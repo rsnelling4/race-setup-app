@@ -1,0 +1,1013 @@
+/* ===== LAYOUT ===== */
+.app {
+  min-height: 100vh;
+  display: flex;
+  flex-direction: column;
+}
+
+/* ===== HEADER ===== */
+.app-header {
+  background: linear-gradient(135deg, #1a1b26 0%, #0f1117 100%);
+  border-bottom: 1px solid var(--border);
+  padding: 32px 24px;
+  text-align: center;
+}
+
+.app-header h1 {
+  font-size: 2.5rem;
+  font-weight: 700;
+  color: var(--text-primary);
+  margin: 0;
+  letter-spacing: -0.5px;
+  background: linear-gradient(135deg, #3b82f6, #8b5cf6);
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+  background-clip: text;
+}
+
+.tagline {
+  color: var(--text-secondary);
+  font-size: 1rem;
+  margin-top: 4px;
+}
+
+/* ===== TAB NAV ===== */
+.tab-nav {
+  display: flex;
+  background: var(--bg-secondary);
+  border-bottom: 1px solid var(--border);
+  padding: 0 24px;
+}
+
+.tab {
+  padding: 14px 28px;
+  background: none;
+  border: none;
+  color: var(--text-secondary);
+  font-size: 0.95rem;
+  font-weight: 500;
+  cursor: pointer;
+  border-bottom: 2px solid transparent;
+  transition: all 0.2s;
+}
+
+.tab:hover {
+  color: var(--text-primary);
+  background: rgba(59, 130, 246, 0.05);
+}
+
+.tab.active {
+  color: var(--accent);
+  border-bottom-color: var(--accent);
+}
+
+/* ===== MAIN ===== */
+.app-main {
+  flex: 1;
+  padding: 32px 24px;
+  max-width: 1100px;
+  margin: 0 auto;
+  width: 100%;
+}
+
+.section-header {
+  margin-bottom: 28px;
+}
+
+.section-header h2 {
+  font-size: 1.5rem;
+  font-weight: 600;
+  color: var(--text-primary);
+  margin-bottom: 8px;
+}
+
+.section-description {
+  color: var(--text-secondary);
+  font-size: 0.9rem;
+  max-width: 600px;
+}
+
+/* ===== TIRE INPUT GRID ===== */
+.tire-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 16px;
+  max-width: 720px;
+  margin: 0 auto;
+  position: relative;
+}
+
+.grid-label {
+  grid-column: 1 / -1;
+  text-align: center;
+  font-size: 0.75rem;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 2px;
+  color: var(--text-muted);
+  padding: 4px 0;
+}
+
+.tire-input-card {
+  background: var(--bg-card);
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  padding: 20px;
+  transition: border-color 0.2s;
+}
+
+.tire-input-card:hover {
+  border-color: var(--border-accent);
+}
+
+.tire-input-card h3 {
+  font-size: 0.95rem;
+  font-weight: 600;
+  color: var(--text-primary);
+  margin-bottom: 14px;
+}
+
+.tire-temp-inputs {
+  display: grid;
+  grid-template-columns: 1fr 1fr 1fr;
+  gap: 10px;
+  margin-bottom: 12px;
+}
+
+.temp-field label,
+.pressure-field label {
+  display: block;
+  font-size: 0.75rem;
+  color: var(--text-muted);
+  margin-bottom: 5px;
+  font-weight: 500;
+}
+
+.temp-field input,
+.pressure-field input {
+  width: 100%;
+  padding: 10px 12px;
+  background: var(--bg-input);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  color: var(--text-primary);
+  font-size: 1rem;
+  font-weight: 500;
+  text-align: center;
+  transition: border-color 0.2s, box-shadow 0.2s;
+}
+
+.temp-field input:focus,
+.pressure-field input:focus {
+  outline: none;
+  border-color: var(--accent);
+  box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.15);
+}
+
+.temp-field input::placeholder,
+.pressure-field input::placeholder {
+  color: var(--text-muted);
+}
+
+.pressure-field input {
+  text-align: left;
+}
+
+/* ===== ACTION BUTTONS ===== */
+.action-buttons {
+  display: flex;
+  gap: 12px;
+  justify-content: center;
+  margin: 28px 0;
+}
+
+.analyze-button {
+  padding: 12px 36px;
+  background: var(--accent);
+  color: white;
+  border: none;
+  border-radius: 10px;
+  font-size: 1rem;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.2s;
+}
+
+.analyze-button:hover:not(:disabled) {
+  background: var(--accent-hover);
+  transform: translateY(-1px);
+  box-shadow: 0 4px 12px rgba(59, 130, 246, 0.3);
+}
+
+.analyze-button:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.clear-button {
+  padding: 12px 24px;
+  background: transparent;
+  color: var(--text-secondary);
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  font-size: 0.95rem;
+  font-weight: 500;
+  cursor: pointer;
+  transition: all 0.2s;
+}
+
+.clear-button:hover {
+  border-color: var(--red);
+  color: var(--red);
+}
+
+/* ===== TIRE RESULTS ===== */
+.results-section {
+  margin-top: 32px;
+  padding-top: 32px;
+  border-top: 1px solid var(--border);
+}
+
+.results-section h2 {
+  font-size: 1.5rem;
+  font-weight: 600;
+  color: var(--text-primary);
+  margin-bottom: 24px;
+  text-align: center;
+}
+
+.tire-results-grid {
+  max-width: 800px;
+  margin: 0 auto;
+}
+
+.car-outline {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+.car-label {
+  text-align: center;
+  font-size: 0.75rem;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 2px;
+  color: var(--text-muted);
+}
+
+.tires-row {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 16px;
+}
+
+/* Individual tire result card */
+.tire-result-card {
+  background: var(--bg-card);
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  padding: 20px;
+  transition: border-color 0.2s;
+}
+
+.tire-result-card.severity-good {
+  border-left: 3px solid var(--green);
+}
+.tire-result-card.severity-warning {
+  border-left: 3px solid var(--yellow);
+}
+.tire-result-card.severity-critical {
+  border-left: 3px solid var(--red);
+}
+
+.tire-result-card h3 {
+  font-size: 0.95rem;
+  font-weight: 600;
+  color: var(--text-primary);
+  margin-bottom: 12px;
+}
+
+/* Tire heat visualization */
+.tire-visual {
+  margin-bottom: 14px;
+}
+
+.tire-tread {
+  display: grid;
+  grid-template-columns: 1fr 1fr 1fr;
+  gap: 3px;
+  border-radius: 8px;
+  overflow: hidden;
+  height: 72px;
+}
+
+.tread-section {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  color: white;
+  font-weight: 600;
+  transition: background-color 0.3s;
+}
+
+.temp-label {
+  font-size: 1.05rem;
+  font-weight: 700;
+}
+
+.zone-label {
+  font-size: 0.65rem;
+  opacity: 0.85;
+  margin-top: 2px;
+  text-transform: uppercase;
+  letter-spacing: 1px;
+}
+
+/* Stats */
+.tire-stats {
+  display: flex;
+  gap: 16px;
+  margin-bottom: 14px;
+}
+
+.stat {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.stat-label {
+  font-size: 0.7rem;
+  color: var(--text-muted);
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+}
+
+.stat-value {
+  font-size: 0.9rem;
+  font-weight: 600;
+  color: var(--text-primary);
+}
+
+.stat-value .rec-arrow {
+  font-size: 0.8em;
+  margin: 0 4px;
+  color: var(--text-muted);
+}
+
+.stat-value .rec-old-pressure {
+  text-decoration: line-through;
+  color: var(--text-muted);
+  font-weight: 400;
+  margin-left: 6px;
+}
+
+/* Recommendations */
+.tire-recommendations {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.recommendation {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+  padding: 8px 10px;
+  border-radius: 6px;
+  font-size: 0.82rem;
+  line-height: 1.4;
+}
+
+.recommendation.good {
+  background: var(--green-bg);
+  color: var(--green);
+}
+.recommendation.warning {
+  background: var(--yellow-bg);
+  color: var(--yellow);
+}
+.recommendation.critical {
+  background: var(--red-bg);
+  color: var(--red);
+}
+
+.rec-icon {
+  font-size: 0.85rem;
+  flex-shrink: 0;
+  margin-top: 1px;
+}
+
+/* Overall analysis */
+.overall-analysis {
+  margin-top: 24px;
+  padding: 20px;
+  background: var(--bg-card);
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  border: 1px solid var(--border);
+  border-radius: 12px;
+}
+
+.overall-analysis h3 {
+  font-size: 1.1rem;
+  font-weight: 600;
+  color: var(--text-primary);
+  margin-bottom: 16px;
+}
+
+.overall-recommendation {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  padding: 12px 14px;
+  border-radius: 8px;
+  margin-bottom: 8px;
+  font-size: 0.88rem;
+  line-height: 1.5;
+}
+
+.overall-recommendation.warning {
+  background: var(--yellow-bg);
+  color: var(--yellow);
+}
+
+.overall-recommendation.good {
+  background: var(--green-bg);
+  color: var(--green);
+}
+
+/* ===== REFERENCE GUIDE ===== */
+.reference-guide {
+  margin-top: 48px;
+  padding-top: 32px;
+  border-top: 1px solid var(--border);
+}
+
+.reference-guide h3 {
+  font-size: 1.2rem;
+  font-weight: 600;
+  color: var(--text-primary);
+  margin-bottom: 16px;
+  text-align: center;
+}
+
+.reference-grid {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 12px;
+}
+
+.reference-card {
+  background: var(--bg-card);
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  padding: 16px;
+  text-align: left;
+}
+
+.reference-card h4 {
+  font-size: 0.85rem;
+  font-weight: 600;
+  color: var(--accent);
+  margin-bottom: 6px;
+}
+
+.reference-card p {
+  font-size: 0.82rem;
+  color: var(--text-secondary);
+  line-height: 1.4;
+}
+
+/* ===== HANDLING SECTION ===== */
+.handling-section {
+  max-width: 900px;
+  margin: 0 auto;
+}
+
+.handling-section h2 {
+  font-size: 1.5rem;
+  font-weight: 600;
+  color: var(--text-primary);
+  margin-bottom: 8px;
+}
+
+.handling-inputs {
+  margin-top: 24px;
+}
+
+.handling-select-group {
+  margin-bottom: 24px;
+}
+
+.handling-select-group > label {
+  display: block;
+  font-size: 0.9rem;
+  font-weight: 600;
+  color: var(--text-primary);
+  margin-bottom: 12px;
+}
+
+.button-group {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 12px;
+}
+
+.button-group.three-col {
+  grid-template-columns: 1fr 1fr 1fr;
+}
+
+.select-button {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 4px;
+  padding: 16px;
+  background: var(--bg-card);
+  border: 2px solid var(--border);
+  border-radius: 12px;
+  cursor: pointer;
+  transition: all 0.2s;
+  text-align: center;
+}
+
+.select-button:hover {
+  border-color: var(--border-accent);
+  background: var(--bg-input);
+}
+
+.select-button.active {
+  border-color: var(--accent);
+  background: var(--blue-bg);
+}
+
+.btn-label {
+  font-size: 0.95rem;
+  font-weight: 600;
+  color: var(--text-primary);
+}
+
+.btn-desc {
+  font-size: 0.78rem;
+  color: var(--text-muted);
+}
+
+.select-button.active .btn-label {
+  color: var(--accent);
+}
+
+/* ===== HANDLING RESULTS ===== */
+.handling-results {
+  margin-top: 32px;
+  padding: 24px;
+  background: var(--bg-card);
+  border: 1px solid var(--border);
+  border-radius: 14px;
+}
+
+.handling-results h3 {
+  font-size: 1.2rem;
+  font-weight: 600;
+  color: var(--text-primary);
+  margin-bottom: 8px;
+}
+
+.handling-desc {
+  color: var(--text-secondary);
+  font-size: 0.88rem;
+  margin-bottom: 20px;
+}
+
+.changes-table {
+  display: flex;
+  flex-direction: column;
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  overflow: hidden;
+}
+
+.changes-header {
+  display: grid;
+  grid-template-columns: 180px 1fr 1fr;
+  gap: 16px;
+  padding: 12px 16px;
+  background: var(--bg-input);
+  font-size: 0.75rem;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 1px;
+  color: var(--text-muted);
+}
+
+.changes-row {
+  display: grid;
+  grid-template-columns: 180px 1fr 1fr;
+  gap: 16px;
+  padding: 14px 16px;
+  border-top: 1px solid var(--border);
+  font-size: 0.88rem;
+  transition: background 0.15s;
+}
+
+.changes-row:hover {
+  background: rgba(59, 130, 246, 0.03);
+}
+
+.change-component {
+  font-weight: 600;
+  color: var(--accent);
+}
+
+.change-adjustment {
+  color: var(--text-primary);
+}
+
+.change-effect {
+  color: var(--text-secondary);
+  font-size: 0.82rem;
+}
+
+.handling-tip {
+  margin-top: 20px;
+  padding: 14px 16px;
+  background: var(--blue-bg);
+  border-radius: 8px;
+  font-size: 0.85rem;
+  color: var(--accent);
+  line-height: 1.5;
+}
+
+.handling-tip strong {
+  font-weight: 700;
+}
+
+/* ===== DELTA TABLE ===== */
+.delta-section {
+  margin-top: 28px;
+  padding: 24px;
+  background: var(--bg-card);
+  border: 1px solid var(--border);
+  border-radius: 12px;
+}
+
+.delta-section h3 {
+  font-size: 1.2rem;
+  font-weight: 600;
+  color: var(--text-primary);
+  margin-bottom: 20px;
+}
+
+.delta-grid {
+  display: grid;
+  grid-template-columns: minmax(0, 2fr) minmax(0, 1fr);
+  gap: 20px;
+}
+
+.delta-group {
+  background: var(--bg-input);
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  padding: 16px;
+}
+
+.delta-group h4 {
+  font-size: 0.85rem;
+  font-weight: 600;
+  color: var(--accent);
+  margin-bottom: 12px;
+}
+
+.delta-subtitle {
+  font-weight: 400;
+  color: var(--text-muted);
+  font-size: 0.75rem;
+}
+
+.delta-table {
+  display: flex;
+  flex-direction: column;
+}
+
+.delta-row {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  align-items: center;
+  padding: 8px 0;
+  border-bottom: 1px solid var(--border);
+}
+
+.delta-row:last-child {
+  border-bottom: none;
+}
+
+.delta-row.header-row {
+  font-size: 0.7rem;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  color: var(--text-muted);
+  padding-bottom: 6px;
+}
+
+.delta-row.rf-highlight {
+  background: rgba(59, 130, 246, 0.06);
+  margin: 0 -8px;
+  padding-left: 8px;
+  padding-right: 8px;
+  border-radius: 4px;
+}
+
+.delta-label {
+  font-size: 0.82rem;
+  color: var(--text-secondary);
+  font-weight: 500;
+}
+
+.delta-header-val {
+  font-size: 0.7rem;
+  color: var(--text-muted);
+}
+
+.delta-value-cell {
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+}
+
+.delta-number {
+  font-size: 0.95rem;
+  font-weight: 700;
+  font-family: 'SF Mono', 'Cascadia Code', 'Consolas', monospace;
+}
+
+.delta-meaning {
+  font-size: 0.7rem;
+  font-weight: 500;
+}
+
+.delta-averages {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 8px;
+  margin-top: 12px;
+  padding-top: 12px;
+  border-top: 1px solid var(--border);
+}
+
+.avg-pair {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.avg-label {
+  font-size: 0.68rem;
+  color: var(--text-muted);
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+}
+
+.avg-value {
+  font-size: 0.88rem;
+  font-weight: 600;
+  color: var(--text-primary);
+}
+
+.delta-legend {
+  background: var(--bg-input);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 16px;
+}
+
+.delta-legend h4 {
+  font-size: 0.82rem;
+  font-weight: 600;
+  color: var(--text-primary);
+  margin-bottom: 10px;
+}
+
+.legend-columns {
+  display: flex;
+  gap: 20px;
+  flex-wrap: wrap;
+}
+
+.legend-column {
+  flex: 1;
+  min-width: 150px; /* Ensure columns don't get too small */
+}
+
+.legend-item {
+  font-size: 0.78rem;
+  color: var(--text-secondary);
+  line-height: 1.4;
+  margin-bottom: 6px; /* Add some space between legend items */
+}
+
+.legend-item:last-child {
+  margin-bottom: 0;
+}
+
+.legend-category {
+  font-weight: 600;
+  color: var(--text-primary);
+  margin-right: 4px;
+}
+
+/* ===== FOOTER ===== */
+.app-footer {
+  margin-top: auto;
+  padding: 20px 24px;
+  border-top: 1px solid var(--border);
+  text-align: center;
+}
+
+.app-footer p {
+  font-size: 0.78rem;
+  color: var(--text-muted);
+  max-width: 600px;
+  margin: 0 auto;
+}
+
+/* ===== RESPONSIVE ===== */
+@media (max-width: 768px) {
+  .app-header {
+    padding: 24px 16px;
+  }
+  .app-header h1 {
+    font-size: 1.8rem;
+  }
+  .app-main {
+    padding: 20px 16px;
+  }
+  .tire-grid {
+    grid-template-columns: 1fr;
+  }
+  .reference-grid {
+    grid-template-columns: 1fr;
+  }
+  .tires-row {
+    grid-template-columns: 1fr;
+  }
+  .button-group,
+  .button-group.three-col {
+    grid-template-columns: 1fr;
+  }
+  .changes-header,
+  .changes-row {
+    grid-template-columns: 1fr;
+    gap: 4px;
+  }
+  .changes-header {
+    display: none;
+  }
+  .changes-row {
+    padding: 12px 16px;
+  }
+  .change-component::before {
+    content: '';
+    display: block;
+  }
+  .change-adjustment {
+    font-size: 0.85rem;
+  }
+  .change-effect {
+    font-size: 0.8rem;
+    padding-top: 4px;
+    border-top: 1px solid var(--border);
+  }
+  .delta-grid {
+    grid-template-columns: 1fr;
+  }
+  .legend-columns {
+    flex-direction: column;
+  }
+}
+
+.per-tire-recommendations {
+  margin-top: 24px;
+}
+
+.per-tire-recommendations h4 {
+  font-size: 1rem;
+  font-weight: 600;
+  color: var(--text-primary);
+  margin-bottom: 12px;
+}
+
+.per-tire-table {
+  display: grid;
+  grid-template-columns: 1.5fr repeat(4, 1fr);
+  gap: 1px; /* To help with visual separation */
+  border-radius: 8px;
+  overflow: hidden;
+  border: 1px solid var(--border);
+}
+
+.per-tire-table .changes-header,
+.per-tire-table .changes-row {
+  display: contents; /* Allows grid items to be direct children of the grid container */
+}
+
+.per-tire-table .changes-header span,
+.per-tire-table .changes-row span {
+  background: var(--bg-card);
+  padding: 12px 10px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  text-align: center;
+  font-size: 0.85rem;
+}
+
+.per-tire-table .changes-header span {
+  font-weight: 600;
+  color: var(--text-muted);
+  background: var(--bg-secondary);
+}
+
+.per-tire-table .changes-row span {
+  color: var(--text-primary);
+}
+
+.per-tire-table .changes-row .change-component {
+  justify-content: flex-start;
+  padding-left: 15px;
+}
+
+@media (max-width: 768px) {
+  .app-main {
+    padding: 20px 15px;
+  }
+
+  .tire-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .per-tire-table {
+    display: block;
+    border: none;
+    overflow: visible;
+  }
+
+  .per-tire-table .changes-header {
+    display: none;
+  }
+
+  .per-tire-table .changes-row {
+    display: block;
+    margin-bottom: 15px;
+    padding: 10px;
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    background: var(--bg-card);
+  }
+
+  .per-tire-table .changes-row .change-component {
+    display: block;
+    font-weight: bold;
+    margin-bottom: 8px;
+    color: var(--accent);
+    text-align: left;
+    padding: 0;
+    background: none;
+  }
+
+  .per-tire-table .changes-row span:not(.change-component) {
+    display: block;
+    padding: 8px 0;
+    border-top: 1px solid rgba(255, 255, 255, 0.05);
+    text-align: left;
+    background: none;
+  }
+
+  .per-tire-table .changes-row span:not(.change-component):first-of-type {
+    border-top: none;
+  }
+
+  .per-tire-table .changes-row span:not(.change-component)::before {
+    content: attr(data-label) ": ";
+    font-weight: 600;
+    color: var(--text-muted);
+    margin-right: 5px;
+  }
+}
+/* Keep existing .other-recommendations margin-top */
+.other-recommendations {
+  margin-top: 32px;
+}
+
+.other-recommendations h4 {
+  font-size: 1rem;
+  font-weight: 600;
+  color: var(--text-primary);
+  margin-bottom: 12px;
+}
