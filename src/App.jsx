@@ -2,6 +2,10 @@ import { useState } from 'react';
 import TireInput from './components/TireInput';
 import TireResults from './components/TireResults';
 import HandlingDiagnosis from './components/HandlingDiagnosis';
+import ShocksReference from './components/ShocksReference';
+import SpringsReference from './components/SpringsReference';
+import CamberReference from './components/CamberReference';
+import CasterReference from './components/CasterReference';
 import { analyzeFullCar } from './utils/tireAnalysis';
 import './App.css';
 
@@ -67,6 +71,30 @@ function App() {
         >
           Handling Diagnosis
         </button>
+        <button
+          className={`tab ${activeTab === 'shocks' ? 'active' : ''}`}
+          onClick={() => setActiveTab('shocks')}
+        >
+          Shocks Reference
+        </button>
+        <button
+          className={`tab ${activeTab === 'springs' ? 'active' : ''}`}
+          onClick={() => setActiveTab('springs')}
+        >
+          Springs Reference
+        </button>
+        <button
+          className={`tab ${activeTab === 'camber' ? 'active' : ''}`}
+          onClick={() => setActiveTab('camber')}
+        >
+          Camber Reference
+        </button>
+        <button
+          className={`tab ${activeTab === 'caster' ? 'active' : ''}`}
+          onClick={() => setActiveTab('caster')}
+        >
+          Caster Reference
+        </button>
       </nav>
 
       <main className="app-main">
@@ -75,7 +103,7 @@ function App() {
             <div className="section-header">
               <h2>Enter Tire Temperatures</h2>
               <p className="section-description">
-                Use your pyrometer to measure inside, middle, and outside temperatures for each tire.
+                Use your pyrometer to measure inside, middle, and outside temperatures for each tire. Inside will be the edge of tire closest to the motor. Outside will be the edge of tire furthest from the motor.
               </p>
             </div>
 
@@ -99,35 +127,55 @@ function App() {
               <h3>Quick Reference</h3>
               <div className="reference-grid">
                 <div className="reference-card">
-                  <h4>Middle Hotter Than Edges</h4>
-                  <p>Over-inflated — reduce pressure 1-3 PSI</p>
+                  <h4>General Tire Wear</h4>
+                  <p>The hotter the tire, the quicker it will wear.</p>
+                  <p>The hottest tire on the car is the one being worked the most; the coolest is the least worked.</p>
+                  <p>Focus adjustments on the most overworked or least worked corner first.</p>
                 </div>
                 <div className="reference-card">
-                  <h4>Middle Cooler Than Edges</h4>
-                  <p>Under-inflated — increase pressure 1-3 PSI</p>
+                  <h4>Camber Issues</h4>
+                  <p>Too much NEGATIVE camber: excessively higher temperature at the INSIDE edges.</p>
+                  <p>Too much POSITIVE camber: excessively higher temperature at the OUTSIDE edges.</p>
                 </div>
                 <div className="reference-card">
-                  <h4>Inside Hotter Than Outside</h4>
-                  <p>Too much negative camber — reduce 0.25-0.5°</p>
+                  <h4>Inflation Issues</h4>
+                  <p>OVER inflated: higher middle temperature than inside & outside edges.</p>
+                  <p>UNDER inflated: lower middle temperature than inside & outside edges.</p>
                 </div>
                 <div className="reference-card">
-                  <h4>Outside Hotter Than Inside</h4>
-                  <p>Not enough negative camber — add 0.25-0.5°</p>
+                  <h4>Toe Issues (Front Tires)</h4>
+                  <p>Too much toe OUT: higher temperatures on both INSIDE edges.</p>
+                  <p>Too much toe IN: higher temperatures on both OUTSIDE edges.</p>
+                </div>
+                <div className="reference-card">
+                  <h4>Handling & Temperature Split</h4>
+                  <p>RF tire HOTTER by &gt;10°F over RR: indicates a tight condition.</p>
+                  <p>RF tire COLDER by &gt;10°F over RR: indicates a loose condition.</p>
+                </div>
+                <div className="reference-card">
+                  <h4>Overall Workload</h4>
+                  <p>HIGHEST average temperature: corner of the car being most worked.</p>
+                  <p>LOWEST average temperature: corner of the car being least worked.</p>
                 </div>
                 <div className="reference-card">
                   <h4>Ideal Inside-Outside Spread</h4>
                   <p>5-20°F with inside slightly hotter</p>
                 </div>
-                <div className="reference-card">
-                  <h4>R-Compound Operating Range</h4>
-                  <p>180-200°F typical (street tires run cooler)</p>
-                </div>
+
               </div>
             </div>
           </div>
         )}
 
         {activeTab === 'handling' && <HandlingDiagnosis />}
+
+        {activeTab === 'shocks' && <ShocksReference />}
+
+        {activeTab === 'springs' && <SpringsReference />}
+
+        {activeTab === 'camber' && <CamberReference />}
+
+        {activeTab === 'caster' && <CasterReference />}
       </main>
 
       <footer className="app-footer">

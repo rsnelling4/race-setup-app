@@ -12,33 +12,67 @@ function TireInput({ position, label, data, onChange }) {
     <div className={`tire-input-card ${positionClasses[position]}`}>
       <h3>{label}</h3>
       <div className="tire-temp-inputs">
-        <div className="temp-field">
-          <label>Inside °F</label>
-          <input
-            type="number"
-            placeholder="---"
-            value={data.inside}
-            onChange={(e) => onChange(position, 'inside', e.target.value)}
-          />
-        </div>
-        <div className="temp-field">
-          <label>Middle °F</label>
-          <input
-            type="number"
-            placeholder="---"
-            value={data.middle}
-            onChange={(e) => onChange(position, 'middle', e.target.value)}
-          />
-        </div>
-        <div className="temp-field">
-          <label>Outside °F</label>
-          <input
-            type="number"
-            placeholder="---"
-            value={data.outside}
-            onChange={(e) => onChange(position, 'outside', e.target.value)}
-          />
-        </div>
+        {(position === 'LF' || position === 'LR') ? (
+          <>
+            <div className="temp-field">
+              <label>Outside °F</label>
+              <input
+                type="number"
+                placeholder="---"
+                value={data.outside}
+                onChange={(e) => onChange(position, 'outside', e.target.value)}
+              />
+            </div>
+            <div className="temp-field">
+              <label>Middle °F</label>
+              <input
+                type="number"
+                placeholder="---"
+                value={data.middle}
+                onChange={(e) => onChange(position, 'middle', e.target.value)}
+              />
+            </div>
+            <div className="temp-field">
+              <label>Inside °F</label>
+              <input
+                type="number"
+                placeholder="---"
+                value={data.inside}
+                onChange={(e) => onChange(position, 'inside', e.target.value)}
+              />
+            </div>
+          </>
+        ) : (
+          <>
+            <div className="temp-field">
+              <label>Inside °F</label>
+              <input
+                type="number"
+                placeholder="---"
+                value={data.inside}
+                onChange={(e) => onChange(position, 'inside', e.target.value)}
+              />
+            </div>
+            <div className="temp-field">
+              <label>Middle °F</label>
+              <input
+                type="number"
+                placeholder="---"
+                value={data.middle}
+                onChange={(e) => onChange(position, 'middle', e.target.value)}
+              />
+            </div>
+            <div className="temp-field">
+              <label>Outside °F</label>
+              <input
+                type="number"
+                placeholder="---"
+                value={data.outside}
+                onChange={(e) => onChange(position, 'outside', e.target.value)}
+              />
+            </div>
+          </>
+        )}
       </div>
       <div className="pressure-field">
         <label>Current PSI (optional)</label>
