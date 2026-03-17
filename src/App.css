@@ -359,6 +359,207 @@
 
 /* ===== SHOCKS REFERENCE PAGE ===== */
 
+.shock-cards-grid {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 16px;
+}
+
+.shock-info-card {
+  background: var(--bg-card);
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  padding: 18px;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.shock-info-card h4 {
+  font-size: 0.85rem;
+  font-weight: 600;
+  color: var(--accent);
+  margin: 0;
+  padding-bottom: 8px;
+  border-bottom: 1px solid var(--border);
+}
+
+/* Rating scale */
+.shock-rating-scale {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-top: 4px;
+}
+
+.shock-scale-bar {
+  flex: 1;
+  height: 6px;
+  border-radius: 3px;
+  background: linear-gradient(to right, var(--green), var(--yellow), var(--red));
+}
+
+.shock-scale-labels {
+  display: flex;
+  justify-content: space-between;
+  font-size: 0.75rem;
+  font-weight: 600;
+}
+
+/* Methodology list */
+.shock-method-list {
+  list-style: none;
+  padding: 0;
+  margin: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  counter-reset: method-counter;
+}
+
+.shock-method-list li {
+  display: grid;
+  grid-template-columns: auto 1fr;
+  grid-template-rows: auto auto;
+  column-gap: 8px;
+  row-gap: 2px;
+  padding-left: 20px;
+  position: relative;
+  font-size: 0.82rem;
+}
+
+.shock-method-list li::before {
+  content: counter(method-counter);
+  counter-increment: method-counter;
+  position: absolute;
+  left: 0;
+  top: 0;
+  font-size: 0.75rem;
+  font-weight: 700;
+  color: var(--accent);
+  line-height: 1.4;
+}
+
+.method-label {
+  font-weight: 600;
+  color: var(--text-primary);
+  grid-column: 1;
+}
+
+.method-weight {
+  font-size: 0.72rem;
+  color: var(--text-muted);
+  font-style: italic;
+  grid-column: 2;
+  align-self: center;
+}
+
+.method-desc {
+  font-size: 0.78rem;
+  color: var(--text-secondary);
+  line-height: 1.4;
+  grid-column: 1 / -1;
+}
+
+/* Construction type blocks */
+.shock-type-block {}
+
+.shock-type-label {
+  font-size: 0.8rem;
+  font-weight: 700;
+  color: var(--text-primary);
+  margin-bottom: 5px;
+}
+
+.shock-bullet-list {
+  list-style: none;
+  padding: 0;
+  margin: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+}
+
+.shock-bullet-list li {
+  font-size: 0.78rem;
+  color: var(--text-secondary);
+  line-height: 1.4;
+  padding-left: 12px;
+  position: relative;
+}
+
+.shock-bullet-list li::before {
+  content: '–';
+  position: absolute;
+  left: 0;
+  color: var(--text-muted);
+}
+
+/* Intended use table */
+.shock-use-table {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.shock-use-row {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  padding-bottom: 8px;
+  border-bottom: 1px solid var(--border);
+}
+
+.shock-use-row:last-child {
+  border-bottom: none;
+  padding-bottom: 0;
+}
+
+.use-label {
+  font-size: 0.78rem;
+  font-weight: 700;
+}
+
+.use-desc {
+  font-size: 0.78rem;
+  color: var(--text-secondary);
+  line-height: 1.4;
+}
+
+/* Brand tiers */
+.shock-brand-tier {
+  padding-bottom: 10px;
+  border-bottom: 1px solid var(--border);
+}
+
+.shock-brand-tier:last-child {
+  border-bottom: none;
+  padding-bottom: 0;
+}
+
+.tier-header {
+  font-size: 0.78rem;
+  font-weight: 700;
+  margin-bottom: 5px;
+}
+
+/* Note */
+.shock-note {
+  font-size: 0.75rem;
+  color: var(--text-muted);
+  font-style: italic;
+  line-height: 1.4;
+  margin: 0;
+  padding-top: 8px;
+  border-top: 1px solid var(--border);
+}
+
+@media (max-width: 768px) {
+  .shock-cards-grid {
+    grid-template-columns: 1fr;
+  }
+}
+
 /* ===== CASTER REFERENCE PAGE ===== */
 
   /* ===== SHOCK SPECS TABLES ===== */
