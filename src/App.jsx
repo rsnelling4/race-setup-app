@@ -2,10 +2,7 @@ import { useState } from 'react';
 import TireInput from './components/TireInput';
 import TireResults from './components/TireResults';
 import HandlingDiagnosis from './components/HandlingDiagnosis';
-import ShocksReference from './components/ShocksReference';
-import SpringsReference from './components/SpringsReference';
-import CamberReference from './components/CamberReference';
-import CasterReference from './components/CasterReference';
+import CrownVicShocks from './components/CrownVicShocks';
 import { analyzeFullCar } from './utils/tireAnalysis';
 import './App.css';
 
@@ -75,25 +72,7 @@ function App() {
           className={`tab ${activeTab === 'shocks' ? 'active' : ''}`}
           onClick={() => setActiveTab('shocks')}
         >
-          Shocks Reference
-        </button>
-        <button
-          className={`tab ${activeTab === 'springs' ? 'active' : ''}`}
-          onClick={() => setActiveTab('springs')}
-        >
-          Springs Reference
-        </button>
-        <button
-          className={`tab ${activeTab === 'camber' ? 'active' : ''}`}
-          onClick={() => setActiveTab('camber')}
-        >
-          Camber Reference
-        </button>
-        <button
-          className={`tab ${activeTab === 'caster' ? 'active' : ''}`}
-          onClick={() => setActiveTab('caster')}
-        >
-          Caster Reference
+          Shocks &amp; Struts
         </button>
       </nav>
 
@@ -169,13 +148,8 @@ function App() {
 
         {activeTab === 'handling' && <HandlingDiagnosis />}
 
-        {activeTab === 'shocks' && <ShocksReference />}
+        {activeTab === 'shocks' && <CrownVicShocks />}
 
-        {activeTab === 'springs' && <SpringsReference />}
-
-        {activeTab === 'camber' && <CamberReference />}
-
-        {activeTab === 'caster' && <CasterReference />}
       </main>
 
       <footer className="app-footer">
