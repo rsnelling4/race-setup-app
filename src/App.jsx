@@ -3,12 +3,21 @@ import TireInput from './components/TireInput';
 import TireResults from './components/TireResults';
 import HandlingDiagnosis from './components/HandlingDiagnosis';
 import CrownVicShocks from './components/CrownVicShocks';
-import CrownVicSetup from './components/CrownVicSetup';
+import RaceSimulation from './components/RaceSimulation';
+import SetupOptimizer from './components/SetupOptimizer';
 import { analyzeFullCar } from './utils/tireAnalysis';
+import { DEFAULT_SETUP } from './utils/raceSimulation';
 import './App.css';
+
+function deepClone(o) { return JSON.parse(JSON.stringify(o)); }
 
 function App() {
   const [activeTab, setActiveTab] = useState('tires');
+
+  // Shared setup state — used by both Race Simulation and Setup Optimizer
+  const [setup, setSetup] = useState(deepClone(DEFAULT_SETUP));
+  const [ambient, setAmbient] = useState(65);
+
   const [tireData, setTireData] = useState({
     LF: { inside: '', middle: '', outside: '', pressure: '' },
     RF: { inside: '', middle: '', outside: '', pressure: '' },
@@ -57,29 +66,20 @@ function App() {
       </header>
 
       <nav className="tab-nav">
-        <button
-          className={`tab ${activeTab === 'tires' ? 'active' : ''}`}
-          onClick={() => setActiveTab('tires')}
-        >
+        <button className={`tab ${activeTab === 'tires' ? 'active' : ''}`} onClick={() => setActiveTab('tires')}>
           Tire Temperatures
         </button>
-        <button
-          className={`tab ${activeTab === 'handling' ? 'active' : ''}`}
-          onClick={() => setActiveTab('handling')}
-        >
+        <button className={`tab ${activeTab === 'handling' ? 'active' : ''}`} onClick={() => setActiveTab('handling')}>
           Handling Diagnosis
         </button>
-        <button
-          className={`tab ${activeTab === 'shocks' ? 'active' : ''}`}
-          onClick={() => setActiveTab('shocks')}
-        >
+        <button className={`tab ${activeTab === 'shocks' ? 'active' : ''}`} onClick={() => setActiveTab('shocks')}>
           Shocks &amp; Struts
         </button>
-        <button
-          className={`tab ${activeTab === 'setup' ? 'active' : ''}`}
-          onClick={() => setActiveTab('setup')}
-        >
-          Race Setup
+        <button className={`tab ${activeTab === 'simulation' ? 'active' : ''}`} onClick={() => setActiveTab('simulation')}>
+          Race Simulation
+        </button>
+        <button className={`tab ${activeTab === 'optimize' ? 'active' : ''}`} onClick={() => setActiveTab('optimize')}>
+          Optimizer
         </button>
       </nav>
 
@@ -92,7 +92,6 @@ function App() {
                 Use your pyrometer to measure inside, middle, and outside temperatures for each tire. Inside will be the edge of tire closest to the motor. Outside will be the edge of tire furthest from the motor.
               </p>
             </div>
-
             <div className="tire-grid">
               <div className="grid-label front-label">FRONT</div>
               <TireInput position="LF" label="Left Front" data={tireData.LF} onChange={handleTireChange} />
@@ -101,14 +100,11 @@ function App() {
               <TireInput position="RR" label="Right Rear" data={tireData.RR} onChange={handleTireChange} />
               <div className="grid-label rear-label">REAR</div>
             </div>
-
             <div className="action-buttons">
               <button className="analyze-button" onClick={handleAnalyze}>Analyze Tires</button>
               <button className="clear-button" onClick={handleClear}>Clear All</button>
             </div>
-
             {analysis && <TireResults analysis={analysis} />}
-
             <div className="reference-guide">
               <h3>Quick Reference</h3>
               <div className="reference-grid">
@@ -125,8 +121,8 @@ function App() {
                 </div>
                 <div className="reference-card">
                   <h4>Inflation Issues</h4>
-                  <p>OVER inflated: higher middle temperature than inside & outside edges.</p>
-                  <p>UNDER inflated: lower middle temperature than inside & outside edges.</p>
+                  <p>OVER inflated: higher middle temperature than inside &amp; outside edges.</p>
+                  <p>UNDER inflated: lower middle temperature than inside &amp; outside edges.</p>
                 </div>
                 <div className="reference-card">
                   <h4>Toe Issues (Front Tires)</h4>
@@ -134,7 +130,7 @@ function App() {
                   <p>Too much toe IN: higher temperatures on both OUTSIDE edges.</p>
                 </div>
                 <div className="reference-card">
-                  <h4>Handling & Temperature Split</h4>
+                  <h4>Handling &amp; Temperature Split</h4>
                   <p>RF tire HOTTER by &gt;10°F over RR: indicates a tight condition.</p>
                   <p>RF tire COLDER by &gt;10°F over RR: indicates a loose condition.</p>
                 </div>
@@ -147,24 +143,23 @@ function App() {
                   <h4>Ideal Inside-Outside Spread</h4>
                   <p>5-20°F with inside slightly hotter</p>
                 </div>
-
               </div>
             </div>
           </div>
         )}
 
         {activeTab === 'handling' && <HandlingDiagnosis />}
-
         {activeTab === 'shocks' && <CrownVicShocks />}
-
-        {activeTab === 'setup' && <CrownVicSetup />}
-
+        {activeTab === 'simulation' && (
+          <RaceSimulation setup={setup} setSetup={setSetup} ambient={ambient} setAmbient={setAmbient} />
+        )}
+        {activeTab === 'optimize' && (
+          <SetupOptimizer setup={setup} setSetup={setSetup} ambient={ambient} setAmbient={setAmbient} />
+        )}
       </main>
 
       <footer className="app-footer">
-        <p>
-          Data sourced from Team NASA, Billy Hines, and Bobby.
-        </p>
+        <p>Data sourced from Team NASA, Billy Hines, and Bobby.</p>
       </footer>
     </div>
   );
