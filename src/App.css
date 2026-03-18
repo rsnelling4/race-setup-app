@@ -1893,3 +1893,185 @@
     grid-template-columns: 1fr;
   }
 }
+
+/* ===== CROWN VIC SETUP PAGE ===== */
+.setup-page {
+  max-width: 900px;
+  margin: 0 auto;
+}
+
+.setup-section-title {
+  font-size: 0.85rem;
+  font-weight: 600;
+  color: var(--accent);
+  text-transform: uppercase;
+  letter-spacing: 1.5px;
+  margin: 32px 0 14px;
+  padding-bottom: 8px;
+  border-bottom: 1px solid var(--border);
+}
+
+.setup-corner-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 14px;
+  max-width: 720px;
+  margin: 0 auto;
+}
+
+.setup-grid-label {
+  grid-column: 1 / -1;
+  text-align: center;
+  font-size: 0.75rem;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 2px;
+  color: var(--text-muted);
+  padding: 4px 0;
+}
+
+.setup-corner-card {
+  background: var(--bg-card);
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  padding: 18px 20px;
+}
+
+.setup-corner-title {
+  font-size: 0.9rem;
+  font-weight: 700;
+  color: var(--text-primary);
+  margin-bottom: 12px;
+}
+
+.setup-spec-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 5px 0;
+}
+
+.setup-spec-label {
+  font-size: 0.8rem;
+  color: var(--text-muted);
+  font-weight: 500;
+}
+
+.setup-spec-value {
+  font-size: 0.9rem;
+  font-weight: 700;
+  color: var(--text-primary);
+  font-family: 'SF Mono', 'Cascadia Code', 'Consolas', monospace;
+}
+
+.setup-spec-divider {
+  border: none;
+  border-top: 1px solid var(--border);
+  margin: 8px 0;
+}
+
+.pressure-cold { color: var(--accent); }
+.pressure-hot  { color: var(--orange); }
+
+.setup-pressure-note {
+  font-size: 0.72rem;
+  color: var(--text-muted);
+  font-style: italic;
+  margin-top: 6px;
+  line-height: 1.4;
+}
+
+.setup-toe-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 14px;
+  max-width: 540px;
+  margin: 0 auto;
+}
+
+.setup-shock-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 16px;
+}
+
+.setup-shock-card {
+  background: var(--bg-card);
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  padding: 18px 20px;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.setup-shock-header {
+  font-size: 0.9rem;
+  font-weight: 700;
+  color: var(--text-primary);
+  padding-bottom: 10px;
+  border-bottom: 1px solid var(--border);
+}
+
+.setup-shock-rec {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  padding: 12px;
+  background: var(--bg-input);
+  border-radius: 8px;
+  border-left: 3px solid var(--accent);
+}
+
+.setup-shock-rec.alt-rec {
+  border-left-color: var(--border);
+}
+
+.shock-rec-badge {
+  font-size: 0.68rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 1px;
+  color: var(--text-muted);
+}
+
+.shock-rec-badge.primary-badge {
+  color: var(--accent);
+}
+
+.shock-rec-part {
+  font-size: 0.88rem;
+  font-weight: 700;
+  color: var(--text-primary);
+}
+
+.shock-rec-type {
+  font-size: 0.76rem;
+  color: var(--text-secondary);
+}
+
+.shock-rec-rating {
+  font-size: 0.75rem;
+  color: var(--text-muted);
+  margin-top: 2px;
+}
+
+.shock-rec-scale {
+  color: var(--text-muted);
+  font-weight: 400;
+}
+
+.shock-rec-rationale {
+  font-size: 0.78rem;
+  color: var(--text-muted);
+  line-height: 1.5;
+  font-style: italic;
+}
+
+@media (max-width: 768px) {
+  .setup-corner-grid,
+  .setup-shock-grid,
+  .setup-toe-grid {
+    grid-template-columns: 1fr;
+  }
+}

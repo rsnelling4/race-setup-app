@@ -3,6 +3,7 @@ import TireInput from './components/TireInput';
 import TireResults from './components/TireResults';
 import HandlingDiagnosis from './components/HandlingDiagnosis';
 import CrownVicShocks from './components/CrownVicShocks';
+import CrownVicSetup from './components/CrownVicSetup';
 import { analyzeFullCar } from './utils/tireAnalysis';
 import './App.css';
 
@@ -73,6 +74,12 @@ function App() {
           onClick={() => setActiveTab('shocks')}
         >
           Shocks &amp; Struts
+        </button>
+        <button
+          className={`tab ${activeTab === 'setup' ? 'active' : ''}`}
+          onClick={() => setActiveTab('setup')}
+        >
+          Race Setup
         </button>
       </nav>
 
@@ -149,6 +156,8 @@ function App() {
         {activeTab === 'handling' && <HandlingDiagnosis />}
 
         {activeTab === 'shocks' && <CrownVicShocks />}
+
+        {activeTab === 'setup' && <CrownVicSetup />}
 
       </main>
 

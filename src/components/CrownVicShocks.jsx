@@ -83,7 +83,7 @@ function CrownVicShocks() {
   return (
     <div className="shocks-reference-page">
       <div className="section-header">
-        <h2>2008 Ford Crown Victoria – Shocks &amp; Struts Guide</h2>
+        <h2>Ford Crown Victoria – Shocks &amp; Struts Guide</h2>
         <p className="section-description">
           Comprehensive list of rear shocks and front struts compiled from RockAuto. Stiffness ratings analyzed independently based on construction type, intended application, brand/product line, and stroke length. Scale: 10 = softest, 0 = stiffest.
         </p>
