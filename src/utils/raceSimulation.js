@@ -93,13 +93,18 @@ function pressureGripFactor(hotPsi, tireLoad) {
   return Math.max(0.88, 1 - 0.0025 * dev);
 }
 
-// Camber: deviation from ideal for the cornering condition
+// Camber: deviation from ideal effective camber for the cornering condition.
+// Outside front (RF in left turns): pyrometer data (O>M>I at equilibrium) shows the tire
+// needs significant negative camber to counteract body roll and keep contact patch loaded.
+// Ideal calibrated from real temp data: ~-4.5° effective at 1G.
+// Inside front (LF): pyrometer (I>M>O at equilibrium) shows slight negative camber is correct.
+// Ideal: ~-1.0° effective at 1G (near-zero, slightly negative).
 function camberGripFactor(actualCamber, isOutside, lateralG) {
   let ideal;
   if (isOutside) {
-    ideal = -(1.0 + lateralG * 2.0);
+    ideal = -(2.5 + lateralG * 2.0);  // -4.5° at 1G (calibrated to pyrometer data)
   } else {
-    ideal = 0.3 + lateralG * 0.3;
+    ideal = -(lateralG * 1.0);        // -1.0° at 1G for inside front
   }
   const dev = Math.abs(actualCamber - ideal);
   return Math.max(0.88, 1 - 0.012 * dev);
@@ -215,10 +220,12 @@ function calcPerformance(setup, tires, ambient) {
     const outside = OUTSIDE[c];
     const front = IS_FRONT[c];
     if (front) {
-      // Dynamic camber from caster: ~0.5° per degree caster per G of lateral
+      // Caster camber gain: geometric formula ≈ caster × sin(steer_angle).
+      // At ~10° steer on 1/4-mile oval: sin(10°) ≈ 0.174.
+      // 0.18/degree used (vs old 0.5 which was 2.8× overstated).
       const casterCamberGain = outside
-        ? -(caster[c] * 0.5 * refG)  // RF: caster adds negative camber (good)
-        : (caster[c] * 0.3 * refG);   // LF: caster adds positive camber (less effect)
+        ? -(caster[c] * 0.18 * refG)  // RF: negative camber gain (adds to static neg camber)
+        : (caster[c] * 0.10 * refG);   // LF: small positive camber gain on inside wheel
       const effectiveCamber = setup.camber[c] + casterCamberGain;
       mu *= camberGripFactor(effectiveCamber, outside, refG);
       // Caster direct effect (trail, stability)
@@ -296,10 +303,10 @@ function updateTireTemps(tires, workFactors, ambient, lapTime, setup) {
     let camberVal = 0;
     if (front) {
       camberVal = setup.camber[c];
-      // Add caster-induced dynamic camber
+      // Corrected caster gain: geometric ≈ caster × sin(~10° oval steer) ≈ 0.18/deg
       const casterGain = outside
-        ? -(caster[c] * 0.5)
-        : (caster[c] * 0.3);
+        ? -(caster[c] * 0.18)
+        : (caster[c] * 0.10);
       camberVal += casterGain;
     } else {
       // Rear: body roll effect
@@ -309,11 +316,12 @@ function updateTireTemps(tires, workFactors, ambient, lapTime, setup) {
     }
 
     // Camber shifts heat distribution: negative camber → more inside heat
-    // Each degree of negative camber shifts ~2% heat from outside to inside
-    const camberShift = camberVal * 0.02;
-    const insideMult = zoneMults[0] + camberShift;  // more neg camber = more inside heat
+    // Each degree of negative camber shifts ~2% heat from outside to inside.
+    // Sign: negate camberVal so that negative camber → positive shift → more inside heat.
+    const camberShift = -camberVal * 0.02;
+    const insideMult = zoneMults[0] + camberShift;  // more neg camber = more inside heat ✓
     const middleMult = zoneMults[1];
-    const outsideMult = zoneMults[2] - camberShift; // more neg camber = less outside heat
+    const outsideMult = zoneMults[2] - camberShift; // more neg camber = less outside heat ✓
 
     // Toe effect on temperature: toe out heats inside edges of both fronts
     let toeInsideBoost = 0;
@@ -429,7 +437,10 @@ export const DEFAULT_SETUP = {
 // ============ RECOMMENDED SETUP ============
 export const RECOMMENDED_SETUP = {
   shocks: { LF: 6, RF: 2, LR: 5, RR: 1 },
-  camber: { LF: 1.0, RF: -2.75 },
+  // Camber corrected from pyrometer data + updated camber model:
+  //   RF: more negative needed (outside-hot signal) → -3.5° (approaching -4° rule max)
+  //   LF: near-zero optimal for inside tire → -1.25° (was wrong +1.0° from bad model)
+  camber: { LF: -1.25, RF: -3.5 },
   caster: { LF: 3.0, RF: 5.5 },
   toe: -0.375, // 3/8" toe out for better turn-in
   coldPsi: { LF: 22, RF: 36, LR: 26, RR: 34 },
@@ -554,9 +565,13 @@ export function analyzeSetup(setup, ambientTemp = 65) {
     let effectiveCamber, idealCamber, camberDev, camberFactor;
     let casterGain = 0, casterFactor = 1, optStaticCamber = null;
     if (front) {
-      casterGain = outside ? -(caster[c] * 0.5) : (caster[c] * 0.3);
+      // Corrected caster gain: geometric ≈ caster × sin(~10° oval steer) ≈ 0.18/deg
+      casterGain = outside ? -(caster[c] * 0.18) : (caster[c] * 0.10);
       effectiveCamber = setup.camber[c] + casterGain;
-      idealCamber = outside ? -3.0 : 0.6;
+      // Ideal camber calibrated from pyrometer data:
+      //   RF (outside): equilibrium temps show O>I → needs more neg camber → -4.5° at 1G
+      //   LF (inside):  equilibrium temps show I>O → slight neg camber correct → -1.0° at 1G
+      idealCamber = outside ? -4.5 : -1.0;
       camberDev = Math.abs(effectiveCamber - idealCamber);
       camberFactor = camberGripFactor(effectiveCamber, outside, 1.0);
       casterFactor = casterGripFactor(caster[c], outside, true);
