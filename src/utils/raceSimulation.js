@@ -17,13 +17,24 @@
 
 // ============ CONSTANTS ============
 const G = 32.174;            // ft/s²
-const MPH_PER_FPS = 0.6818;  // conversion factor
 const RANKINE = 459.67;       // °F to °R offset
 
+// Actual cornering lateral G — calibrated from real-world pressure targets (not from speed/radius).
+// At OVAL_CORNER_G with the measured corner radius (105 ft):
+//   Oval: v = sqrt(0.375 × 32.174 × 105) = 35.6 ft/s ≈ 24 mph at apex
+//   Figure 8: 25 mph @ 149 ft radius → G = 36.7²/(149×32.174) = 0.28G
+// Using actual G for pressure targets gives RF≈40 PSI, LF≈26 PSI — matching real-world data.
+const OVAL_CORNER_G = 0.375;
+const F8_CORNER_G   = 0.28;
+
 // ============ TRACK ============
+// Measured via Google Earth: frontstretch 325 ft, backstretch 333 ft, corner width 53 ft.
+// Average straight = 329 ft. For a 1/4-mile (1320 ft) track: R = (1320-658)/(2π) ≈ 105 ft.
 const TRACK = {
-  straightLength: 335,   // ft
-  cornerRadius: 130,     // ft (racing line, calibrated)
+  frontStraight: 325,    // ft (measured, frontstretch with start/finish)
+  backStraight: 333,     // ft (measured, backstretch)
+  straightLength: 329,   // ft (average of front/back, used for symmetric calculations)
+  cornerRadius: 105,     // ft (racing line, derived from 1/4-mile total with 329 ft straights)
   bankingDeg: 3,         // effective banking (calibrated)
 };
 TRACK.bankingRad = TRACK.bankingDeg * Math.PI / 180;
@@ -75,7 +86,7 @@ function tempGripFactor(temp) {
   // Upper bound extended to 185°F — these tires don't degrade meaningfully
   // until well past 170°F, and the thermal model overshoots slightly on hot zones.
   const optLow = 100;
-  const optHigh = 185;
+  const optHigh = 165;
   if (temp >= optLow && temp <= optHigh) return 1.0;
   if (temp < optLow) {
     const below = optLow - temp;
@@ -85,26 +96,31 @@ function tempGripFactor(temp) {
   return Math.max(0.70, 1 - Math.pow(above / 50, 2) * 0.30);
 }
 
-// Pressure: deviation from load-optimal reduces grip
+// Pressure: deviation from load-optimal reduces grip.
+// 0.010/PSI = 1% grip per PSI of deviation — calibrated so a 2-3 PSI change
+// meaningfully shifts handling balance (RF pressure directly affects push/loose).
+// Floor 0.82 = 18% max loss (hits at 18 PSI off — catastrophically wrong pressure).
 function pressureGripFactor(hotPsi, tireLoad) {
   const avgLoad = VEH.weight / 4;
   const optPsi = 30 * (tireLoad / avgLoad);
   const dev = Math.abs(hotPsi - optPsi);
-  return Math.max(0.88, 1 - 0.0025 * dev);
+  return Math.max(0.82, 1 - 0.010 * dev);
 }
 
 // Camber: deviation from ideal effective camber for the cornering condition.
-// Outside front (RF in left turns): pyrometer data (O>M>I at equilibrium) shows the tire
-// needs significant negative camber to counteract body roll and keep contact patch loaded.
-// Ideal calibrated from real temp data: ~-4.5° effective at 1G.
-// Inside front (LF): pyrometer (I>M>O at equilibrium) shows slight negative camber is correct.
-// Ideal: ~-1.0° effective at 1G (near-zero, slightly negative).
+// Crown Vic P71 uses SLA (short-long arm / double wishbone) front suspension.
+// Outside front (RF in left turns): jounce/compression. SLA geometry (shorter upper arm)
+//   gains NEGATIVE camber in jounce — the key SLA advantage over MacPherson, which gains
+//   positive camber in jounce. Ideal effective ≈ -4.5° at 1G.
+// Inside front (LF): droop/extension. Gains POSITIVE camber (top tilts outward), same
+//   direction as MacPherson droop. Less critical since inside tire carries low load.
+//   Ideal effective ≈ 0° (flat contact patch).
 function camberGripFactor(actualCamber, isOutside, lateralG) {
   let ideal;
   if (isOutside) {
     ideal = -(2.5 + lateralG * 2.0);  // -4.5° at 1G (calibrated to pyrometer data)
   } else {
-    ideal = -(lateralG * 1.0);        // -1.0° at 1G for inside front
+    ideal = 0;                         // 0° — flat contact patch is optimal for inside front
   }
   const dev = Math.abs(actualCamber - ideal);
   return Math.max(0.88, 1 - 0.012 * dev);
@@ -151,9 +167,15 @@ function toeDragFactor(toeInches) {
   return 1.0 + 0.001 * absToe * absToe;
 }
 
-// Hot pressure from cold + tire temp via ideal gas law
-function hotPressure(coldPsi, tireTemp, ambient) {
-  return coldPsi * (tireTemp + RANKINE) / (ambient + RANKINE);
+// Temperature at which cold PSI is measured (morning before racing)
+// Independent of racing ambient — you inflate in the garage, not on track.
+const COLD_PSI_TEMP = 68; // °F
+
+// Hot pressure from cold + tire temp via ideal gas law: P2 = P1 × (T2/T1), absolute temps
+// Reference T1 = COLD_PSI_TEMP (when you inflated), not racing ambient.
+// At 200°F tires from 68°F cold: 34 × (200+460)/(68+460) = +8.5 PSI ≈ 10 PSI on a hot day ✓
+function hotPressure(coldPsi, tireTemp) {
+  return coldPsi * (tireTemp + RANKINE) / (COLD_PSI_TEMP + RANKINE);
 }
 
 // ============ SHOCK → ROLL STIFFNESS ============
@@ -193,6 +215,8 @@ function calcPerformance(setup, tires, ambient) {
   const refG = 1.0;
   const ss = shockStiffness(setup);
   const loads = tireLoads(refG, ss.frontLLTD);
+  // Pressure optimum uses actual cornering G — 1G loads give absurd optPsi (52 PSI RF, 14 PSI LF)
+  const cornerLoads = tireLoads(OVAL_CORNER_G, ss.frontLLTD);
   const roll = bodyRoll(refG, ss.total);
 
   // Toe and caster from setup (with defaults for backward compat)
@@ -213,20 +237,31 @@ function calcPerformance(setup, tires, ambient) {
     // Temperature
     mu *= tempGripFactor(avgTemp);
 
-    // Pressure
-    mu *= pressureGripFactor(hp, load);
+    // Pressure — use actual cornering loads (not 1G) for realistic optPsi
+    mu *= pressureGripFactor(hp, cornerLoads[c]);
 
     // Camber (with caster-induced dynamic camber for fronts)
     const outside = OUTSIDE[c];
     const front = IS_FRONT[c];
     if (front) {
-      // Caster camber gain: geometric formula ≈ caster × sin(steer_angle).
-      // At ~10° steer on 1/4-mile oval: sin(10°) ≈ 0.174.
-      // 0.18/degree used (vs old 0.5 which was 2.8× overstated).
+      // Caster camber gain: geometric ≈ caster × sin(steer_angle), ~0.18/deg at 10° steer.
+      // The two front wheels go OPPOSITE directions: RF (outside) gains negative, LF (inside)
+      // gains positive. This is the caster geometry — same effect on both SLA and MacPherson.
       const casterCamberGain = outside
         ? -(caster[c] * 0.18 * refG)  // RF: negative camber gain (adds to static neg camber)
-        : (caster[c] * 0.10 * refG);   // LF: small positive camber gain on inside wheel
-      const effectiveCamber = setup.camber[c] + casterCamberGain;
+        :  (caster[c] * 0.10 * refG); // LF: positive camber gain from caster (geometric)
+      // SLA body roll camber: computed at actual racing G (OVAL_CORNER_G), not 1G.
+      // The 1G reference used for everything else is a normalized metric; body roll is a
+      // physical effect limited to actual corner G. Using 1G overstates roll by 2.7× and
+      // throws off optStaticCamber recommendations significantly.
+      // RF (outside, jounce): SLA gains NEGATIVE camber — key advantage over MacPherson.
+      // LF (inside, droop): gains POSITIVE camber — same direction as MacPherson droop.
+      // Crown Vic P71 comfort SLA coefficients: ~0.35°/° roll in jounce, ~0.15°/° in droop.
+      const cornerRoll = roll * OVAL_CORNER_G; // actual roll in racing corners
+      const bodyRollCamber = outside
+        ? -(cornerRoll * 0.35)  // RF in jounce: SLA gains negative camber
+        :  (cornerRoll * 0.15); // LF in droop: gains positive camber (low inside load)
+      const effectiveCamber = setup.camber[c] + casterCamberGain + bodyRollCamber;
       mu *= camberGripFactor(effectiveCamber, outside, refG);
       // Caster direct effect (trail, stability)
       mu *= casterGripFactor(caster[c], outside, true);
@@ -264,6 +299,14 @@ function calcPerformance(setup, tires, ambient) {
   const imbalance = Math.abs(frontPct - VEH.frontBias);
   totalForce *= Math.max(0.94, 1 - imbalance * 0.2);
 
+  // LLTD driveability: gentle quadratic drag for setups far from balanced.
+  // Optimal oval LLTD ≈ 0.46 (recommended setup). Penalty is mild —
+  // ±0.10 dev: <1%, ±0.20: ~3%, ±0.35: ~9%. Floor 90% so even extreme
+  // setups are still driveable (sub-18s laps).
+  const OPTIMAL_LLTD = 0.46;
+  const lltdDev = Math.abs(ss.frontLLTD - OPTIMAL_LLTD);
+  totalForce *= Math.max(0.90, 1 - 0.7 * lltdDev * lltdDev);
+
   // Toe drag penalty on straights (reduces overall performance slightly)
   const dragPenalty = toeDragFactor(toe);
   totalForce /= dragPenalty;
@@ -284,6 +327,20 @@ function calcWorkFactors(setup) {
   };
 }
 
+// Compute steady-state equilibrium refTires for any setup + wfFn.
+// Used by testGain and optSetup so that load→temperature cascades correctly
+// when shocks change: stiffer shock → more load on that corner → higher equil temp → grip change.
+function eqTires(setup, ambientTemp, wfFn) {
+  const wf = wfFn(setup);
+  const tires = {};
+  for (const c of CORNERS) {
+    const tEq = ambientTemp +
+      (THERMAL.heatBase + THERMAL.heatLoad * wf[c] * THERMAL.refSpeed) / THERMAL.coolRate;
+    tires[c] = { temp: tEq, inside: tEq, middle: tEq, outside: tEq, wear: 0 };
+  }
+  return tires;
+}
+
 // ============ I/M/O TIRE TEMPERATURE UPDATE ============
 // Each tire tracks inside, middle, outside temperatures separately.
 // The "temp" field is the average used for grip calculations.
@@ -291,6 +348,9 @@ function updateTireTemps(tires, workFactors, ambient, lapTime, setup) {
   const newTires = {};
   const toe = setup.toe !== undefined ? setup.toe : -0.25;
   const caster = setup.caster || { LF: 3.5, RF: 5.0 };
+  // Body roll used for both rear solid-axle camber and SLA front camber
+  const ss = shockStiffness(setup);
+  const roll = bodyRoll(1.0, ss.total);
 
   for (const c of CORNERS) {
     const wf = workFactors[c];
@@ -303,41 +363,57 @@ function updateTireTemps(tires, workFactors, ambient, lapTime, setup) {
     let camberVal = 0;
     if (front) {
       camberVal = setup.camber[c];
-      // Corrected caster gain: geometric ≈ caster × sin(~10° oval steer) ≈ 0.18/deg
+      // Caster gain: RF (outside) gains negative, LF (inside) gains positive — geometric.
       const casterGain = outside
         ? -(caster[c] * 0.18)
-        : (caster[c] * 0.10);
+        :  (caster[c] * 0.10);
       camberVal += casterGain;
     } else {
-      // Rear: body roll effect
-      const ss = shockStiffness(setup);
-      const roll = bodyRoll(1.0, ss.total);
+      // Rear: body roll effect (solid axle)
       camberVal = outside ? roll : -roll;
     }
 
-    // Camber shifts heat distribution: negative camber → more inside heat
-    // Each degree of negative camber shifts ~2% heat from outside to inside.
-    // Sign: negate camberVal so that negative camber → positive shift → more inside heat.
-    const camberShift = -camberVal * 0.02;
-    const insideMult = zoneMults[0] + camberShift;  // more neg camber = more inside heat ✓
+    // Camber shifts heat distribution within the tire (I/M/O zones).
+    // Calibrated against 4-session pyrometer dataset (87–95°F, 25-lap oval races):
+    //
+    //   Outside tires (RF, RR): centrifugal cornering load dominates zone distribution.
+    //     The base outsideTire mults [0.82, 1.0, 1.18] already capture this correctly.
+    //     Applying a camberShift here moves heat the wrong direction — zero it out.
+    //
+    //   Inside front (LF): camber loads the inside (motor-side) edge, compounded by
+    //     steering scrub from toe-out. Observed inside-outside deltas are large.
+    //     Coefficient 0.04/deg matches multi-session pyrometer data.
+    //
+    //   Inside rear (LR): solid rear axle rolls with the body but no steering scrub.
+    //     The body-roll camber effect is much weaker in practice (nearly flat I/O pattern
+    //     observed). Use a small coefficient (0.008) to avoid over-predicting the spread.
+    let camberShift;
+    if (outside) {
+      camberShift = 0;                    // centrifugal load dominates; base mults are correct
+    } else if (front) {
+      camberShift = -camberVal * 0.04;    // camber + steering scrub; calibrated to pyrometer data
+    } else {
+      camberShift = -camberVal * 0.008;   // body roll only, no scrub; small effect
+    }
+    const insideMult = zoneMults[0] + camberShift;
     const middleMult = zoneMults[1];
-    const outsideMult = zoneMults[2] - camberShift; // more neg camber = less outside heat ✓
+    const outsideMult = zoneMults[2] - camberShift;
 
     // Toe effect on temperature: toe out heats inside edges of both fronts
+    // Coefficient updated to 0.05 (from 0.03) based on observed LF inside-hot pattern.
     let toeInsideBoost = 0;
     let toeOutsideBoost = 0;
     if (front) {
-      // Toe out (negative) → inside edges scrub more
-      toeInsideBoost = -toe * 0.03;   // toe out → positive boost to inside
-      toeOutsideBoost = toe * 0.02;    // toe out → slight cooling of outside
+      toeInsideBoost  = -toe * 0.05;   // toe out → positive boost to inside
+      toeOutsideBoost =  toe * 0.03;   // toe out → slight cooling of outside
     }
 
     // Pressure effect on temperature: over-inflation → hotter middle
     const avgTemp = (tires[c].inside + tires[c].middle + tires[c].outside) / 3;
     const hp = hotPressure(setup.coldPsi[c], avgTemp, ambient);
     const avgLoad = VEH.weight / 4;
-    const loads = tireLoads(1.0, shockStiffness(setup).frontLLTD);
-    const optPsi = 30 * (loads[c] / avgLoad);
+    const cornerLoadsTherm = tireLoads(OVAL_CORNER_G, shockStiffness(setup).frontLLTD);
+    const optPsi = 30 * (cornerLoadsTherm[c] / avgLoad);
     const psiDev = hp - optPsi; // positive = over-inflated
     const psiMiddleBoost = psiDev * 0.003; // over-inflation heats middle more
 
@@ -382,7 +458,11 @@ THERMAL.wearRate = function (workFactor, temp) {
 
 // ============ LAP TIME FROM METRIC ============
 const BASELINE_LAP = 17.4;
-const LAP_SENSITIVITY = 0.55;
+// How aggressively grip improvements translate to lap time gains.
+// 0.55 was too aggressive — gave 16.3s optimal vs real fastest 17.1.
+// 0.28 caps the theoretical perfect setup at ~16.8s (realistic for short oval
+// where straight time is engine-limited and grip has diminishing returns).
+const LAP_SENSITIVITY = 0.28;
 
 let _baselineMetric = null;
 
@@ -404,24 +484,30 @@ function metricToLapTime(metric) {
   return BASELINE_LAP * Math.pow(base / metric, LAP_SENSITIVITY);
 }
 
-// Approximate speeds for display
+// Physics-derived speeds.
+// Corner: v = sqrt(G_lateral × g × R_racing) — minimum speed at apex.
+// Straight peak: car accelerates from corner exit to peak then brakes back to corner entry.
+//   v_peak² = v_corner² + 2·a_acc·L·a_brake / (a_acc + a_brake)
 function metricToSpeeds(metric) {
-  const cornerSpeed = Math.sqrt(metric * G * TRACK.cornerRadius);
-  const wheelForce = VEH.peakTorque * VEH.gear2Ratio / VEH.tireRadius * VEH.driveEff;
-  const drag = 0.5 * 0.00238 * VEH.cd * VEH.frontalArea * cornerSpeed * cornerSpeed;
-  const netForce = wheelForce - drag;
-  const accel = netForce / VEH.mass;
-  const decel = VEH.brakingG * G;
-  const dBrake = Math.max(0,
-    (cornerSpeed * cornerSpeed + 2 * accel * TRACK.straightLength - cornerSpeed * cornerSpeed) /
-    (2 * (accel + decel))
-  );
-  const dAccel = TRACK.straightLength - dBrake;
-  const peakSpeedSq = cornerSpeed * cornerSpeed + 2 * accel * Math.max(dAccel, 0);
-  const peakSpeed = Math.sqrt(Math.max(peakSpeedSq, cornerSpeed * cornerSpeed));
+  const scale = Math.sqrt(metric / getBaselineMetric());
+
+  // Corner apex speed from lateral G and radius
+  const v_corner = Math.sqrt(OVAL_CORNER_G * G * TRACK.cornerRadius);        // ft/s
+  const cornerBaseMph = v_corner / 1.4667;
+
+  // Engine thrust force at low speed (2nd gear, conservative peak-torque estimate)
+  const f_engine = VEH.peakTorque * VEH.gear2Ratio * VEH.driveEff / VEH.tireRadius;
+  const a_acc   = f_engine / VEH.mass;                                        // ft/s²
+  const a_brake = VEH.brakingG * G;                                           // ft/s²
+
+  // Peak speed over the straight (acceleration then braking back to corner speed)
+  const v_peak_sq = v_corner * v_corner +
+    2 * a_acc * TRACK.straightLength * a_brake / (a_acc + a_brake);
+  const straightBaseMph = Math.sqrt(v_peak_sq) / 1.4667;
+
   return {
-    cornerMph: cornerSpeed * MPH_PER_FPS,
-    peakMph: peakSpeed * MPH_PER_FPS,
+    cornerMph: Math.round(cornerBaseMph * scale * 10) / 10,
+    peakMph:   Math.round(straightBaseMph * scale * 10) / 10,
   };
 }
 
@@ -435,15 +521,60 @@ export const DEFAULT_SETUP = {
 };
 
 // ============ RECOMMENDED SETUP ============
+// Grid-searched over all 180,880 combinations of available shocks, caster, camber (analytical),
+// PSI (analytical), and toe. Best lap: 17.196s @ 90°F (vs 17.4s baseline @ 65°F).
+// Shocks: LF Monroe 171346 (rating 8), RF KYB SR4140/551600 (rating 6),
+//         LR/RR Monroe 550018 Magnum Severe Service (rating 1 — stiffest available)
+// Camber analytically derived: ideal effective LF=0°, RF=-4.5° minus caster+body-roll gains.
+// PSI analytically derived: optimal hot PSI from corner loads at OVAL_CORNER_G.
 export const RECOMMENDED_SETUP = {
-  shocks: { LF: 6, RF: 2, LR: 5, RR: 1 },
-  // Camber corrected from pyrometer data + updated camber model:
-  //   RF: more negative needed (outside-hot signal) → -3.5° (approaching -4° rule max)
-  //   LF: near-zero optimal for inside tire → -1.25° (was wrong +1.0° from bad model)
-  camber: { LF: -1.25, RF: -3.5 },
-  caster: { LF: 3.0, RF: 5.5 },
-  toe: -0.375, // 3/8" toe out for better turn-in
-  coldPsi: { LF: 22, RF: 36, LR: 26, RR: 34 },
+  shocks: { LF: 8, RF: 6, LR: 1, RR: 1 },
+  camber: { LF: -0.5, RF: -3.0 },
+  caster: { LF: 3.0, RF: 5.0 },
+  toe: -0.25,
+  coldPsi: { LF: 26, RF: 32.5, LR: 16.5, RR: 33.5 },
+};
+
+// ============ PETE SETUP ============
+// Pete's race setup — LF/RF FCS 1336349 (rating 4), LR/RR KYB 555603 (rating 2)
+export const PETE_SETUP = {
+  shocks: { LF: 4, RF: 4, LR: 2, RR: 2 },
+  camber: { LF: -2.25, RF: -2.75 },
+  caster: { LF: 3.5, RF: 8.0 },
+  toe: -0.25,
+  coldPsi: { LF: 24, RF: 35, LR: 17.5, RR: 32 },
+};
+
+// ============ DYLAN SETUP ============
+// Dylan's race setup — LF/RF FCS 1336349 (rating 4), LR/RR KYB 555603 (rating 2)
+export const DYLAN_SETUP = {
+  shocks: { LF: 4, RF: 4, LR: 2, RR: 2 },
+  camber: { LF: -2.0, RF: -2.75 },
+  caster: { LF: 4.0, RF: 3.25 },
+  toe: -0.25,
+  coldPsi: { LF: 24, RF: 35, LR: 17.5, RR: 32 },
+};
+
+// ============ JOSH SETUP ============
+// Josh's race setup — LF/RF FCS 1336349 (rating 4), LR/RR KYB 555603 (rating 2)
+export const JOSH_SETUP = {
+  shocks: { LF: 4, RF: 4, LR: 2, RR: 2 },
+  camber: { LF: -0.75, RF: -1.75 },
+  caster: { LF: 5.0, RF: 7.0 },
+  toe: -0.25,
+  coldPsi: { LF: 24, RF: 35, LR: 17.5, RR: 32 },
+};
+
+// ============ FIGURE 8 DEFAULT SETUP ============
+// Calibrated to real baseline run — symmetric pressures for bidirectional loading
+// Pyrometer equilibrium: RF O:144 M:142 I:142, RR O:147 M:146 I:133,
+//                        LR O:143 M:145 I:132, LF O:146 M:140 I:139
+export const DEFAULT_SETUP_F8 = {
+  shocks: { LF: 4, RF: 4, LR: 3, RR: 3 },
+  camber: { LF: -2.5, RF: -2.5 },
+  caster: { LF: 4.0, RF: 4.0 },
+  toe: -0.25,
+  coldPsi: { LF: 34, RF: 34, LR: 29, RR: 29 },
 };
 
 // ============ MAIN SIMULATION ============
@@ -525,6 +656,8 @@ export function simulateRace(setup, ambientTemp = 65, numLaps = 25) {
 export function analyzeSetup(setup, ambientTemp = 65) {
   const ss = shockStiffness(setup);
   const loads = tireLoads(1.0, ss.frontLLTD);
+  // Use actual cornering G for pressure targets — 1G gives absurd RF/LF optPsi
+  const cornerLoads = tireLoads(OVAL_CORNER_G, ss.frontLLTD);
   const avgLoad = VEH.weight / 4;
   const roll = bodyRoll(1.0, ss.total);
   const toe = setup.toe !== undefined ? setup.toe : -0.25;
@@ -549,33 +682,32 @@ export function analyzeSetup(setup, ambientTemp = 65) {
     const wf = workFactors[c];
     const tEq = refTires[c].temp;
 
-    // Pressure
+    // Pressure — use actual cornering G loads (not 1G) for realistic optPsi
+    // At OVAL_CORNER_G: RF≈40 PSI, LF≈26 PSI, RR≈36 PSI, LR≈19 PSI (matches real-world data)
     const hp = hotPressure(setup.coldPsi[c], tEq, ambientTemp);
-    const optHotPsi = 30 * (load / avgLoad);
+    const optHotPsi = 30 * (cornerLoads[c] / avgLoad);
     const psiDev = hp - optHotPsi;
-    const psiGripFactor = pressureGripFactor(hp, load);
+    const psiGripFactor = pressureGripFactor(hp, cornerLoads[c]);
     // XL-rated Ironman iMove Gen3 AS 235/55R17: 51 PSI cold max → use 51 PSI as hot ceiling.
-    // Hot pressure at track equilibrium (~120°F) rises ~10.5% above cold, so cold recommendations
-    // will back-calculate to ~46 PSI max — well within the 51 PSI XL sidewall rating.
     const isPresLimited = optHotPsi < 18 || optHotPsi > 51;
     const recHotPsi = Math.min(Math.max(18, optHotPsi), 51);
-    const recColdPsi = recHotPsi * (ambientTemp + RANKINE) / (tEq + RANKINE);
+    const recColdPsi = recHotPsi * (COLD_PSI_TEMP + RANKINE) / (tEq + RANKINE);
 
     // Camber
     let effectiveCamber, idealCamber, camberDev, camberFactor;
-    let casterGain = 0, casterFactor = 1, optStaticCamber = null;
+    let casterGain = 0, casterFactor = 1, optStaticCamber = null, bodyRollCamber = 0;
     if (front) {
-      // Corrected caster gain: geometric ≈ caster × sin(~10° oval steer) ≈ 0.18/deg
+      // Caster gain: RF (outside) gains negative, LF (inside) gains positive — geometric.
       casterGain = outside ? -(caster[c] * 0.18) : (caster[c] * 0.10);
-      effectiveCamber = setup.camber[c] + casterGain;
-      // Ideal camber calibrated from pyrometer data:
-      //   RF (outside): equilibrium temps show O>I → needs more neg camber → -4.5° at 1G
-      //   LF (inside):  equilibrium temps show I>O → slight neg camber correct → -1.0° at 1G
-      idealCamber = outside ? -4.5 : -1.0;
+      // SLA body roll at actual racing G (not 1G) — see calcPerformance comment for rationale.
+      const cornerRoll = roll * OVAL_CORNER_G;
+      bodyRollCamber = outside ? -(cornerRoll * 0.35) : (cornerRoll * 0.15);
+      effectiveCamber = setup.camber[c] + casterGain + bodyRollCamber;
+      idealCamber = outside ? -4.5 : 0.0;
       camberDev = Math.abs(effectiveCamber - idealCamber);
       camberFactor = camberGripFactor(effectiveCamber, outside, 1.0);
       casterFactor = casterGripFactor(caster[c], outside, true);
-      optStaticCamber = Math.round((idealCamber - casterGain) * 4) / 4;
+      optStaticCamber = Math.round((idealCamber - casterGain - bodyRollCamber) * 4) / 4;
     } else {
       effectiveCamber = outside ? roll : -roll;
       idealCamber = outside ? -1.0 : 0;
@@ -584,19 +716,21 @@ export function analyzeSetup(setup, ambientTemp = 65) {
     }
 
     const tempFactor = tempGripFactor(tEq);
+    const toeFactor = front ? toeGripFactor(toe) : 1.0; // matches calcPerformance
     const loadSens = Math.pow(avgLoad / Math.max(load, 50), 0.08);
-    const mu = tempFactor * psiGripFactor * camberFactor * casterFactor * loadSens;
-    const adjustableScore = tempFactor * psiGripFactor * camberFactor * casterFactor;
+    const mu = tempFactor * psiGripFactor * camberFactor * casterFactor * toeFactor * loadSens;
+    const adjustableScore = tempFactor * psiGripFactor * camberFactor * casterFactor * toeFactor;
 
     corners[c] = {
       load, wf, estimatedTemp: tEq,
       hp, optHotPsi, psiDev, psiGripFactor, isPresLimited, recHotPsi, recColdPsi,
-      effectiveCamber, idealCamber, camberDev, camberFactor, casterGain, casterFactor,
-      optStaticCamber, front, outside, tempFactor, loadSens, mu, adjustableScore,
+      effectiveCamber, idealCamber, camberDev, camberFactor,
+      casterGain, bodyRollCamber, dynamicGain: casterGain + bodyRollCamber,
+      casterFactor, optStaticCamber, front, outside, tempFactor, loadSens, mu, adjustableScore,
     };
   }
 
-  // Balance
+  // Balance — matches calcPerformance which uses VEH.frontBias
   let frontForce = 0, rearForce = 0;
   for (const c of CORNERS) {
     const f = corners[c].mu * corners[c].load;
@@ -619,7 +753,9 @@ export function analyzeSetup(setup, ambientTemp = 65) {
   const testGain = (mutate) => {
     const s = clone(setup);
     mutate(s);
-    return lapTime - metricToLapTime(calcPerformance(s, refTires, ambientTemp));
+    // Recompute equilibrium temps for mutated setup — load shifts (from shock changes etc.)
+    // cascade into temperature, which feeds tempGripFactor. Using stale refTires would miss this.
+    return lapTime - metricToLapTime(calcPerformance(s, eqTires(s, ambientTemp, calcWorkFactors), ambientTemp));
   };
   const recs = [];
 
@@ -637,7 +773,7 @@ export function analyzeSetup(setup, ambientTemp = 65) {
       optimal: `${opt}°`, optimalVal: opt,
       gain,
       detail: `Mid-corner effective: ${corners[c].effectiveCamber.toFixed(2)}° → ideal ${corners[c].idealCamber.toFixed(1)}°`,
-      note: `Assumes ${Math.abs(corners[c].casterGain).toFixed(1)}° dynamic gain from ${caster[c]}° caster — verify with tire temps`,
+      note: `Dynamic gains: ${Math.abs(corners[c].casterGain).toFixed(2)}° caster + ${Math.abs(corners[c].bodyRollCamber).toFixed(2)}° body roll = ${Math.abs(corners[c].dynamicGain).toFixed(2)}° total — verify with tire temps`,
     });
   }
 
@@ -677,6 +813,54 @@ export function analyzeSetup(setup, ambientTemp = 65) {
     }
   }
 
+  // Shocks — test all click values 0-10 for each position, find best gain.
+  // Shocks drive LLTD, body roll, and phase-specific balance — must be in recommendations.
+  // Lower click = stiffer (more LLTD contribution). Front stiffer = more push. Rear stiffer = more loose.
+  const shockMeta = {
+    RF: {
+      role: 'Outside front strut',
+      stiffer: 'Increases front LLTD → more RF load on turn-in → tighter entry',
+      softer:  'Reduces front LLTD → less RF load transfer → freer turn-in, looser entry',
+    },
+    LF: {
+      role: 'Inside front strut',
+      stiffer: 'Resists body roll → slower weight transfer → more front LLTD → tighter',
+      softer:  'Allows more body roll → front loads later → less front LLTD → looser',
+    },
+    RR: {
+      role: 'Outside rear shock',
+      stiffer: 'Increases rear LLTD → overloads RR in corners → looser',
+      softer:  'Reduces rear LLTD → distributes rear load better → tighter',
+    },
+    LR: {
+      role: 'Inside rear shock',
+      stiffer: 'More rear roll resistance → more rear LLTD → looser',
+      softer:  'Allows inside rear to extend freely → less rear LLTD → tighter',
+    },
+  };
+  for (const pos of ['RF', 'LF', 'RR', 'LR']) {
+    const cur = setup.shocks[pos];
+    let best = { val: cur, gain: 0 };
+    for (let v = 0; v <= 10; v++) {
+      if (v === cur) continue;
+      const g = testGain(s => { s.shocks[pos] = v; });
+      if (g > best.gain) best = { val: v, gain: g };
+    }
+    if (best.gain < 0.005) continue;
+    const isStiffer = best.val < cur;
+    const meta = shockMeta[pos];
+    const newSS = shockStiffness({ ...setup, shocks: { ...setup.shocks, [pos]: best.val } });
+    recs.push({
+      id: `${pos.toLowerCase()}-shock`,
+      parameter: `${pos} Shock`,
+      current: `Click ${cur}`, currentVal: cur,
+      optimal: `Click ${best.val}`, optimalVal: best.val,
+      gain: best.gain,
+      detail: `${meta.role}: ${isStiffer ? 'stiffen' : 'soften'} ${Math.abs(cur - best.val)} click${Math.abs(cur - best.val) > 1 ? 's' : ''}. New front LLTD: ${(newSS.frontLLTD * 100).toFixed(1)}% (current: ${(ss.frontLLTD * 100).toFixed(1)}%)`,
+      note: isStiffer ? meta.stiffer : meta.softer,
+    });
+  }
+
   recs.sort((a, b) => b.gain - a.gain);
 
   // Combined optimal lap time
@@ -686,10 +870,12 @@ export function analyzeSetup(setup, ambientTemp = 65) {
     if (rec.id === 'lf-camber') optSetup.camber.LF = rec.optimalVal;
     if (rec.id === 'rf-camber') optSetup.camber.RF = rec.optimalVal;
     if (rec.id === 'toe') optSetup.toe = rec.optimalVal;
-    const m = rec.id.match(/^([a-z]{2})-psi$/);
+    const m  = rec.id.match(/^([a-z]{2})-psi$/);
     if (m) optSetup.coldPsi[m[1].toUpperCase()] = rec.optimalVal;
+    const m2 = rec.id.match(/^([a-z]{2})-shock$/);
+    if (m2) optSetup.shocks[m2[1].toUpperCase()] = rec.optimalVal;
   }
-  const optMetric = calcPerformance(optSetup, refTires, ambientTemp);
+  const optMetric = calcPerformance(optSetup, eqTires(optSetup, ambientTemp, calcWorkFactors), ambientTemp);
   const optLapTime = metricToLapTime(optMetric);
 
   return {
@@ -697,5 +883,520 @@ export function analyzeSetup(setup, ambientTemp = 65) {
     toeGrip, toeDrag, toe,
     lapTime, optLapTime, totalGain: lapTime - optLapTime,
     recs, caster,
+  };
+}
+
+// ============ FIGURE 8 SETUP ANALYSIS ============
+// Adapted for bidirectional loading. Each front tire alternates outside/inside each lap.
+//
+// Key physics differences from oval:
+//   - Average loads ≈ static loads (lateral transfer cancels across L+R turns)
+//   - Fronts heavier than rears (55% front bias) → optimal psi still differs F/R
+//   - Optimal static camber found by minimizing sum of per-turn deviations from ideal:
+//       optStatic = avg(ideal_outside_static, ideal_inside_static)
+//       = avg(-4.5 + caster×0.18, 0.0 - caster×0.10)  [inside ideal = 0° flat]
+//   - Caster benefits each front ONLY when it is the outside tire (50% of laps)
+//       avgCasterFactor = (casterGripFactor_outside + 1.0) / 2
+//   - Balance penalty in calcPerformanceF8 still uses VEH.frontBias (0.55), not 0.50
+//
+// Display factors mirror calcPerformanceF8 exactly so scores reflect actual lap time impact.
+const F8_IDEAL_AVG_EFFECTIVE_CAMBER = -2.25; // avg of outside ideal (−4.5°) + inside ideal (0°, flat)
+
+export function analyzeSetupF8(setup, ambientTemp = 65) {
+  const ss = shockStiffness(setup);
+  // Average loads across L+R turns = static loads (lateral transfer cancels)
+  const loadsL = tireLoads(1.0, ss.frontLLTD);
+  const loadsR = { LF: loadsL.RF, RF: loadsL.LF, LR: loadsL.RR, RR: loadsL.LR };
+  const loads = {
+    LF: (loadsL.LF + loadsR.LF) / 2,
+    RF: (loadsL.RF + loadsR.RF) / 2,
+    LR: (loadsL.LR + loadsR.LR) / 2,
+    RR: (loadsL.RR + loadsR.RR) / 2,
+  };
+  const avgLoad = VEH.weight / 4;
+  const roll = bodyRoll(1.0, ss.total);
+  const toe = setup.toe !== undefined ? setup.toe : -0.25;
+  const caster = setup.caster || { LF: 4.0, RF: 4.0 };
+
+  // Steady-state equilibrium temps using F8 work factors (averaged L+R)
+  const workFactors = calcWorkFactorsF8(setup);
+  const refTires = {};
+  for (const c of CORNERS) {
+    const wf = workFactors[c];
+    const tEq = ambientTemp +
+      (THERMAL.heatBase + THERMAL.heatLoad * wf * THERMAL.refSpeed) / THERMAL.coolRate;
+    refTires[c] = { temp: tEq, inside: tEq, middle: tEq, outside: tEq, wear: 0 };
+  }
+
+  const corners = {};
+  for (const c of CORNERS) {
+    const load = loads[c];
+    const front = IS_FRONT[c];
+    const tEq = refTires[c].temp;
+
+    // Pressure — symmetric loads front-to-front and rear-to-rear, but fronts heavier than rears
+    const hp = hotPressure(setup.coldPsi[c], tEq, ambientTemp);
+    const optHotPsi = 30 * (load / avgLoad);
+    const psiDev = hp - optHotPsi;
+    const psiGripFactor = pressureGripFactor(hp, load);
+    const isPresLimited = optHotPsi < 18 || optHotPsi > 51;
+    const recHotPsi = Math.min(Math.max(18, optHotPsi), 51);
+    const recColdPsi = recHotPsi * (COLD_PSI_TEMP + RANKINE) / (tEq + RANKINE);
+
+    let effectiveCamber, idealCamber, camberDev, camberFactor;
+    let casterGain = 0, casterFactor = 1, optStaticCamber = null;
+
+    if (front) {
+      // Per-turn caster camber gains: outside wheel gains negative, inside gains positive.
+      // Caster direction is geometric and the same on SLA and MacPherson.
+      const gOut = -(caster[c] * 0.18); // outside turn: negative camber gain
+      const gIn  =  (caster[c] * 0.10); // inside turn: positive camber gain (geometric)
+      // Average caster gain across both turns (F8 body roll averages to ~0 across L+R)
+      casterGain = (gOut + gIn) / 2; // = caster × -0.04
+
+      // Average effective camber (for display — what the tire averages across a lap)
+      effectiveCamber = setup.camber[c] + casterGain;
+      idealCamber = F8_IDEAL_AVG_EFFECTIVE_CAMBER; // -2.25°
+
+      // DISPLAY: average the actual per-turn camberGripFactor (matches calcPerformanceF8)
+      const factorOut = camberGripFactor(setup.camber[c] + gOut, true,  1.0);
+      const factorIn  = camberGripFactor(setup.camber[c] + gIn,  false, 1.0);
+      camberFactor = (factorOut + factorIn) / 2;
+      camberDev = Math.abs(effectiveCamber - idealCamber);
+
+      // DISPLAY: caster factor — helps only when this tire is the outside tire (50% of laps)
+      const casterBenefit = casterGripFactor(caster[c], true, true);
+      casterFactor = (casterBenefit + 1.0) / 2;
+
+      // Optimal static camber: avg of (ideal_outside_static, ideal_inside_static)
+      //   ideal_outside_static = -4.5 - gOut = -4.5 + caster×0.18
+      //   ideal_inside_static  =  0.0 - gIn  = 0.0 - caster×0.10  (flat patch; gIn is positive)
+      const optOut = -4.5 - gOut;
+      const optIn  =  0.0 - gIn;
+      optStaticCamber = Math.round(((optOut + optIn) / 2) * 4) / 4;
+
+    } else {
+      // Rear solid axle: body roll averages to ~0 across L+R turns → dynamic camber ~0°
+      // ideal = 0°, so rear camber score is always 1.0 in figure 8
+      effectiveCamber = 0;
+      idealCamber = 0;
+      camberDev = 0;
+      camberFactor = 1.0;
+      casterFactor = 1.0;
+    }
+
+    const tempFactor = tempGripFactor(tEq);
+    const loadSens = Math.pow(avgLoad / Math.max(load, 50), 0.08);
+    const mu = tempFactor * psiGripFactor * camberFactor * casterFactor * loadSens;
+    const adjustableScore = tempFactor * psiGripFactor * camberFactor * casterFactor;
+
+    corners[c] = {
+      load, estimatedTemp: tEq,
+      hp, optHotPsi, psiDev, psiGripFactor, isPresLimited, recHotPsi, recColdPsi,
+      effectiveCamber, idealCamber, camberDev, camberFactor, casterGain, casterFactor,
+      optStaticCamber, front, outside: OUTSIDE[c], tempFactor, loadSens, mu, adjustableScore,
+    };
+  }
+
+  // Balance — uses VEH.frontBias (0.55) to match calcPerformanceF8's penalty formula
+  let frontForce = 0, rearForce = 0;
+  for (const c of CORNERS) {
+    const f = corners[c].mu * corners[c].load;
+    if (IS_FRONT[c]) frontForce += f; else rearForce += f;
+  }
+  const frontGripPct = frontForce / Math.max(frontForce + rearForce, 1);
+  const imbalance = Math.abs(frontGripPct - VEH.frontBias);
+  const balancePenalty = Math.max(0.94, 1 - imbalance * 0.2);
+
+  const toeGrip = toeGripFactor(toe);
+  const toeDrag = toeDragFactor(toe);
+
+  const metric = calcPerformanceF8(setup, refTires, ambientTemp);
+  const lapTime = metricToLapTimeF8(metric);
+
+  // Recommendations — testGain uses calcPerformanceF8 directly (ground truth)
+  const clone = (s) => JSON.parse(JSON.stringify(s));
+  const testGain = (mutate) => {
+    const s = clone(setup);
+    mutate(s);
+    return lapTime - metricToLapTimeF8(calcPerformanceF8(s, eqTires(s, ambientTemp, calcWorkFactorsF8), ambientTemp));
+  };
+  const recs = [];
+
+  // Front camber
+  for (const c of ['LF', 'RF']) {
+    const cur = setup.camber[c];
+    const opt = corners[c].optStaticCamber;
+    if (opt === null || Math.abs(opt - cur) < 0.25) continue;
+    const gain = testGain(s => { s.camber[c] = opt; });
+    const gOut = -(caster[c] * 0.18);
+    const gIn  =  (caster[c] * 0.10);
+    const effOut = (opt + gOut).toFixed(2);
+    const effIn  = (opt + gIn).toFixed(2);
+    recs.push({
+      id: `${c.toLowerCase()}-camber`,
+      parameter: `${c} Camber`,
+      current: `${cur}°`, currentVal: cur,
+      optimal: `${opt}°`, optimalVal: opt,
+      gain,
+      detail: `At ${opt}°: effective ${effOut}° outside turn (ideal −4.5°), ${effIn}° inside turn (ideal 0° flat)`,
+      note: 'Both fronts alternate outside/inside each lap — symmetric target maximizes average contact patch',
+    });
+  }
+
+  // Pressures
+  for (const c of CORNERS) {
+    const cur = setup.coldPsi[c];
+    const opt = Math.round(corners[c].recColdPsi * 2) / 2;
+    if (Math.abs(opt - cur) < 0.5) continue;
+    const gain = testGain(s => { s.coldPsi[c] = opt; });
+    if (Math.abs(gain) < 0.003) continue;
+    const d = corners[c];
+    recs.push({
+      id: `${c.toLowerCase()}-psi`,
+      parameter: `${c} Pressure`,
+      current: `${cur} PSI`, currentVal: cur,
+      optimal: `${opt} PSI`, optimalVal: opt,
+      gain,
+      detail: `Hot: ${d.hp.toFixed(1)} → ${d.recHotPsi.toFixed(1)} PSI (load-optimal: ${d.optHotPsi.toFixed(0)} PSI for ${Math.round(d.load)} lb avg load)`,
+      note: d.isPresLimited ? 'Load is far from average — optimal is outside practical range' : null,
+    });
+  }
+
+  // Toe
+  const optToe = -0.25;
+  if (Math.abs(toe - optToe) > 0.0625) {
+    const gain = testGain(s => { s.toe = optToe; });
+    if (Math.abs(gain) >= 0.002) {
+      recs.push({
+        id: 'toe',
+        parameter: 'Front Toe',
+        current: toe < 0 ? `${Math.abs(toe)}" toe out` : toe > 0 ? `${toe}" toe in` : 'Zero toe',
+        currentVal: toe,
+        optimal: '¼" toe out', optimalVal: -0.25,
+        gain,
+        detail: 'Sharpens turn-in for both left and right corners; balances against straight-line drag on 350 ft straights',
+        note: null,
+      });
+    }
+  }
+
+  // Shocks — F8 turns both directions; shocks drive LLTD and body roll each way.
+  // Lower click = stiffer. For F8 optimal LLTD ≈ 0.50 (balanced bidirectional).
+  const shockMetaF8 = {
+    RF: {
+      role: 'RF strut (outside in left turns, inside in right)',
+      stiffer: 'More front LLTD in left turns → tighter left, but also acts as inside in right turns',
+      softer:  'Less front LLTD in left turns → looser left, more balanced overall',
+    },
+    LF: {
+      role: 'LF strut (inside in left turns, outside in right)',
+      stiffer: 'More front LLTD in right turns → tighter right, looser left',
+      softer:  'Less front LLTD in right turns → more balanced across both directions',
+    },
+    RR: {
+      role: 'RR shock (outside rear in left turns)',
+      stiffer: 'More rear LLTD → looser in left turns; also inside rear in right turns',
+      softer:  'Less rear LLTD → tighter in left turns',
+    },
+    LR: {
+      role: 'LR shock (inside rear in left turns, outside rear in right)',
+      stiffer: 'More rear LLTD in right turns; less inside rear droop in left turns',
+      softer:  'Allows inside rear to extend freely in left turns; reduces rear LLTD in right turns',
+    },
+  };
+  for (const pos of ['RF', 'LF', 'RR', 'LR']) {
+    const cur = setup.shocks[pos];
+    let best = { val: cur, gain: 0 };
+    for (let v = 0; v <= 10; v++) {
+      if (v === cur) continue;
+      const g = testGain(s => { s.shocks[pos] = v; });
+      if (g > best.gain) best = { val: v, gain: g };
+    }
+    if (best.gain < 0.005) continue;
+    const isStiffer = best.val < cur;
+    const meta = shockMetaF8[pos];
+    const newSS = shockStiffness({ ...setup, shocks: { ...setup.shocks, [pos]: best.val } });
+    recs.push({
+      id: `${pos.toLowerCase()}-shock`,
+      parameter: `${pos} Shock`,
+      current: `Click ${cur}`, currentVal: cur,
+      optimal: `Click ${best.val}`, optimalVal: best.val,
+      gain: best.gain,
+      detail: `${meta.role}: ${isStiffer ? 'stiffen' : 'soften'} ${Math.abs(cur - best.val)} click${Math.abs(cur - best.val) > 1 ? 's' : ''}. New front LLTD: ${(newSS.frontLLTD * 100).toFixed(1)}% (current: ${(ss.frontLLTD * 100).toFixed(1)}%)`,
+      note: isStiffer ? meta.stiffer : meta.softer,
+    });
+  }
+
+  recs.sort((a, b) => b.gain - a.gain);
+
+  const optSetup = clone(setup);
+  for (const rec of recs) {
+    if (rec.gain <= 0) continue;
+    if (rec.id === 'lf-camber') optSetup.camber.LF = rec.optimalVal;
+    if (rec.id === 'rf-camber') optSetup.camber.RF = rec.optimalVal;
+    if (rec.id === 'toe') optSetup.toe = rec.optimalVal;
+    const m  = rec.id.match(/^([a-z]{2})-psi$/);
+    if (m) optSetup.coldPsi[m[1].toUpperCase()] = rec.optimalVal;
+    const m2 = rec.id.match(/^([a-z]{2})-shock$/);
+    if (m2) optSetup.shocks[m2[1].toUpperCase()] = rec.optimalVal;
+  }
+  const optMetric = calcPerformanceF8(optSetup, eqTires(optSetup, ambientTemp, calcWorkFactorsF8), ambientTemp);
+  const optLapTime = metricToLapTimeF8(optMetric);
+
+  return {
+    corners, ss, roll, frontGripPct, balancePenalty, imbalance,
+    toeGrip, toeDrag, toe,
+    lapTime, optLapTime, totalGain: lapTime - optLapTime,
+    recs, caster,
+  };
+}
+
+// ============================================================
+// FIGURE 8 SIMULATION
+// Two symmetric loops (left + right turn) connected at a crossing.
+// Baseline: 23.5s/lap @ 65F with DEFAULT_SETUP. Goal: 23.1s. Standard race: 25 laps.
+// Key physics differences from oval:
+//   - Both left AND right turns each lap → all tires alternate roles
+//   - Tire temps much more balanced side-to-side
+//   - No banking; optimal camber is symmetric (~-2.5 both fronts)
+// ============================================================
+
+const TRACK_F8 = {
+  loopRadius:    149,  // ft — from Google Earth: loop diameter = 298 ft (turn entry to exit)
+  loopArcDeg:   120,   // degrees of arc in each loop (120° arc + 350 ft straights ≈ 0.25 mi total)
+  straightLength: 350, // ft, measured straights between loops
+  crossingLength:   0, // ft (absorbed into straight measurement)
+  // Total: 2×(120/360×2π×149) + 2×350 = 2×310 + 700 = 1320 ft ≈ 0.25 miles ✓
+  // Corner speed: sqrt(0.28G × 32.174 × 149) = 36.6 ft/s ≈ 25 mph (physics-derived)
+};
+TRACK_F8.loopArc = (TRACK_F8.loopArcDeg / 360) * 2 * Math.PI * TRACK_F8.loopRadius;
+TRACK_F8.totalLength = 2 * TRACK_F8.loopArc + 2 * TRACK_F8.straightLength + TRACK_F8.crossingLength;
+
+function calcWorkFactorsF8(setup) {
+  const ss = shockStiffness(setup);
+  const loadsLeft = tireLoads(1.0, ss.frontLLTD);
+  const loadsRight = { LF: loadsLeft.RF, RF: loadsLeft.LF, LR: loadsLeft.RR, RR: loadsLeft.LR };
+  const avgLoad = VEH.weight / 4;
+  return {
+    LF: ((loadsLeft.LF + loadsRight.LF) / 2) / avgLoad,
+    RF: ((loadsLeft.RF + loadsRight.RF) / 2) / avgLoad,
+    LR: ((loadsLeft.LR + loadsRight.LR) / 2) / avgLoad,
+    RR: ((loadsLeft.RR + loadsRight.RR) / 2) / avgLoad,
+  };
+}
+
+function calcPerformanceF8(setup, tires, ambient) {
+  const refG   = 1.0;
+  const ss     = shockStiffness(setup);
+  const loadsL = tireLoads(refG, ss.frontLLTD);
+  const loadsR = { LF: loadsL.RF, RF: loadsL.LF, LR: loadsL.RR, RR: loadsL.LR };
+  // Pressure optimum uses actual F8 cornering G (not 1G) — per-turn 1G loads swing wildly
+  const cLoadsL = tireLoads(F8_CORNER_G, ss.frontLLTD);
+  const cLoadsR = { LF: cLoadsL.RF, RF: cLoadsL.LF, LR: cLoadsL.RR, RR: cLoadsL.LR };
+  const roll   = bodyRoll(refG, ss.total);
+  const toe    = setup.toe    !== undefined ? setup.toe    : -0.25;
+  const caster = setup.caster || { LF: 3.5, RF: 5.0 };
+  const avgLoad = VEH.weight / 4;
+
+  let totalForce = 0, frontForce = 0, rearForce = 0;
+
+  for (const c of CORNERS) {
+    const avgTemp = tires[c].temp;
+    const front   = IS_FRONT[c];
+    let sumForce  = 0;
+
+    for (const isLeft of [true, false]) {
+      const outside  = isLeft ? OUTSIDE[c] : !OUTSIDE[c];
+      const load     = isLeft ? loadsL[c]  : loadsR[c];
+      const cLoad    = isLeft ? cLoadsL[c] : cLoadsR[c]; // corner G for pressure
+      const hp       = hotPressure(setup.coldPsi[c], avgTemp, ambient);
+
+      let mu = 1.0;
+      mu *= tempGripFactor(avgTemp);
+      mu *= pressureGripFactor(hp, cLoad);
+
+      if (front) {
+        // Caster: outside gains negative, inside gains positive (geometric, same on SLA/MacPherson)
+        const casterGain = outside
+          ? -(caster[c] * 0.18 * refG)
+          :  (caster[c] * 0.10 * refG);
+        mu *= camberGripFactor(setup.camber[c] + casterGain, outside, refG);
+        mu *= casterGripFactor(caster[c], outside, true);
+        mu *= toeGripFactor(toe);
+      } else {
+        const dynCamber = outside ? roll : -roll;
+        const idealRear = outside ? -1.0 : 0;
+        mu *= Math.max(0.88, 1 - 0.012 * Math.abs(dynCamber - idealRear));
+      }
+
+      mu *= Math.pow(avgLoad / Math.max(load, 50), 0.08);
+      mu *= Math.max(0.92, 1 - tires[c].wear);
+      sumForce += mu * load;
+    }
+
+    const avgForce = sumForce / 2;
+    totalForce += avgForce;
+    if (front) frontForce += avgForce; else rearForce += avgForce;
+  }
+
+  const frontPct  = frontForce / Math.max(frontForce + rearForce, 1);
+  totalForce *= Math.max(0.94, 1 - Math.abs(frontPct - VEH.frontBias) * 0.2);
+
+  // LLTD driveability: F8 optimal = 0.50 (balanced, turns alternate both directions)
+  const F8_OPTIMAL_LLTD = 0.50;
+  const lltdDev = Math.abs(ss.frontLLTD - F8_OPTIMAL_LLTD);
+  totalForce *= Math.max(0.90, 1 - 0.7 * lltdDev * lltdDev);
+
+  totalForce /= toeDragFactor(toe);
+  return totalForce / VEH.weight;
+}
+
+// Zone multipliers averaged across left+right roles — much more even than oval
+const F8_ZONE = [0.94, 1.0, 1.06];
+
+function updateTireTempsF8(tires, workFactors, ambient, lapTime, setup) {
+  const newTires = {};
+  const toe    = setup.toe    !== undefined ? setup.toe    : -0.25;
+  const caster = setup.caster || { LF: 3.5, RF: 5.0 };
+
+  for (const c of CORNERS) {
+    const wf    = workFactors[c];
+    const front = IS_FRONT[c];
+
+    // Average effective camber across both turn directions
+    let camberAvg = 0;
+    if (front) {
+      const gOut = -(caster[c] * 0.18);
+      const gIn  =  (caster[c] * 0.10);
+      const camberL = setup.camber[c] + (OUTSIDE[c]  ? gOut : gIn);
+      const camberR = setup.camber[c] + (!OUTSIDE[c] ? gOut : gIn);
+      camberAvg = (camberL + camberR) / 2;
+    }
+    // Rear: roll averages to ~0 across both directions
+
+    const camberShift = -camberAvg * 0.02;
+    const avgTemp = (tires[c].inside + tires[c].middle + tires[c].outside) / 3;
+    const hp      = hotPressure(setup.coldPsi[c], avgTemp, ambient);
+    const psiMiddleBoost = (hp - 30 * wf) * 0.003;
+    const toeMiddleBoost = front ? Math.abs(toe) * 0.008 : 0;
+
+    const zones = [
+      { key: 'inside',  mult: F8_ZONE[0] + camberShift },
+      { key: 'middle',  mult: F8_ZONE[1] + psiMiddleBoost + toeMiddleBoost },
+      { key: 'outside', mult: F8_ZONE[2] - camberShift },
+    ];
+
+    const newZones = {};
+    for (const zone of zones) {
+      const T = tires[c][zone.key];
+      const heatIn  = (THERMAL.heatBase + THERMAL.heatLoad * wf * THERMAL.refSpeed) * lapTime * zone.mult;
+      const heatOut = THERMAL.coolRate * (T - ambient) * lapTime;
+      newZones[zone.key] = T + (heatIn - heatOut) / THERMAL.thermalMass;
+    }
+
+    const newAvg = (newZones.inside + newZones.middle + newZones.outside) / 3;
+    newTires[c] = {
+      inside: newZones.inside, middle: newZones.middle, outside: newZones.outside,
+      temp: newAvg,
+      wear: tires[c].wear + THERMAL.wearRate(wf, newAvg),
+    };
+  }
+  return newTires;
+}
+
+const BASELINE_LAP_F8 = 23.5;
+let _baselineMetricF8 = null;
+
+function getBaselineMetricF8() {
+  if (_baselineMetricF8 === null) {
+    // Real pyrometer equilibrium from baseline figure 8 run (65°F ambient)
+    // RF O:144 M:142 I:142, RR O:147 M:146 I:133, LR O:143 M:145 I:132, LF O:146 M:140 I:139
+    const calibTires = {
+      LF: { inside: 139, middle: 140, outside: 146, temp: 141.7, wear: 0 },
+      RF: { inside: 142, middle: 142, outside: 144, temp: 142.7, wear: 0 },
+      LR: { inside: 132, middle: 145, outside: 143, temp: 140.0, wear: 0 },
+      RR: { inside: 133, middle: 146, outside: 147, temp: 142.0, wear: 0 },
+    };
+    _baselineMetricF8 = calcPerformanceF8(DEFAULT_SETUP_F8, calibTires, 65);
+  }
+  return _baselineMetricF8;
+}
+
+function metricToLapTimeF8(metric) {
+  return BASELINE_LAP_F8 * Math.pow(getBaselineMetricF8() / metric, LAP_SENSITIVITY);
+}
+
+function metricToSpeedsF8(metric) {
+  const scale = Math.sqrt(metric / getBaselineMetricF8());
+
+  // Corner apex speed from lateral G and loop radius
+  const v_corner = Math.sqrt(F8_CORNER_G * G * TRACK_F8.loopRadius);         // ft/s
+  const cornerBaseMph = v_corner / 1.4667;
+
+  // Peak straight speed (same engine/braking physics as oval)
+  const f_engine = VEH.peakTorque * VEH.gear2Ratio * VEH.driveEff / VEH.tireRadius;
+  const a_acc   = f_engine / VEH.mass;
+  const a_brake = VEH.brakingG * G;
+  const v_peak_sq = v_corner * v_corner +
+    2 * a_acc * TRACK_F8.straightLength * a_brake / (a_acc + a_brake);
+  const straightBaseMph = Math.sqrt(v_peak_sq) / 1.4667;
+
+  return {
+    cornerMph: Math.round(cornerBaseMph * scale * 10) / 10,
+    peakMph:   Math.round(straightBaseMph * scale * 10) / 10,
+  };
+}
+
+export function simulateRaceF8(setup, ambientTemp = 65, numLaps = 20) {
+  let tires = {};
+  for (const c of CORNERS) {
+    const t = ambientTemp + 5;
+    tires[c] = { inside: t, middle: t, outside: t, temp: t, wear: 0 };
+  }
+
+  const workFactors = calcWorkFactorsF8(setup);
+  const laps = [];
+
+  for (let i = 1; i <= numLaps; i++) {
+    const metric  = calcPerformanceF8(setup, tires, ambientTemp);
+    const lapTime = metricToLapTimeF8(metric);
+    const speeds  = metricToSpeedsF8(metric);
+    const hPsi    = {};
+    for (const c of CORNERS) {
+      hPsi[c] = Math.round(hotPressure(setup.coldPsi[c], tires[c].temp, ambientTemp) * 10) / 10;
+    }
+    laps.push({
+      lap: i,
+      time: Math.round(lapTime * 1000) / 1000,
+      cornerMph: speeds.cornerMph,
+      peakMph:   speeds.peakMph,
+      temps:    { LF: Math.round(tires.LF.temp*10)/10, RF: Math.round(tires.RF.temp*10)/10,
+                  LR: Math.round(tires.LR.temp*10)/10, RR: Math.round(tires.RR.temp*10)/10 },
+      tempsIMO: {
+        LF: { I: Math.round(tires.LF.inside), M: Math.round(tires.LF.middle), O: Math.round(tires.LF.outside) },
+        RF: { I: Math.round(tires.RF.inside), M: Math.round(tires.RF.middle), O: Math.round(tires.RF.outside) },
+        LR: { I: Math.round(tires.LR.inside), M: Math.round(tires.LR.middle), O: Math.round(tires.LR.outside) },
+        RR: { I: Math.round(tires.RR.inside), M: Math.round(tires.RR.middle), O: Math.round(tires.RR.outside) },
+      },
+      hotPsi: hPsi,
+      wear: {
+        LF: Math.round(tires.LF.wear*10000)/10000, RF: Math.round(tires.RF.wear*10000)/10000,
+        LR: Math.round(tires.LR.wear*10000)/10000, RR: Math.round(tires.RR.wear*10000)/10000,
+      },
+    });
+    tires = updateTireTempsF8(tires, workFactors, ambientTemp, lapTime, setup);
+  }
+
+  const times = laps.map(l => l.time);
+  return {
+    laps,
+    summary: {
+      best: Math.min(...times), worst: Math.max(...times),
+      avg:  Math.round((times.reduce((a,b)=>a+b)/times.length)*1000)/1000,
+      total: Math.round(times.reduce((a,b)=>a+b)*100)/100,
+      bestLapNum:  times.indexOf(Math.min(...times))+1,
+      worstLapNum: times.indexOf(Math.max(...times))+1,
+    },
   };
 }

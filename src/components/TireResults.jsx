@@ -56,24 +56,30 @@ function TireVisual({ result }) {
         </div>
         {result.currentPressure && (
           <div className="stat">
-            <span className="stat-label">Pressure (PSI)</span>
+            <span className="stat-label">Cold PSI</span>
             <span className="stat-value">
               <span className="rec-old-pressure">{result.currentPressure}</span>
               <span className="rec-arrow">→</span>
-              {result.recommendedPressure.toFixed(1)}
+              {result.recommendedPressure != null ? result.recommendedPressure.toFixed(1) : '—'}
+            </span>
+          </div>
+        )}
+        {result.hotPsi != null && (
+          <div className="stat">
+            <span className="stat-label">Hot PSI</span>
+            <span className="stat-value">
+              <span className={Math.abs(result.hotPsi - result.optimalHotPsi) > 5 ? 'rec-old-pressure critical-value' : Math.abs(result.hotPsi - result.optimalHotPsi) > 2.5 ? 'rec-old-pressure warning-value' : 'rec-old-pressure'}>
+                {result.hotPsi.toFixed(1)}
+              </span>
+              <span className="rec-arrow">→</span>
+              <span className="stat-optimal">{result.optimalHotPsi} opt</span>
             </span>
           </div>
         )}
         {result.camberCalculation !== null && (
           <div className="stat">
-            <span className="stat-label">Camber Calc</span>
-            <span className="stat-value">{result.camberCalculation.toFixed(1)}</span>
-          </div>
-        )}
-        {result.psiCalculation !== undefined && (
-          <div className="stat">
-            <span className="stat-label">PSI Calc</span>
-            <span className="stat-value">{result.psiCalculation.toFixed(1)}</span>
+            <span className="stat-label">I/O Spread</span>
+            <span className="stat-value">{result.camberCalculation > 0 ? '+' : ''}{result.camberCalculation.toFixed(1)}°F</span>
           </div>
         )}
       </div>

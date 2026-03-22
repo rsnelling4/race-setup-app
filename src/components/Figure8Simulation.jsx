@@ -1,10 +1,19 @@
 import { useState } from 'react';
-import { simulateRace, DEFAULT_SETUP, RECOMMENDED_SETUP, PETE_SETUP, DYLAN_SETUP, JOSH_SETUP } from '../utils/raceSimulation';
+import { simulateRaceF8, DEFAULT_SETUP_F8 } from '../utils/raceSimulation';
 import { REAR_SHOCKS, FRONT_STRUTS, shockLabel } from '../data/shockOptions';
 import NumericInput from './NumericInput';
 
 const CORNERS = ['LF', 'RF', 'LR', 'RR'];
-const CORNER_LABELS = { LF: 'Left Front', RF: 'Right Front', LR: 'Left Rear', RR: 'Right Rear' };
+
+// Recommended F8 setup — symmetric camber since both left and right turns
+// Pressures match baseline real-world run: RF:34, LF:34, RR:29, LR:29
+const RECOMMENDED_F8_SETUP = {
+  shocks: { LF: 4, RF: 4, LR: 3, RR: 3 },
+  camber: { LF: -2.5, RF: -2.5 },
+  caster: { LF: 4.0, RF: 4.0 },
+  toe: -0.25,
+  coldPsi: { LF: 34, RF: 34, LR: 29, RR: 29 },
+};
 
 function deepClone(obj) {
   return JSON.parse(JSON.stringify(obj));
@@ -20,15 +29,13 @@ function formatMins(s) {
   return `${m}:${sec.padStart(4, '0')}`;
 }
 
-// Color for tire temperature — thresholds match tempGripFactor optimal window (100–165°F)
 function tempColor(t) {
-  if (t < 100) return 'var(--accent)';  // cold: below optimal grip window
-  if (t < 165) return 'var(--green)';   // optimal: full grip range
-  if (t < 185) return 'var(--yellow)';  // warm: grip starting to drop
-  return 'var(--red)';                  // overheating
+  if (t < 90) return 'var(--accent)';
+  if (t < 130) return 'var(--green)';
+  if (t < 160) return 'var(--yellow)';
+  return 'var(--red)';
 }
 
-// Color for lap time delta
 function deltaColor(delta) {
   if (delta <= 0) return 'var(--green)';
   if (delta < 0.1) return 'var(--yellow)';
@@ -36,12 +43,6 @@ function deltaColor(delta) {
 }
 
 // ============ SETUP FORM ============
-// Find the shock/strut object that matches the current rating for a given corner
-function findShockByRating(corner, rating) {
-  const list = (corner === 'LF' || corner === 'RF') ? FRONT_STRUTS : REAR_SHOCKS;
-  return list.find(s => s.rating === rating) || null;
-}
-
 function SetupForm({ setup, onChange, onRun, onPreset }) {
   const updateShock = (corner, selectedLabel) => {
     const list = (corner === 'LF' || corner === 'RF') ? FRONT_STRUTS : REAR_SHOCKS;
@@ -72,7 +73,6 @@ function SetupForm({ setup, onChange, onRun, onPreset }) {
     onChange(s);
   };
 
-  // Get the currently selected label for a corner (match by rating, fallback to first)
   const selectedShockLabel = (corner) => {
     const list = (corner === 'LF' || corner === 'RF') ? FRONT_STRUTS : REAR_SHOCKS;
     const match = list.find(s => s.rating === setup.shocks[corner]);
@@ -82,20 +82,11 @@ function SetupForm({ setup, onChange, onRun, onPreset }) {
   return (
     <div className="sim-form">
       <div className="sim-presets">
-        <button className="sim-preset-btn" onClick={() => onPreset('current')}>
-          Load Current Setup
+        <button className="sim-preset-btn" onClick={() => onPreset('default')}>
+          Load Default Setup
         </button>
-        <button className="sim-preset-btn" onClick={() => onPreset('pete')}>
-          Load Pete
-        </button>
-        <button className="sim-preset-btn" onClick={() => onPreset('dylan')}>
-          Load Dylan
-        </button>
-        <button className="sim-preset-btn" onClick={() => onPreset('josh')}>
-          Load Josh
-        </button>
-        <button className="sim-preset-btn accent" onClick={() => onPreset('recommended')}>
-          Load Recommended Setup
+        <button className="sim-preset-btn accent" onClick={() => onPreset('f8')}>
+          Load F8 Recommended
         </button>
       </div>
 
@@ -136,7 +127,7 @@ function SetupForm({ setup, onChange, onRun, onPreset }) {
       </div>
 
       <div className="sim-form-section">
-        <h4>Camber (degrees) <span className="sim-hint">Front only — rear is solid axle</span></h4>
+        <h4>Camber (degrees) <span className="sim-hint">Symmetric recommended for figure 8 — both fronts equal negative</span></h4>
         <div className="sim-input-grid two-col">
           {['LF', 'RF'].map(c => (
             <div key={c} className="sim-input-group">
@@ -151,7 +142,7 @@ function SetupForm({ setup, onChange, onRun, onPreset }) {
       </div>
 
       <div className="sim-form-section">
-        <h4>Caster (degrees) <span className="sim-hint">Front only — affects dynamic camber gain in corners</span></h4>
+        <h4>Caster (degrees) <span className="sim-hint">Symmetric recommended — equal caster for balanced left/right handling</span></h4>
         <div className="sim-input-grid two-col">
           {['LF', 'RF'].map(c => (
             <div key={c} className="sim-input-group">
@@ -183,7 +174,7 @@ function SetupForm({ setup, onChange, onRun, onPreset }) {
       </div>
 
       <div className="sim-form-section">
-        <h4>Cold Tire Pressures (PSI)</h4>
+        <h4>Cold Tire Pressures (PSI) <span className="sim-hint">Symmetric pressures recommended for balanced loading</span></h4>
         <div className="sim-input-grid four-col">
           {CORNERS.map(c => (
             <div key={c} className="sim-input-group">
@@ -207,6 +198,8 @@ function SetupForm({ setup, onChange, onRun, onPreset }) {
 
 // ============ SUMMARY CARD ============
 function SummaryCard({ summary, label }) {
+  const TARGET = 23.1;
+  const gap = summary.best - TARGET;
   return (
     <div className="sim-summary-card">
       {label && <div className="sim-summary-label">{label}</div>}
@@ -228,6 +221,12 @@ function SummaryCard({ summary, label }) {
         <div className="sim-stat">
           <span className="sim-stat-label">Total Race</span>
           <span className="sim-stat-value">{formatMins(summary.total)}</span>
+        </div>
+        <div className="sim-stat">
+          <span className="sim-stat-label">Goal (23.1s)</span>
+          <span className="sim-stat-value" style={{ color: gap <= 0 ? 'var(--green)' : 'var(--yellow)' }}>
+            {gap <= 0 ? `✓ ${Math.abs(gap).toFixed(3)}s under` : `${gap.toFixed(3)}s off`}
+          </span>
         </div>
       </div>
     </div>
@@ -316,7 +315,7 @@ function LapTable({ laps }) {
             <th colSpan="3">LF</th>
           </tr>
           <tr>
-            {CORNERS.filter(() => true).flatMap(c =>
+            {CORNERS.flatMap(c =>
               ['I', 'M', 'O'].map(z => <th key={`${c}-${z}`} className="sim-imo-th">{z}</th>)
             )}
           </tr>
@@ -374,22 +373,19 @@ function CompareSummary({ a, b }) {
 }
 
 // ============ MAIN COMPONENT ============
-export default function RaceSimulation({ setup, setSetup, ambient, setAmbient }) {
+export default function Figure8Simulation({ setup, setSetup, ambient, setAmbient }) {
   const [numLaps, setNumLaps] = useState(25);
   const [resultA, setResultA] = useState(null);
   const [resultB, setResultB] = useState(null);
   const [activeResult, setActiveResult] = useState('A');
 
   const handlePreset = (type) => {
-    if (type === 'current') setSetup(deepClone(DEFAULT_SETUP));
-    else if (type === 'pete') setSetup(deepClone(PETE_SETUP));
-    else if (type === 'dylan') setSetup(deepClone(DYLAN_SETUP));
-    else if (type === 'josh') setSetup(deepClone(JOSH_SETUP));
-    else setSetup(deepClone(RECOMMENDED_SETUP));
+    if (type === 'default') setSetup(deepClone(DEFAULT_SETUP_F8));
+    else setSetup(deepClone(RECOMMENDED_F8_SETUP));
   };
 
   const handleRun = () => {
-    const result = simulateRace(setup, ambient, numLaps);
+    const result = simulateRaceF8(setup, ambient, numLaps);
     if (activeResult === 'A') {
       setResultA({ ...result, setup: deepClone(setup), ambient, numLaps });
     } else {
@@ -402,10 +398,10 @@ export default function RaceSimulation({ setup, setSetup, ambient, setAmbient })
   return (
     <div className="sim-page">
       <div className="sim-header">
-        <h2>Race Simulation</h2>
+        <h2>Figure 8 Race Simulation</h2>
         <p className="sim-subtitle">
-          Physics-based simulation calibrated to real pyrometer data and lap times.
-          Adjust toe, caster, camber, shocks, and pressures to find the fastest setup.
+          Physics-based simulation for figure 8 racing — both left and right turns each lap.
+          Goal: break 23.1s. Symmetric setup recommended for balanced tire loading.
         </p>
       </div>
 
@@ -416,11 +412,11 @@ export default function RaceSimulation({ setup, setSetup, ambient, setAmbient })
         </div>
         <div className="sim-context-card">
           <h4>Track</h4>
-          <p>1/4 mile oval — 335 ft straights, slight banking, left turns only</p>
+          <p>~0.25 mi figure 8 — two 149 ft radius loops (298 ft diameter), ~120° arc each, 350 ft straights, no banking, left AND right turns</p>
         </div>
         <div className="sim-context-card">
           <h4>Calibration</h4>
-          <p>Baseline: 17.4s/lap at 65°F — I/M/O temps calibrated to pyrometer data</p>
+          <p>Baseline: 23.5s/lap @ 65°F — symmetric tire loading, all tires work equally hard. Goal: 23.1s</p>
         </div>
       </div>
 
@@ -439,7 +435,7 @@ export default function RaceSimulation({ setup, setSetup, ambient, setAmbient })
           <input
             type="number" min="1" max="100" step="1"
             value={numLaps}
-            onChange={e => setNumLaps(parseInt(e.target.value) || 25)}
+            onChange={e => setNumLaps(parseInt(e.target.value) || 20)}
           />
         </div>
         <div className="sim-input-group">
@@ -508,9 +504,9 @@ export default function RaceSimulation({ setup, setSetup, ambient, setAmbient })
       )}
 
       <div className="sim-disclaimer">
-        <strong>Note:</strong> This simulation uses a physics-based model calibrated to real data.
-        Results are directionally accurate for comparing setups but are not predictive of exact lap times.
-        Use tire temperature trends and relative lap time differences to guide setup decisions.
+        <strong>Note:</strong> Figure 8 physics averages left and right turn loads — all tires work symmetrically.
+        Symmetric camber (~-2.5° both fronts), equal pressures, and balanced shocks are recommended.
+        Results are directionally accurate for comparing setups.
       </div>
     </div>
   );

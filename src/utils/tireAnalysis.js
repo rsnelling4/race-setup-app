@@ -1,261 +1,281 @@
 // Tire Temperature Analysis Engine
-// Based on research from multiple racing setup resources
+// Aligned with the Setup Optimizer's physics model for consistent recommendations.
+
+// ============ PHYSICS-BASED PRESSURE CONSTANTS ============
+// Optimal HOT tire pressures for Crown Vic P71 on a left-turn oval.
+// Derived from: optPsi = 30 × (cornerLoad / avgLoad)
+//   at OVAL_CORNER_G = 0.375G (27 mph @ 130 ft radius),
+//   frontLLTD = 0.46 (recommended shock setup), vehicle weight = 3800 lbs.
+//   RF cornerLoad ≈ 1274 lbs → 40 PSI hot   (outside loaded)
+//   LF cornerLoad ≈ 816 lbs  → 26 PSI hot   (inside, lightly loaded)
+//   RR cornerLoad ≈ 1124 lbs → 35 PSI hot   (outside rear)
+//   LR cornerLoad ≈ 586 lbs  → 19 PSI hot   (inside rear, most lightly loaded)
+// These match the optimizer's recommendations exactly.
+const OVAL_OPTIMAL_HOT_PSI = { LF: 26, RF: 40, LR: 19, RR: 35 };
+const COLD_REF_TEMP = 68;    // °F — temperature when cold PSI is set (garage inflate)
+const RANKINE = 459.67;      // °F → °R conversion offset
+
+// ============ CAMBER TEMPERATURE CALIBRATION ============
+// Calibrated from simulation and real pyrometer data for Crown Vic P71.
+//
+// RF (always outside-loaded in left turns):
+//   Body roll partially "stands up" the RF even with neg camber — so outside edge
+//   will always carry some extra heat even at optimal setup.
+//   At recommended -3.5° static / -4.5° effective: RF outside ~9°F warmer than inside.
+//   At default -3.0° static / -3.9° effective: RF outside ~25°F warmer — needs more camber.
+//   Normal operating range: outside 5-15°F warmer. Flag beyond that.
+//
+// LF (always inside tire in left turns):
+//   Ideal effective = 0° (flat contact patch). Body roll adds positive camber.
+//   At recommended -1.25° static: inside ~6°F warmer (slightly over-negative).
+//   Ideal: inside ≈ outside (±5°F). Warn at ≥5°F deviation from equal.
 
 /**
- * Analyze a single tire's temperature readings
- * @param {number} inside - Inside edge temperature
- * @param {number} middle - Middle temperature
- * @param {number} outside - Outside edge temperature
- * @param {string} position - 'LF', 'RF', 'LR', 'RR'
- * @param {number} currentPressure - Current tire pressure in PSI (optional)
- * @returns {object} Analysis results
+ * Analyze a single tire's temperature readings.
+ * When cold PSI is provided, uses the same physics-based optimal pressure model
+ * as the Setup Optimizer — same hot-PSI calculation, same optimal targets.
  */
 export function analyzeTire(inside, middle, outside, position, currentPressure = null) {
   const avg = (inside + middle + outside) / 3;
   const spread = Math.abs(inside - outside);
   const edgeAvg = (inside + outside) / 2;
   const middleDiff = middle - edgeAvg;
-  const psiCalculation = middle - edgeAvg; // New PSI Calculation
-
-  const camberDiff = inside - outside;
+  const psiCalculation = middle - edgeAvg;
+  const camberDiff = inside - outside;      // positive = inside hotter
   const isFront = position.includes('F');
   const isRF = position === 'RF';
-  const rfSpread = isRF ? (inside - outside) : null; // positive = inside hotter (correct for RF)
-  const rfSpreadProblem = isRF && rfSpread < 5; // RF inside not hot enough or outside hotter
 
-  const tireRecommendations = []; // Use a single list for all recommendations
-  let overallSeverity = 'good'; // Overall severity for the tire
+  const tireRecommendations = [];
+  let overallSeverity = 'good';
+  let currentPressureSeverity = 'good';
+  let currentPressureAction = 'none';
+  let camberCalculation = null;
   let recommendedPressure = currentPressure;
 
-  // Internal state for pressure analysis, used for prioritization
-  let currentPressureSeverity = 'good'; // Track severity of pressure issues only
-  let currentPressureAction = 'none'; // 'increase', 'decrease', 'none', 'good'
-  let camberCalculation = null; // Declare here to ensure it's always defined
+  // ── Hot pressure (ideal gas law) ─────────────────────────────────────────
+  // Same formula used by Setup Optimizer: P_hot = P_cold × (T_hot + 460) / (T_cold_ref + 460)
+  const optimalHotPsi = OVAL_OPTIMAL_HOT_PSI[position];
+  let hotPsi = null;
+  let psiError = null;   // positive = over-pressured hot
+  let recommendedColdPsi = null;
 
+  if (currentPressure) {
+    hotPsi = currentPressure * (avg + RANKINE) / (COLD_REF_TEMP + RANKINE);
+    psiError = hotPsi - optimalHotPsi;
+    // Back-calculate the cold PSI that would hit optimal hot at this tire temperature
+    recommendedColdPsi = optimalHotPsi * (COLD_REF_TEMP + RANKINE) / (avg + RANKINE);
+    recommendedPressure = Math.round(recommendedColdPsi * 2) / 2; // nearest 0.5 PSI
+  }
 
-  const getPressureAdjustment = (amount) => {
-    if (!amount) return 0;
-    const parts = amount.split(' ')[0].split('-');
-    if (parts.length === 1) return parseFloat(parts[0]);
-    return (parseFloat(parts[0]) + parseFloat(parts[1])) / 2;
-  };
+  // ── Pressure Analysis ─────────────────────────────────────────────────────
+  const rfNote = isRF ? ' RF is the primary loaded tire — pressure accuracy here is critical.' : '';
 
-  const getDynamicPressureAmount = (diff, isRF) => {
-    const absDiff = Math.abs(diff);
-    if (isRF) {
-      if (absDiff >= 15) return '3-4 PSI'; // Even more critical for RF
-      if (absDiff >= 10) return '2-3 PSI';
-      if (absDiff >= 5) return '1-2 PSI';
-      if (absDiff >= 3) return '0.5-1 PSI'; // Small adjustment for slight difference
+  if (currentPressure && psiError !== null) {
+    // Physics-based comparison — identical to Setup Optimizer logic.
+    // Middle-vs-edge temperature pattern is unreliable for low-loaded inside tires
+    // (LF, LR) because they don't deform much even when significantly over-pressured.
+    const absDiff = Math.abs(psiError);
+    const isOver = psiError > 0;
+    const action = isOver ? 'decrease' : 'increase';
+    const coldDiff = Math.abs(currentPressure - recommendedPressure).toFixed(1);
+
+    if (absDiff > 5) {
+      tireRecommendations.push({
+        type: 'pressure', severity: 'critical',
+        message: `Hot PSI is ${hotPsi.toFixed(1)} — significantly ${isOver ? 'over' : 'under'} the optimal ${optimalHotPsi} PSI for this tire's corner load. ${isOver ? 'Decrease' : 'Increase'} cold PSI: ${currentPressure} → ${recommendedPressure.toFixed(1)} PSI (${coldDiff} PSI ${action}).${rfNote}`,
+        action,
+      });
+      currentPressureAction = action;
+      currentPressureSeverity = 'critical';
+      if (overallSeverity !== 'critical') overallSeverity = 'critical';
+    } else if (absDiff > 2.5) {
+      tireRecommendations.push({
+        type: 'pressure', severity: 'warning',
+        message: `Hot PSI is ${hotPsi.toFixed(1)}, optimal is ${optimalHotPsi} PSI. ${isOver ? 'Decrease' : 'Increase'} cold PSI: ${currentPressure} → ${recommendedPressure.toFixed(1)} PSI (${coldDiff} PSI ${action}).${rfNote}`,
+        action,
+      });
+      currentPressureAction = action;
+      currentPressureSeverity = 'warning';
+      if (overallSeverity === 'good') overallSeverity = 'warning';
+    } else if (absDiff > 1) {
+      tireRecommendations.push({
+        type: 'pressure', severity: 'good',
+        message: `Hot PSI is ${hotPsi.toFixed(1)}, optimal is ${optimalHotPsi} PSI — close. Fine-tune: ${action} cold PSI to ${recommendedPressure.toFixed(1)} for maximum grip.`,
+        action,
+      });
+      currentPressureAction = 'good';
     } else {
-      if (absDiff >= 20) return '3-4 PSI';
-      if (absDiff >= 15) return '2-3 PSI';
-      if (absDiff >= 8) return '1-2 PSI';
-      if (absDiff >= 4) return '0.5-1 PSI';
+      tireRecommendations.push({
+        type: 'pressure', severity: 'good',
+        message: `Hot PSI is ${hotPsi.toFixed(1)} — at optimal ${optimalHotPsi} PSI. Pressure is dialed in for this corner's load.`,
+        action: 'none',
+      });
+      currentPressureAction = 'good';
     }
-    return '0.5-1 PSI'; // Default for very small but noticeable difference
-  };
 
+    // Secondary: flag extreme middle-vs-edge even when physics pressure is near optimal
+    // (indicates abnormal tire deformation or damage, not just pressure)
+    const midEdgeCrit = 18;
+    if (Math.abs(psiCalculation) > midEdgeCrit && currentPressureSeverity !== 'critical') {
+      const msg = psiCalculation > 0
+        ? `Middle is ${Math.round(psiCalculation)}°F hotter than edges despite near-optimal pressure — check for abnormal tire deformation.`
+        : `Edges are ${Math.round(Math.abs(psiCalculation))}°F hotter than middle — verify tire is seated correctly.`;
+      tireRecommendations.push({ type: 'pressure', severity: 'warning', message: msg, action: 'none' });
+      if (overallSeverity === 'good') overallSeverity = 'warning';
+    }
 
-  // Right front uses tighter thresholds — it's the primary loaded tire
-  const overCritical = isRF ? 10 : 15;
-  const overWarn = isRF ? 5 : 8;
-  const underCritical = isRF ? -10 : -15;
-  const underWarn = isRF ? -5 : -8;
-  const rfNote = isRF ? ' The RF is your hardest-working tire — getting pressure right here is critical.' : '';
-
-
-
-  // --- Pressure Analysis ---
-  // Prioritize critical conditions
-  if (isRF && rfSpread < 0) { // RF outside hotter than inside (critical camber/contact patch issue)
-    const amount = getDynamicPressureAmount(rfSpread, isRF);
-    tireRecommendations.push({
-      type: 'pressure',
-      severity: 'critical',
-      message: `RF outside is ${Math.round(Math.abs(rfSpread))}°F hotter than inside — the inside must be hotter on the RF. Contact patch is not loading the inside edge. Reduce RF pressure ${amount}.`,
-      action: 'decrease',
-      amount,
-    });
-    currentPressureAction = 'decrease';
-    currentPressureSeverity = 'critical';
-    if (currentPressure) recommendedPressure = currentPressure - getPressureAdjustment(amount);
-  } else if (psiCalculation > overCritical) { // Middle is significantly hotter (over-inflated)
-    const amount = getDynamicPressureAmount(psiCalculation, isRF);
-    tireRecommendations.push({
-      type: 'pressure',
-      severity: 'critical',
-      message: `Over-inflated. Middle is ${Math.round(psiCalculation)}°F hotter than edges. Reduce pressure ${amount}.${rfNote}`,
-      action: 'decrease',
-      amount,
-    });
-    currentPressureAction = 'decrease';
-    currentPressureSeverity = 'critical'; // Set to critical directly
-    if (currentPressure) recommendedPressure = currentPressure - getPressureAdjustment(amount);
-  } else if (psiCalculation < underCritical) { // Middle is significantly cooler (under-inflated)
-    const amount = getDynamicPressureAmount(psiCalculation, isRF);
-    tireRecommendations.push({
-      type: 'pressure',
-      severity: 'critical',
-      message: `Under-inflated. Middle is ${Math.round(Math.abs(psiCalculation))}°F cooler than edges. Increase pressure ${amount}.${rfNote}`,
-      action: 'increase',
-      amount,
-    });
-    currentPressureAction = 'increase';
-    currentPressureSeverity = 'critical'; // Set to critical directly
-    if (currentPressure) recommendedPressure = currentPressure + getPressureAdjustment(amount);
-  } else if (psiCalculation > overWarn) { // Middle is moderately hotter (slightly over-inflated)
-    const amount = getDynamicPressureAmount(psiCalculation, isRF);
-    tireRecommendations.push({
-      type: 'pressure',
-      severity: 'warning',
-      message: `Slightly over-inflated. Middle is ${Math.round(psiCalculation)}°F hotter than edges. Consider reducing pressure ${amount}.${rfNote}`,
-      action: 'decrease',
-      amount,
-    });
-    currentPressureAction = 'decrease';
-    if (currentPressureSeverity === 'good') currentPressureSeverity = 'warning';
-    if (currentPressure) recommendedPressure = currentPressure - getPressureAdjustment(amount);
-  } else if (psiCalculation < underWarn) { // Middle is moderately cooler (slightly under-inflated)
-    const amount = getDynamicPressureAmount(psiCalculation, isRF);
-    tireRecommendations.push({
-      type: 'pressure',
-      severity: 'warning',
-      message: `Slightly under-inflated. Middle is ${Math.round(Math.abs(psiCalculation))}°F cooler than edges. Consider increasing pressure ${amount}.${rfNote}`,
-      action: 'increase',
-      amount,
-    });
-    currentPressureAction = 'increase';
-    if (currentPressureSeverity === 'good') currentPressureSeverity = 'warning';
-    if (currentPressure) recommendedPressure = currentPressure + getPressureAdjustment(amount);
   } else {
-    currentPressureAction = 'good'; // All checks passed for pressure
+    // Fallback when no cold PSI is entered: use middle-vs-edge pattern.
+    // Note: this method misses over-inflation on lightly-loaded tires — enter PSI for best results.
+    const overCritical = isRF ? 10 : 15;
+    const overWarn = isRF ? 5 : 8;
+    const underCritical = isRF ? -10 : -15;
+    const underWarn = isRF ? -5 : -8;
+
+    if (psiCalculation > overCritical) {
+      tireRecommendations.push({
+        type: 'pressure', severity: 'critical',
+        message: `Over-inflated — middle is ${Math.round(psiCalculation)}°F hotter than edges. Reduce pressure 2-4 PSI.${rfNote} (Enter current PSI for physics-based recommendation.)`,
+        action: 'decrease',
+      });
+      currentPressureAction = 'decrease';
+      currentPressureSeverity = 'critical';
+      if (overallSeverity !== 'critical') overallSeverity = 'critical';
+    } else if (psiCalculation < underCritical) {
+      tireRecommendations.push({
+        type: 'pressure', severity: 'critical',
+        message: `Under-inflated — middle is ${Math.round(Math.abs(psiCalculation))}°F cooler than edges. Increase pressure 2-4 PSI.${rfNote} (Enter current PSI for physics-based recommendation.)`,
+        action: 'increase',
+      });
+      currentPressureAction = 'increase';
+      currentPressureSeverity = 'critical';
+      if (overallSeverity !== 'critical') overallSeverity = 'critical';
+    } else if (psiCalculation > overWarn) {
+      tireRecommendations.push({
+        type: 'pressure', severity: 'warning',
+        message: `Slightly over-inflated — middle is ${Math.round(psiCalculation)}°F hotter than edges. Consider reducing pressure 1-2 PSI.${rfNote}`,
+        action: 'decrease',
+      });
+      currentPressureAction = 'decrease';
+      currentPressureSeverity = 'warning';
+      if (overallSeverity === 'good') overallSeverity = 'warning';
+    } else if (psiCalculation < underWarn) {
+      tireRecommendations.push({
+        type: 'pressure', severity: 'warning',
+        message: `Slightly under-inflated — middle is ${Math.round(Math.abs(psiCalculation))}°F cooler than edges. Consider increasing pressure 1-2 PSI.${rfNote}`,
+        action: 'increase',
+      });
+      currentPressureAction = 'increase';
+      currentPressureSeverity = 'warning';
+      if (overallSeverity === 'good') overallSeverity = 'warning';
+    } else {
+      currentPressureAction = 'good';
+      tireRecommendations.push({
+        type: 'pressure', severity: 'good',
+        message: `Middle-vs-edge pattern looks good. Enter current cold PSI above for a physics-based optimal pressure comparison (same model as the Setup Optimizer).`,
+        action: 'none',
+      });
+    }
   }
 
-  // --- Camber-Induced Pressure Adjustments (for front tires) ---
-  // If primary pressure analysis is good, but there's a significant camber spread on front tires,
-  // we recommend a pressure adjustment to compensate.
-  if (currentPressureAction === 'good' && isFront && Math.abs(camberDiff) > 10) {
-    let camberCmpPressureMessage;
-    let camberCmpPressureAction;
-    const camberCmpPressureAmount = getDynamicPressureAmount(camberDiff, isRF);
-
-    if (camberDiff > 0) { // Inside hotter, too much effective negative camber
-      camberCmpPressureMessage = `Significant inside/outside temperature spread (${Math.round(camberDiff)}°F inside hotter) indicates excessive negative camber or tire roll. While camber adjustment is recommended, *increase* pressure ${camberCmpPressureAmount} to help flatten contact patch and distribute load more evenly.`;
-      camberCmpPressureAction = 'increase';
-    } else { // Outside hotter, too little effective negative camber
-      camberCmpPressureMessage = `Significant inside/outside temperature spread (${Math.round(Math.abs(camberDiff))}°F outside hotter) indicates insufficient negative camber or tire roll. While camber adjustment is recommended, *decrease* pressure ${camberCmpPressureAmount} to help flatten contact patch and load inside.`;
-      camberCmpPressureAction = 'decrease';
-    }
+  // ── Rear edge-imbalance note (camber not adjustable) ─────────────────────
+  // Only add if physics pressure hasn't already given a recommendation,
+  // since that recommendation already handles the PSI adjustment direction.
+  if (!isFront && currentPressureSeverity === 'good' && Math.abs(camberDiff) > 15) {
+    const dir = camberDiff > 0 ? 'inside' : 'outside';
+    const opp = camberDiff > 0 ? 'outside' : 'inside';
     tireRecommendations.push({
-      type: 'pressure',
-      severity: 'warning', // Treat camber-induced pressure changes as warning
-      message: camberCmpPressureMessage,
-      action: camberCmpPressureAction,
-      amount: camberCmpPressureAmount,
-    });
-    if (currentPressure) {
-      const adj = getPressureAdjustment(camberCmpPressureAmount);
-      if (camberCmpPressureAction === 'increase') {
-        recommendedPressure += adj;
-      } else if (camberCmpPressureAction === 'decrease') {
-        recommendedPressure -= adj;
-      }
-    }
-    if (currentPressureSeverity === 'good') currentPressureSeverity = 'warning';
-    currentPressureAction = camberCmpPressureAction; // Mark that a pressure action was taken due to camber
-  }
-
-
-
-  // --- Camber Analysis ---
-
-
-  // Rear tires: pressure adjustment for camber compensation if uneven wear detected
-  // This block needs to run regardless of currentPressureSeverity because it adds pressure recommendations.
-  if (!isFront && Math.abs(camberDiff) > 10) {
-    let camberCmpPressureMessage;
-    let camberCmpPressureAction;
-    const camberCmpPressureAmount = getDynamicPressureAmount(camberDiff, isRF); // Make this dynamic too
-    if (camberDiff > 0) { // Inside hotter, too much effective negative camber
-      camberCmpPressureMessage = `Uneven inside/outside wear detected (${Math.round(camberDiff)}°F inside hotter). Rear camber is not adjustable. To compensate, *increase* pressure ${camberCmpPressureAmount} to shift load to middle/outside.`;
-      camberCmpPressureAction = 'increase';
-    } else { // Outside hotter, too little effective negative camber
-      camberCmpPressureMessage = `Uneven inside/outside wear detected (${Math.round(Math.abs(camberDiff))}°F outside hotter). Rear camber is not adjustable. To compensate, *decrease* pressure ${camberCmpPressureAmount} to flatten contact patch and load inside.`;
-      camberCmpPressureAction = 'decrease';
-    }
-    // Add this pressure recommendation to the tireRecommendations list
-    tireRecommendations.push({
-      type: 'pressure',
-      severity: 'warning', // Treat camber-induced pressure changes as warning
-      message: camberCmpPressureMessage,
-      action: camberCmpPressureAction,
-      amount: camberCmpPressureAmount,
-    });
-    // Update recommendedPressure if currentPressure is available
-    if (currentPressure) {
-      const adj = getPressureAdjustment(camberCmpPressureAmount);
-      if (camberCmpPressureAction === 'increase') {
-        recommendedPressure += adj;
-      } else if (camberCmpPressureAction === 'decrease') {
-        recommendedPressure -= adj;
-      }
-    }
-    // If no critical pressure issues yet, this becomes a warning
-    if (currentPressureSeverity === 'good') currentPressureSeverity = 'warning';
-    currentPressureAction = camberCmpPressureAction; // Mark that a pressure action was taken due to camber
-  }
-
-  // Only add camber *adjustments* if pressure is already good or only minor pressure warnings exist
-  if (currentPressureSeverity !== 'critical') { // Allow camber recs if warning or good
-    if (isFront) {
-      camberCalculation = outside - (inside - 7);
-
-      if (camberCalculation < -5) { // Negative value -> inside is much hotter than 7F target -> too much negative camber
-        tireRecommendations.push({
-          type: 'camber',
-          severity: 'critical',
-          message: `Too much negative camber. Inside edge ${Math.round(inside)}°F compared to outside edge ${Math.round(outside)}°F. Camber Calc: ${camberCalculation.toFixed(1)}. Reduce negative camber.`,
-          action: 'less_negative',
-        });
-        if (overallSeverity === 'good' || overallSeverity === 'warning') overallSeverity = 'critical';
-      } else if (camberCalculation > 5) { // Positive value -> inside is less hot than 7F target -> too little negative camber
-        tireRecommendations.push({
-          type: 'camber',
-          severity: 'critical',
-          message: `Too little negative camber. Inside edge ${Math.round(inside)}°F compared to outside edge ${Math.round(outside)}°F. Camber Calc: ${camberCalculation.toFixed(1)}. Increase negative camber.`,
-          action: 'more_negative',
-        });
-        if (overallSeverity === 'good' || overallSeverity === 'warning') overallSeverity = 'critical';
-      } else if (Math.abs(camberCalculation) > 2) {
-        tireRecommendations.push({
-          type: 'camber',
-          severity: 'warning',
-        });
-        if (overallSeverity === 'good') overallSeverity = 'warning';
-      }
-    }
-  }
-
-  // Determine overall severity based on all collected recommendations
-  for (const rec of tireRecommendations) {
-    if (rec.severity === 'critical') {
-      overallSeverity = 'critical';
-      break; // Critical is the highest, no need to check further
-    }
-    if (rec.severity === 'warning' && overallSeverity === 'good') {
-      overallSeverity = 'warning';
-    }
-  }
-
-  // If no specific recommendations, and currentPressureSeverity is good, add a general good message
-  if (tireRecommendations.length === 0 && currentPressureSeverity === 'good') {
-    tireRecommendations.push({
-      type: 'pressure',
-      severity: 'good',
-      message: 'Tire pressure looks good!',
+      type: 'pressure', severity: 'warning',
+      message: `Rear ${dir} edge is ${Math.round(Math.abs(camberDiff))}°F hotter than ${opp}. Rear camber is not adjustable — pressure and shock settings are the only levers. Enter PSI above for a specific recommendation.`,
       action: 'none',
     });
+    currentPressureSeverity = 'warning';
+    if (overallSeverity === 'good') overallSeverity = 'warning';
+  }
+
+  // ── Camber Analysis ───────────────────────────────────────────────────────
+  // Calibrated to this car's actual thermal model (not a generic reference).
+  // RF at optimal setup (recommended -3.5° static): outside runs ~9°F warmer — normal.
+  // LF at optimal setup (recommended -1.25° static): inside runs ~6°F warmer — borderline.
+  if (currentPressureSeverity !== 'critical') {
+    if (isFront) {
+      camberCalculation = inside - outside;  // positive = inside hotter
+
+      if (isRF) {
+        // RF: outside running slightly warmer is expected (body roll partially stands RF up).
+        // Normal: outside 5-15°F warmer. Warn beyond that in either direction.
+        if (camberDiff < -25) {
+          tireRecommendations.push({
+            type: 'camber', severity: 'critical',
+            message: `RF outside is ${Math.round(Math.abs(camberDiff))}°F hotter than inside — significantly insufficient negative camber. The tire is riding hard on its outside edge. Add negative camber to RF immediately.`,
+            action: 'more_negative',
+          });
+          if (overallSeverity !== 'critical') overallSeverity = 'critical';
+        } else if (camberDiff < -15) {
+          tireRecommendations.push({
+            type: 'camber', severity: 'warning',
+            message: `RF outside is ${Math.round(Math.abs(camberDiff))}°F hotter than inside (normal: outside 5-15°F warmer). Insufficient negative camber — add negative camber to RF.`,
+            action: 'more_negative',
+          });
+          if (overallSeverity === 'good') overallSeverity = 'warning';
+        } else if (camberDiff > 15) {
+          tireRecommendations.push({
+            type: 'camber', severity: 'critical',
+            message: `RF inside is ${Math.round(camberDiff)}°F hotter than outside — excessive negative camber overloading the inside edge. Reduce negative camber on RF.`,
+            action: 'less_negative',
+          });
+          if (overallSeverity !== 'critical') overallSeverity = 'critical';
+        } else if (camberDiff > 10) {
+          tireRecommendations.push({
+            type: 'camber', severity: 'warning',
+            message: `RF inside is ${Math.round(camberDiff)}°F hotter than outside — slightly too much negative camber. Consider reducing negative camber on RF.`,
+            action: 'less_negative',
+          });
+          if (overallSeverity === 'good') overallSeverity = 'warning';
+        }
+        // camberDiff −15 to +10 → acceptable (outside 5-15°F warmer zone is nominal)
+
+      } else {
+        // LF: inside tire. Ideal effective = 0° (flat contact patch). Body roll adds positive.
+        // Optimal: inside ≈ outside (±5°F). Warn at 5°F to catch optimizer-level issues.
+        if (camberDiff > 12) {
+          tireRecommendations.push({
+            type: 'camber', severity: 'critical',
+            message: `LF inside is ${Math.round(camberDiff)}°F hotter than outside — too much effective negative camber on the inside tire. Reduce LF negative camber.`,
+            action: 'less_negative',
+          });
+          if (overallSeverity !== 'critical') overallSeverity = 'critical';
+        } else if (camberDiff >= 5) {
+          tireRecommendations.push({
+            type: 'camber', severity: 'warning',
+            message: `LF inside is ${Math.round(camberDiff)}°F hotter than outside (ideal: inside ≈ outside). Slightly too much effective negative camber — reduce LF static camber setting toward 0° effective in the corner.`,
+            action: 'less_negative',
+          });
+          if (overallSeverity === 'good') overallSeverity = 'warning';
+        } else if (camberDiff < -12) {
+          tireRecommendations.push({
+            type: 'camber', severity: 'critical',
+            message: `LF outside is ${Math.round(Math.abs(camberDiff))}°F hotter than inside — body roll is overpowering static negative camber. Add negative camber to LF.`,
+            action: 'more_negative',
+          });
+          if (overallSeverity !== 'critical') overallSeverity = 'critical';
+        } else if (camberDiff <= -5) {
+          tireRecommendations.push({
+            type: 'camber', severity: 'warning',
+            message: `LF outside is ${Math.round(Math.abs(camberDiff))}°F hotter than inside — body roll may be overcoming static camber. Consider adding a small amount of negative camber to LF.`,
+            action: 'more_negative',
+          });
+          if (overallSeverity === 'good') overallSeverity = 'warning';
+        }
+        // camberDiff −4 to +4 → ideal range
+      }
+    }
+  }
+
+  // ── Final severity pass ───────────────────────────────────────────────────
+  for (const rec of tireRecommendations) {
+    if (rec.severity === 'critical') { overallSeverity = 'critical'; break; }
+    if (rec.severity === 'warning' && overallSeverity === 'good') overallSeverity = 'warning';
   }
 
   return {
@@ -267,11 +287,14 @@ export function analyzeTire(inside, middle, outside, position, currentPressure =
     spread: Math.round(spread),
     middleDiff: Math.round(middleDiff),
     camberDiff: Math.round(camberDiff),
-    pressureAction: currentPressureAction, // Use the last determined pressure action
-    severity: overallSeverity, // Use the consolidated overall severity
-    recommendations: tireRecommendations, // Return the consolidated list
+    pressureAction: currentPressureAction,
+    severity: overallSeverity,
+    recommendations: tireRecommendations,
     currentPressure,
     recommendedPressure,
+    hotPsi: hotPsi !== null ? Math.round(hotPsi * 10) / 10 : null,
+    optimalHotPsi,
+    recommendedColdPsi: recommendedColdPsi !== null ? Math.round(recommendedColdPsi * 2) / 2 : null,
     camberCalculation,
     psiCalculation,
   };
@@ -312,27 +335,43 @@ export function analyzeFullCar(tires) {
     overallRecommendations.push({
       type: 'balance',
       severity: 'warning',
-      message: `Front tires are running ${Math.round(frontRearDiff)}°F hotter than rears on average. The front is doing more work — car may be understeering. Try reducing front tire pressure 1-2 PSI or increasing rear pressure 1-2 PSI. Also consider softening front springs.`
+      message: `Front tires are running ${Math.round(frontRearDiff)}°F hotter than rears on average. The front is doing more work — car may be understeering. Try reducing front tire pressure 1-2 PSI or increasing rear pressure 1-2 PSI. Also consider softening front shocks (compression).`
     });
   } else if (frontRearDiff < -20) {
     overallRecommendations.push({
       type: 'balance',
       severity: 'warning',
-      message: `Rear tires are running ${Math.round(Math.abs(frontRearDiff))}°F hotter than fronts on average. The rear is doing more work — car may be oversteering. Try reducing rear tire pressure 1-2 PSI or increasing front pressure 1-2 PSI. Also consider stiffening rear springs.`
+      message: `Rear tires are running ${Math.round(Math.abs(frontRearDiff))}°F hotter than fronts on average. The rear is doing more work — car may be oversteering. Try reducing rear tire pressure 1-2 PSI or increasing front pressure 1-2 PSI. Also consider stiffening rear shocks (compression).`
     });
   }
 
   // Left vs right balance
+  // On a left-turn oval, the right side (RF/RR) will always be the outside-loaded side and run
+  // significantly hotter than the left — this is expected and normal, not a setup problem.
   const leftAvg = (results.LF.avg + results.LR.avg) / 2;
   const rightAvg = (results.RF.avg + results.RR.avg) / 2;
   const leftRightDiff = leftAvg - rightAvg;
 
-  if (Math.abs(leftRightDiff) > 15) {
-    const hotSide = leftRightDiff > 0 ? 'left' : 'right';
+  if (leftRightDiff > 15) {
+    // Left hotter than right — unusual on a left-turn oval
     overallRecommendations.push({
       type: 'balance',
       severity: 'warning',
-      message: `${hotSide.charAt(0).toUpperCase() + hotSide.slice(1)} side is running ${Math.round(Math.abs(leftRightDiff))}°F hotter. Check weight distribution or consider cross-weight adjustment.`
+      message: `Left side is running ${Math.round(leftRightDiff)}°F hotter than right. On a left-turn oval the right side should be warmer — check for unusual left-side loading (cross-weight, tire pressure imbalance).`
+    });
+  } else if (leftRightDiff < -40) {
+    // Right side significantly hotter (>40°F) — still expected direction but extreme
+    overallRecommendations.push({
+      type: 'balance',
+      severity: 'warning',
+      message: `Right side is running ${Math.round(Math.abs(leftRightDiff))}°F hotter than left. Right-side loading is expected on a left-turn oval, but this spread is large — verify camber and pressure on the right side.`
+    });
+  } else if (leftRightDiff < -15) {
+    // Right hotter by 15-40°F — normal for oval, just inform
+    overallRecommendations.push({
+      type: 'balance',
+      severity: 'good',
+      message: `Right side is running ${Math.round(Math.abs(leftRightDiff))}°F hotter than left — expected on a left-turn oval where the right side carries the outside load.`
     });
   }
 
@@ -345,26 +384,30 @@ export function analyzeFullCar(tires) {
     overallRecommendations.push({
       type: 'crossweight',
       severity: 'warning',
-      message: `Diagonal imbalance detected (${Math.round(Math.abs(diagDiff))}°F). ${diagDiff > 0 ? 'LF/RR diagonal' : 'RF/LR diagonal'} is hotter. Adjust cross-weight to balance.`
+      message: `Diagonal imbalance detected (${Math.round(Math.abs(diagDiff))}°F). ${diagDiff > 0 ? 'LF/RR diagonal' : 'RF/LR diagonal'} is hotter. Adjust cross-weight or shock stiffness to balance.`
     });
   }
 
-  // Check for a tire not working hard enough
+  // Check for a tire not working hard enough or being excessively overloaded.
+  // On a left-turn oval, RF and RR naturally run 15-25°F hotter than LF/LR — this is expected.
+  // Use a higher threshold for right-side tires to avoid false alarms.
   const avgTemps = analyzed.map(t => t.avg);
   const overallAvg = avgTemps.reduce((a, b) => a + b, 0) / avgTemps.length;
   for (const tire of analyzed) {
+    const isRightSide = tire.position === 'RF' || tire.position === 'RR';
+    const hotThreshold = isRightSide ? 35 : 20; // right side runs naturally hotter on oval
     if (tire.avg < overallAvg - 20) {
       overallRecommendations.push({
         type: 'individual',
         severity: 'warning',
-        message: `${formatPosition(tire.position)} is running ${Math.round(overallAvg - tire.avg)}°F cooler than average. This tire isn't doing enough work. Consider adding static weight at this corner.`
+        message: `${formatPosition(tire.position)} is running ${Math.round(overallAvg - tire.avg)}°F cooler than average. This tire isn't working as hard as the others — check pressure and consider cross-weight adjustment.`
       });
     }
-    if (tire.avg > overallAvg + 20) {
+    if (tire.avg > overallAvg + hotThreshold) {
       overallRecommendations.push({
         type: 'individual',
         severity: 'warning',
-        message: `${formatPosition(tire.position)} is running ${Math.round(tire.avg - overallAvg)}°F hotter than average. This tire is overworked. Try increasing pressure 1 PSI at this corner, or consider reducing static weight or adjusting springs.`
+        message: `${formatPosition(tire.position)} is running ${Math.round(tire.avg - overallAvg)}°F hotter than average. This tire is carrying excessive load. Check pressure, camber, and shock settings at this corner.`
       });
     }
   }
@@ -401,39 +444,59 @@ export function formatPosition(pos) {
 
 /**
  * Get handling recommendations based on reported car behavior
+ * Calibrated for Crown Victoria P71 on a left-turn oval.
+ *
+ * Key physics for this car/track:
+ *   RF = always the outside-loaded tire (compresses in left turns) — primary grip tire
+ *   LF = always the inside tire (extends/rebounds in left turns) — lighter load
+ *   RR = outside rear (compresses in left turns)
+ *   LR = inside rear (extends in left turns)
+ *   Rear camber is NOT adjustable. Spring rates are NOT adjustable.
+ *   Shocks control roll stiffness: stiffer compression = more LLTD at that corner.
+ *   Front LLTD up = more push. Rear LLTD up = more loose.
+ *
+ * Pressure and handling (from oval racing convention):
+ *   Higher RF PSI → RF grips better (more cornering stiffness at design load) → front turns → LOOSE
+ *   Lower RF PSI  → RF less grip → front washes → TIGHT
+ *   Higher RR PSI → RR grips better → rear planted → TIGHT
+ *   Lower RR PSI  → RR loses grip → rear slides → LOOSE
+ *   Higher LR PSI → tighter from middle out
+ *   Lower LR PSI  → looser from middle out
  */
 const perTireRecommendations = {
+  // ── TIGHT (UNDERSTEER / PUSH) ─────────────────────────────────────────────
+  // To fix push: increase front grip OR reduce front LLTD relative to rear.
+  // Pressure to LOOSEN: raise RF (more RF grip), raise RR (rear planted → less rotation, but
+  //   allows front to work = net loosening). Raise LF (front looser). Lower LR (looser mid-corner).
+  // Camber: add negative camber to RF for more grip. LF is inside tire — leave it alone.
+  // Shocks: soften RF compression (less front LLTD), stiffen RR compression (more rear LLTD).
+  //         Soften LF rebound (LF extends freely = less front roll resistance = less push).
+  //         Stiffen LR rebound (rear roll resistance up = rear LLTD up = rear less stable = less push).
   tight_entry: {
     "Tire Pressures": {
       LF: "Increase PSI",
       LR: "Decrease PSI",
-      RF: "Decrease PSI",
-      RR: "Increase PSI",
+      RF: "Increase PSI",   // higher RF = more RF grip = front turns = loosens push
+      RR: "Increase PSI",   // higher RR = RR planted = balanced rear = lets front work
     },
     Camber: {
-      LF: "Add 0.5-1.0° negative camber",
-      RF: "Reduce 0.5-1.0° negative camber",
+      LF: "Leave alone",                        // inside tire; doesn't drive the push
+      RF: "Add 0.5-1.0° negative camber",       // more RF grip helps front bite on entry
     },
     Caster: {
-      LF: "Increase caster slightly",
-      RF: "Increase caster slightly",
+      LF: "Increase slightly",
+      RF: "Increase slightly",  // more RF caster = more dynamic neg camber in left turns = more RF grip
     },
     "Front Toe": {
-      "Front Toe": "Reduce toe-out slightly",
-    },
-    Spring: {
-      LF: "Higher Spring Rate",
-      LR: "Lower Spring Rate",
-      RF: "Lower Spring Rate",
-      RR: "Higher Spring Rate",
+      "Front Toe": "Add toe-out slightly",  // more toe-out = better turn-in = less push on entry
     },
     Shock: {
-      LF: "More compression",
+      LF: "Less Compression",
       LR: "Same compression",
-      RF: "Less Compression",
-      RR: "More Compression",
-      "LF-Rebound": "Less Rebound",
-      "LR-Rebound": "More Rebound",
+      RF: "Less Compression",       // softer RF comp = RF loads more freely = less front LLTD
+      RR: "More Compression",       // stiffer RR = more rear LLTD = rear limits before front
+      "LF-Rebound": "Less Rebound", // softer LF rebound = LF extends freely = less front roll resistance
+      "LR-Rebound": "More Rebound", // stiffer LR rebound = more rear roll resistance = rear LLTD up
       "RF-Rebound": "Leave Alone",
       "RR-Rebound": "More Rebound",
     },
@@ -442,12 +505,12 @@ const perTireRecommendations = {
     "Tire Pressures": {
       LF: "Increase PSI",
       LR: "Decrease PSI",
-      RF: "Decrease PSI",
+      RF: "Increase PSI",   // higher RF = more grip = front turns in mid-corner
       RR: "Increase PSI",
     },
     Camber: {
       LF: "Leave alone",
-      RF: "Leave alone",
+      RF: "Add 0.25° negative camber",  // slight RF camber increase improves mid-corner contact
     },
     Caster: {
       LF: "Leave alone",
@@ -456,17 +519,11 @@ const perTireRecommendations = {
     "Front Toe": {
       "Front Toe": "Leave alone",
     },
-    Spring: {
-      LF: "Leave alone",
-      LR: "Leave alone",
-      RF: "Lower Spring Rate",
-      RR: "Higher Spring Rate",
-    },
     Shock: {
-      LF: "More Compression",
+      LF: "Less Compression",
       LR: "Less Compression",
-      RF: "Less Compression",
-      RR: "More Compression",
+      RF: "Less Compression",       // soften RF = less front LLTD = front can grip more
+      RR: "More Compression",       // stiffen RR = more rear LLTD = rear limits first
       "LF-Rebound": "Less Rebound",
       "LR-Rebound": "More Rebound",
       "RF-Rebound": "Leave Alone",
@@ -477,12 +534,12 @@ const perTireRecommendations = {
     "Tire Pressures": {
       LF: "Increase PSI",
       LR: "Decrease PSI",
-      RF: "Decrease PSI",
+      RF: "Increase PSI",   // higher RF = RF holds grip under throttle = less push on exit
       RR: "Increase PSI",
     },
     Camber: {
-      LF: "More by a lot",
-      RF: "Less by a lot",
+      LF: "Leave alone",
+      RF: "Add 0.5-1.0° negative camber",  // more RF grip helps front steer under throttle
     },
     Caster: {
       LF: "Leave alone",
@@ -491,68 +548,65 @@ const perTireRecommendations = {
     "Front Toe": {
       "Front Toe": "Leave alone",
     },
-    Spring: {
-      LF: "Higher Spring Rate",
-      LR: "Lower Spring Rate",
-      RF: "Lower Spring Rate",
-      RR: "Higher Spring Rate",
-    },
     Shock: {
       LF: "Leave alone",
       LR: "Less Compression",
       RF: "Leave alone",
-      RR: "More Compression",
-      "LF-Rebound": "More Rebound",
+      RR: "More Compression",       // stiffer RR controls how fast weight goes to rear on throttle
+      "LF-Rebound": "More Rebound", // stiffer LF rebound = front doesn't unload as fast on throttle
       "LR-Rebound": "Less Rebound",
-      "RF-Rebound": "More Rebound",
+      "RF-Rebound": "More Rebound", // stiffer RF rebound = front stays loaded longer under acceleration
       "RR-Rebound": "Leave Alone",
     },
   },
+
+  // ── LOOSE (OVERSTEER) ─────────────────────────────────────────────────────
+  // To fix loose: increase rear grip OR reduce rear LLTD relative to front.
+  // Pressure to TIGHTEN: lower RF (less RF grip = front follows rear), lower RR (rear gets more relative grip).
+  //   Lower LF (less front rotation). Raise LR (tighter mid-corner).
+  // Camber: slightly reduce RF negative camber to reduce front rotation tendency.
+  //         LF is inside — leave alone.
+  // Shocks: stiffen RF compression (more front LLTD = front limits before rear = more stable rear).
+  //         Soften RR compression (less rear LLTD = rear doesn't reach limit as fast).
   loose_entry: {
     "Tire Pressures": {
       LF: "Decrease PSI",
       LR: "Increase PSI",
-      RF: "Increase PSI",
-      RR: "Decrease PSI",
+      RF: "Decrease PSI",   // lower RF = less front grip = front follows rear = tighter
+      RR: "Decrease PSI",   // lower RR = RR can grip harder (less over-inflation) = rear planted
     },
     Camber: {
-      LF: "Reduce 0.5-1.0° negative camber",
-      RF: "Add 0.5-1.0° negative camber",
+      LF: "Leave alone",                           // inside tire; doesn't cause loose entry
+      RF: "Reduce 0.5-1.0° negative camber",       // slightly less RF grip slows front rotation on entry
     },
     Caster: {
-      LF: "Decrease caster slightly",
-      RF: "Decrease caster slightly",
+      LF: "Decrease slightly",
+      RF: "Decrease slightly",  // less RF caster = less dynamic neg camber gain = less front rotation
     },
     "Front Toe": {
-      "Front Toe": "Increase toe-out slightly",
-    },
-    Spring: {
-      LF: "Lower Spring Rate",
-      LR: "Higher Spring Rate",
-      RF: "Higher Spring Rate",
-      RR: "Lower Spring Rate",
+      "Front Toe": "Reduce toe-out slightly",  // less toe-out = less aggressive turn-in = more stable entry
     },
     Shock: {
-      LF: "Less compression",
+      LF: "More Compression",
       LR: "Same compression",
-      RF: "More Compression",
-      RR: "Less Compression",
-      "LF-Rebound": "More Rebound",
-      "LR-Rebound": "Less Rebound",
+      RF: "More Compression",       // stiffer RF comp = more front roll resistance = more front LLTD
+      RR: "Less Compression",       // softer RR = less rear LLTD = rear doesn't break away as fast
+      "LF-Rebound": "Less Rebound", // stiffer LF rebound = LF stays down = more front roll resistance
+      "LR-Rebound": "More Rebound", // softer LR rebound = rear can settle = more rear grip on entry
       "RF-Rebound": "Leave Alone",
-      "RR-Rebound": "Less Rebound",
+      "RR-Rebound": "More Rebound",
     },
   },
   loose_middle: {
     "Tire Pressures": {
       LF: "Decrease PSI",
       LR: "Increase PSI",
-      RF: "Increase PSI",
+      RF: "Decrease PSI",   // lower RF = less front rotation = rear can keep up mid-corner
       RR: "Decrease PSI",
     },
     Camber: {
       LF: "Leave alone",
-      RF: "Leave alone",
+      RF: "Leave alone",  // mid-corner balance is primarily a LLTD issue, not camber
     },
     Caster: {
       LF: "Leave alone",
@@ -561,33 +615,27 @@ const perTireRecommendations = {
     "Front Toe": {
       "Front Toe": "Leave alone",
     },
-    Spring: {
-      LF: "Leave alone",
-      LR: "Leave alone",
-      RF: "Higher Spring Rate",
-      RR: "Lower Spring Rate",
-    },
     Shock: {
-      LF: "Less Compression",
-      LR: "More Compression",
-      RF: "Leave Alone",
-      RR: "Less Compression",
-      "LF-Rebound": "More Rebound",
-      "LR-Rebound": "Less Rebound",
-      "RF-Rebound": "More Rebound",
-      "RR-Rebound": "More Rebound",
+      LF: "More Compression",
+      LR: "Less Compression",
+      RF: "More Compression",       // stiffer RF = more front LLTD = front limits before rear
+      RR: "Less Compression",       // softer RR = less rear LLTD = rear stays planted mid-corner
+      "LF-Rebound": "Less Rebound",
+      "LR-Rebound": "More Rebound", // softer LR rebound = rear settles faster mid-corner
+      "RF-Rebound": "Less Rebound",
+      "RR-Rebound": "Less Rebound",
     },
   },
   loose_exit: {
     "Tire Pressures": {
       LF: "Decrease PSI",
       LR: "Increase PSI",
-      RF: "Increase PSI",
-      RR: "Decrease PSI",
+      RF: "Decrease PSI",   // lower RF = front less aggressive on throttle = rear can follow
+      RR: "Decrease PSI",   // lower RR = RR contact patch can work harder = rear planted
     },
     Camber: {
-      LF: "Less by a lot",
-      RF: "More by a lot",
+      LF: "Leave alone",
+      RF: "Reduce 0.5-1.0° negative camber",  // less RF grip on exit lets rear recover without spinning
     },
     Caster: {
       LF: "Leave alone",
@@ -596,21 +644,15 @@ const perTireRecommendations = {
     "Front Toe": {
       "Front Toe": "Leave alone",
     },
-    Spring: {
-      LF: "Lower Spring Rate",
-      LR: "Higher Spring Rate",
-      RF: "Higher Spring Rate",
-      RR: "Lower Spring Rate",
-    },
     Shock: {
       LF: "Leave alone",
-      LR: "More Compression",
+      LR: "Less Compression",
       RF: "Leave alone",
-      RR: "Less Compression",
-      "LF-Rebound": "Less Rebound",
-      "LR-Rebound": "More Rebound",
-      "RF-Rebound": "Less Rebound",
-      "RR-Rebound": "Leave Alone",
+      RR: "More Compression",       // stiffer RR = RR stays planted when throttle loads the rear
+      "LF-Rebound": "More Rebound",
+      "LR-Rebound": "Less Rebound",
+      "RF-Rebound": "More Rebound",
+      "RR-Rebound": "Less Rebound", // softer RR rebound = rear can settle under power without bouncing
     },
   },
 };
@@ -619,57 +661,62 @@ export function getHandlingRecommendations(condition, phase) {
   const recommendations = {
     loose_entry: {
       title: 'Loose on Entry (Oversteer entering the turn)',
-      description: 'The rear end wants to come around when you turn in or brake into the corner.',
+      description: 'The rear end wants to come around when you turn in. Weight is transferring off the rear before it can build grip.',
       changes: [
-        { component: 'Rear Spring Rate', adjustment: 'Soften (lower rate)', effect: 'Allows more rear weight transfer, increasing rear grip' },
-        { component: 'Rear Rebound (Shock)', adjustment: 'Soften rear rebound', effect: 'Allows rear to settle faster on entry, gaining grip' },
-        { component: 'Front Compression (Shock)', adjustment: 'Stiffen front compression', effect: 'Slows front weight transfer on braking, keeping more weight on rear' },
+        { component: 'RF Shock (Compression)', adjustment: 'Stiffen RF compression', effect: 'Increases front roll resistance — more front LLTD keeps the front as the limiting factor, stabilizing the rear on turn-in' },
+        { component: 'LR Shock (Rebound)', adjustment: 'Soften LR rebound', effect: 'Left rear extends freely as the car rolls left, allowing the rear axle to stay planted on entry' },
+        { component: 'RR Shock (Compression)', adjustment: 'Soften RR compression', effect: 'Reduces rear LLTD — the RR stays more loaded rather than transferring all load off the rear' },
+        { component: 'Tire Pressure', adjustment: 'Lower RF 1-2 PSI, raise LR 1-2 PSI', effect: 'Reduces front rotation tendency and tightens the mid-corner balance' },
       ]
     },
     loose_middle: {
       title: 'Loose in the Middle (Oversteer at mid-corner)',
-      description: 'The rear slides out while maintaining steady throttle through the middle of the corner.',
+      description: 'The rear slides out at steady throttle through the corner. Rear LLTD is too high relative to front.',
       changes: [
-        { component: 'Rear Spring Rate', adjustment: 'Soften', effect: 'Allows more mechanical grip at the rear' },
-        { component: 'Rear Ride Height', adjustment: 'Lower slightly', effect: 'Lowers rear roll center, reducing rear load transfer' },
+        { component: 'RF Shock (Compression)', adjustment: 'Stiffen RF compression', effect: 'Increases front roll stiffness — shifts the handling balance so the front reaches its grip limit before the rear' },
+        { component: 'RR Shock (Compression)', adjustment: 'Soften RR compression', effect: 'Reduces rear LLTD — the rear stays more evenly loaded rather than shedding load to the inside (LR), giving the RR more sustained grip' },
+        { component: 'LR Shock (Rebound)', adjustment: 'Soften LR rebound', effect: 'Allows the left rear to unload naturally, reducing rear roll resistance imbalance in sustained cornering' },
+        { component: 'Tire Pressure', adjustment: 'Lower RF 1-2 PSI, raise LR 1-2 PSI', effect: 'Reduces front grip and tightens mid-corner balance' },
       ]
     },
     loose_exit: {
       title: 'Loose on Exit (Oversteer on throttle application)',
-      description: 'The rear steps out when you apply throttle coming off the corner.',
+      description: 'The rear steps out when applying throttle. Weight transfers rearward faster than rear grip can build.',
       changes: [
-        { component: 'Rear Spring Rate', adjustment: 'Soften', effect: 'Allows rear to plant better under acceleration' },
-        { component: 'Rear Rebound (Shock)', adjustment: 'Stiffen rear rebound', effect: 'Keeps rear planted during weight transfer on acceleration' },
-        { component: 'Rear Compression (Shock)', adjustment: 'Soften rear compression', effect: 'Allows rear to absorb bumps and maintain contact' },
-        { component: 'Throttle Application', adjustment: 'Apply throttle more gradually (driver adjustment)', effect: 'Reduces sudden weight transfer off rear tires' },
+        { component: 'RR Shock (Compression)', adjustment: 'Soften RR compression', effect: 'Allows the RR to absorb the weight transfer more smoothly when throttle is applied, maintaining contact' },
+        { component: 'RR Shock (Rebound)', adjustment: 'Stiffen RR rebound', effect: 'Keeps the RR compressed and planted as power loads the rear, preventing the tire from bouncing off the track' },
+        { component: 'RF/LF Shock (Rebound)', adjustment: 'Stiffen front rebound', effect: 'Slows how fast the front unloads under acceleration — keeps the front engaged so the car tracks straight rather than rotating' },
+        { component: 'Throttle Application', adjustment: 'Apply throttle more gradually (driver adjustment)', effect: 'Reduces the abrupt weight transfer spike that breaks the rear loose' },
       ]
     },
     tight_entry: {
       title: 'Tight on Entry (Understeer entering the turn)',
-      description: 'The car wants to go straight (push) when you turn into the corner.',
+      description: 'The car pushes straight when you turn in. The RF is not generating enough grip on entry.',
       changes: [
-        { component: 'Front Spring Rate', adjustment: 'Soften', effect: 'Allows more front weight transfer and grip on entry' },
-        { component: 'Front Compression (Shock)', adjustment: 'Soften front compression', effect: 'Allows the front to load up faster on entry' },
-        { component: 'Front Camber', adjustment: 'Add negative camber (0.25-0.5°)', effect: 'Improves front tire contact in cornering' },
-        { component: 'Caster', adjustment: 'Increase caster', effect: 'Adds dynamic negative camber gain in turns, improving front grip' },
+        { component: 'RF Shock (Compression)', adjustment: 'Soften RF compression', effect: 'Allows the RF to load up faster and more freely on turn-in, reducing front LLTD and improving RF contact patch grip' },
+        { component: 'LF Shock (Rebound)', adjustment: 'Soften LF rebound', effect: 'Left front can extend freely as body rolls, reducing front roll resistance — less front LLTD means more available front grip' },
+        { component: 'RF Camber', adjustment: 'Add 0.25-0.5° negative camber to RF', effect: 'Improves RF contact patch orientation on entry — inside edge carries more load, increasing cornering grip' },
+        { component: 'RF Caster', adjustment: 'Increase RF caster', effect: 'Adds dynamic negative camber gain to the RF during steering input, increasing front grip exactly when it is needed most' },
       ]
     },
     tight_middle: {
       title: 'Tight in the Middle (Understeer at mid-corner)',
-      description: 'The car pushes/plows through the middle of the corner despite consistent steering input.',
+      description: 'The car plows through the corner at steady throttle. Front LLTD is too high relative to rear.',
       changes: [
-        { component: 'Front Spring Rate', adjustment: 'Soften', effect: 'Allows more front grip in sustained cornering' },
-        { component: 'Front Camber', adjustment: 'Add negative camber', effect: 'Improves front tire contact patch through the corner' },
-        { component: 'Rear Ride Height', adjustment: 'Raise slightly', effect: 'Raises rear roll center, increasing rear load transfer and freeing the front' },
+        { component: 'RF Shock (Compression)', adjustment: 'Soften RF compression', effect: 'Reduces front roll stiffness — lowers front LLTD so the RF stays more evenly loaded through sustained cornering' },
+        { component: 'RR Shock (Compression)', adjustment: 'Stiffen RR compression', effect: 'Increases rear LLTD — the rear reaches its grip limit before the front, which rotates the car more freely' },
+        { component: 'RF Camber', adjustment: 'Add 0.25° negative camber to RF', effect: 'Improves RF contact patch through the corner, helping the front grip in sustained lateral load' },
+        { component: 'Tire Pressure', adjustment: 'Raise RF 1-2 PSI', effect: 'Higher RF pressure increases cornering stiffness at the design load, improving mid-corner RF grip' },
       ]
     },
     tight_exit: {
       title: 'Tight on Exit (Understeer on acceleration)',
-      description: 'The car pushes wide when applying throttle coming off the corner.',
+      description: 'The car pushes wide when applying throttle. The front unloads too fast as weight transfers rearward.',
       changes: [
-        { component: 'Rear Spring Rate', adjustment: 'Stiffen', effect: 'Reduces rear squat, keeping front loaded longer' },
-        { component: 'Front Rebound (Shock)', adjustment: 'Soften front rebound', effect: 'Allows front to extend slower, maintaining front grip longer on exit' },
-        { component: 'Rear Compression (Shock)', adjustment: 'Stiffen rear compression', effect: 'Controls rear squat, preventing too much weight transfer off the front' },
+        { component: 'RF/LF Shock (Rebound)', adjustment: 'Stiffen front rebound', effect: 'Slows how fast the front extends as weight transfers rearward — keeps the front engaged in steering longer on corner exit' },
+        { component: 'RR Shock (Compression)', adjustment: 'Stiffen RR compression', effect: 'Controls rear squat under power, preventing excessive weight from dumping off the front and onto the rear too quickly' },
+        { component: 'RF Camber', adjustment: 'Add 0.25-0.5° negative camber to RF', effect: 'More RF grip on exit helps the front maintain steering authority even as the rear loads up under throttle' },
+        { component: 'Tire Pressure', adjustment: 'Raise RF 1-2 PSI', effect: 'Increases RF cornering stiffness — front holds grip better during the combined lateral + longitudinal load on exit' },
       ]
     }
   };

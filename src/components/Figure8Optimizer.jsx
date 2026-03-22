@@ -1,16 +1,15 @@
 import { useMemo, useState, useRef } from 'react';
-import { analyzeSetup, DEFAULT_SETUP, RECOMMENDED_SETUP, PETE_SETUP, DYLAN_SETUP, JOSH_SETUP } from '../utils/raceSimulation';
+import { analyzeSetupF8, DEFAULT_SETUP_F8 } from '../utils/raceSimulation';
 import { REAR_SHOCKS, FRONT_STRUTS, shockLabel } from '../data/shockOptions';
 import NumericInput from './NumericInput';
 
 const CORNERS = ['LF', 'RF', 'LR', 'RR'];
 const CORNER_LABELS = { LF: 'Left Front', RF: 'Right Front', LR: 'Left Rear', RR: 'Right Rear' };
-const TARGET = 17.1;
-const RANGE_MIN = 16.8;
-const RANGE_MAX = 17.8;
+const TARGET = 23.1;
+const RANGE_MIN = 22.8;
+const RANGE_MAX = 23.8;
 
 function deepClone(o) { return JSON.parse(JSON.stringify(o)); }
-
 function pct(v) { return (v * 100).toFixed(1) + '%'; }
 
 function scoreColor(v) {
@@ -52,7 +51,6 @@ function Tooltip({ text, children }) {
   );
 }
 
-// ── ScoreBar with optional tooltip ───────────────────────────────────────────
 function ScoreBar({ value, label, tip }) {
   const p = Math.round(Math.min(100, value * 100));
   const color = scoreColor(value);
@@ -71,44 +69,38 @@ function ScoreBar({ value, label, tip }) {
   );
 }
 
-// Tooltip text definitions for all corner card items
 const TIPS = {
   gripScore: 'Overall grip score for this corner — product of camber, pressure, and temperature factors. 100% = fully optimal. Green ≥99%, Yellow ≥96%, Orange ≥92%, Red below.',
-  load: 'Estimated tire load at 1G of lateral force (one full corner). Heavier = more grip potential but also more heat. RF and RR carry more weight in left turns.',
-  estTemp: 'Steady-state equilibrium temperature predicted by the thermal model at race pace. Actual race temps will vary with lap count and ambient conditions.',
-  tempFactor: 'Grip multiplier from tire temperature. These all-season tires are optimal between 100–165°F. Below 100°F the tire is cold and loses grip; above 165°F heat starts to degrade the compound.',
-  camberSection: 'Camber is the inward/outward tilt of the tire. Negative camber tilts the top of the tire inward. The outside front (RF in a left turn) needs negative camber to stay flat on the road under cornering load.',
-  staticCamber: 'Your static alignment setting in degrees. Negative = top of tire tilted inward toward the car. This is what you set in the garage.',
-  casterGain: 'Combined dynamic camber change from caster and SLA body roll. Caster: opposite directions on each wheel — RF (outside) gains negative camber (~0.18°/deg caster), LF (inside) gains positive (~0.10°/deg). SLA body roll: RF gains additional negative camber in jounce; LF gains slight positive in droop. Net effect moves each tire toward or away from its ideal contact patch angle.',
-  effectiveCamber: 'The actual camber angle at mid-corner: static setting plus caster-induced gain. This is what the tire "sees" during the hardest part of the corner. The goal is to keep the contact patch as flat as possible under body roll.',
-  idealCamber: {
-    outside: 'Model target for the outside front (RF) at 1G: −4.5°. Calibrated from pyrometer data — the RF consistently shows outside edge hotter than inside, meaning the tire needs more negative camber than a generic model would suggest. More negative camber shifts load toward the inside edge for a flatter contact patch.',
-    inside: 'Model target for the inside front (LF): 0° effective (flat contact patch). With SLA suspension, caster adds slight positive camber gain (+0.35° at 3.5° caster) and body roll adds a small positive shift in droop. These dynamic gains partially offset the static negative camber — the optimal static setting is around −0.5° to −0.75° to achieve near-0° effective. Running too much static negative camber on the LF (inside tire) loads the inside edge unnecessarily — the pyrometer inside-hot pattern on the LF is the key indicator.',
-    rearOutside: 'Ideal dynamic camber for the outside rear (RR): −1.0°. With a solid axle the rear tilts with body roll — stiffer shocks reduce roll and keep camber closer to optimal.',
-    rearInside: 'Ideal dynamic camber for the inside rear (LR): 0°. The inside rear is very lightly loaded in a left turn; near-zero camber is optimal.',
-  },
-  solidAxle: 'The rear axle is solid (live axle) — both rear wheels tilt together with body roll. You cannot set rear camber directly. Reducing body roll (stiffer rear shocks) brings dynamic camber closer to ideal.',
-  camberScore: 'Grip multiplier from camber alignment. 100% = effective camber matches the model\'s ideal for this corner. Each degree of deviation costs roughly 1.2% grip.',
-  pressureSection: 'Tire pressure affects contact patch shape. Under-inflated tires flex excessively and overheat the edges; over-inflated tires crown and only use the center of the tread.',
-  coldHot: 'Cold PSI is what you set in the garage (~68°F). Hot PSI is the pressure at racing temperature — calculated using the ideal gas law with 68°F as the cold reference. At 200°F tires: 34 cold → ~42.5 PSI hot (+8.5 PSI). Ambient temperature does NOT affect this — only the difference between your inflation temp and the tire\'s racing temp matters.',
-  optimalHot: 'The hot pressure that gives maximum grip for this corner\'s load. Heavily loaded tires (RF, RR) need higher pressure to support the load; lightly loaded tires (LF, LR) need less.',
+  load: 'Estimated average tire load across both left and right turns at 1G. Figure 8 loading is nearly symmetric — all four corners see similar average loads.',
+  estTemp: 'Steady-state equilibrium temperature predicted by the thermal model at race pace. Based on averaged left/right work factors — figure 8 temps are more balanced than oval.',
+  tempFactor: 'Grip multiplier from tire temperature. Optimal window 100–185°F for these Ironman XL all-season tires.',
+  camberSection: 'Figure 8 camber is unique: each front tire alternates as outside (needs negative) and inside (needs near-zero) every lap. The ideal is the average of both demands: approximately −2.75°.',
+  staticCamber: 'Your static alignment setting in degrees. Negative = top of tire tilted inward. For figure 8, both fronts should be set near the same value.',
+  casterGain: 'Average dynamic camber contribution from caster across both turn directions. Caster adds negative camber when outside (one turn) but slightly reduces it when inside (other turn) — the net average is small: caster × −0.04°/degree.',
+  effectiveCamber: 'Average effective camber across both turn directions. Static setting plus average caster contribution. This is the average camber the tire sees across a full lap.',
+  idealCamber: 'Average effective camber target: −2.25° (avg of outside ideal −4.5° and inside ideal 0°). In each turn the outside role needs −4.5° for maximum grip under cornering load; the inside role needs 0° (flat contact patch — body roll droop lays it flat). Optimal static = avg(−4.5+caster×0.18, 0−caster×0.10). At 4° caster: ≈−2.09° static → −2.25° average effective. The camber score is the true average of both per-turn grip factors.',
+  rearCamber: 'Rear solid axle tilts with body roll. In a figure 8 the car rolls left and right equally, so average dynamic rear camber is approximately zero — near-ideal for the rear axle.',
+  solidAxle: 'The rear axle is solid — both wheels tilt together with body roll. In figure 8, body roll averages to near-zero across both turn directions, so rear dynamic camber stays close to optimal.',
+  camberScore: 'Grip multiplier from camber alignment. 100% = effective camber matches the model ideal of −2.75° for this tire. Each degree of deviation costs roughly 1.2% grip.',
+  pressureSection: 'Tire pressure affects contact patch shape. Figure 8 loading is symmetric — LF/RF see equal average loads, as do LR/RR. Equal pressures side-to-side are appropriate.',
+  coldHot: 'Cold PSI is what you set in the garage (~68°F). Hot PSI is calculated via ideal gas law using 68°F as the cold reference — NOT the racing ambient. At 200°F tires: 34 cold → ~42.5 PSI hot (+8.5 PSI). On a hot day tires run hotter, so hot PSI rises more than you might expect.',
+  optimalHot: 'Load-optimal hot pressure for this corner. Since figure 8 loads are symmetric, LF≈RF and LR≈RR should have equal optimal pressures.',
   presScore: 'Grip multiplier from tire pressure. 100% = hot pressure matches the load-optimal target. Each PSI of deviation costs ~0.25% grip.',
-  loadMismatch: 'This corner\'s load is far from the car\'s average, so the mathematically optimal pressure is outside a practical range. Run the lowest safe pressure for lightly loaded corners and the highest safe pressure for heavily loaded ones.',
-  frontShock: 'Average stiffness rating of the two front struts (0 = stiffest, 10 = softest). Stiffer fronts resist body roll and reduce weight transfer to the front tires during braking and corner entry.',
-  rearShock: 'Average stiffness rating of the two rear shocks (0 = stiffest, 10 = softest). Stiffer rears limit body roll on a solid axle, keeping dynamic rear camber closer to ideal.',
-  frontLLTD: 'Lateral Load Transfer Distribution — the share of total cornering weight transfer handled by the front axle. Higher = more understeer tendency. On an oval, 38–55% works well — slightly below the 55% weight bias gives the car rotation through the corners.',
-  frontGripShare: 'The front axle\'s share of total cornering grip based on current tire temperatures and pressures. 55% ideal matches the car\'s front weight bias and aerodynamic balance in left turns.',
-  bodyRoll: 'Estimated chassis lean angle at 1G of lateral force. More roll tilts the solid rear axle and degrades camber on both rear tires. Target under 3° for this suspension geometry.',
-  balanceScore: 'Combined grip penalty from front/rear imbalance. 100% = perfectly balanced. Score drops when the front and rear axles contribute unequal grip, causing understeer or oversteer.',
-  toeCurrent: 'Current toe setting. Toe-out (negative) points the front tires slightly away from center, sharpening turn-in response. Toe-in (positive) improves straight-line stability but dulls corner entry.',
-  toeOptimal: 'Model optimum: ¼" toe-out. This is the peak of the turn-in grip curve for this car — enough to sharpen initial steering response without excessive tire scrub or drag.',
-  turnInGrip: 'Grip multiplier from toe angle. Peaks near ¼"–⅜" toe-out and falls off with excessive toe in either direction. 100% = best achievable toe grip.',
-  toeDragPenalty: 'Straight-line speed penalty from toe angle. Even small amounts of toe-out create tire scrub on the straights. Displayed as % increase in effective drag coefficient.',
+  loadMismatch: 'Corner load is far from average — the mathematically optimal pressure is outside a practical range.',
+  frontShock: 'Average stiffness rating of front struts. For figure 8, symmetric front shock settings are preferred since the car rolls equally in both directions.',
+  rearShock: 'Average stiffness rating of rear shocks. Controls body roll, which averages to near-zero in figure 8 but stiffer rears still help stability through the crossing.',
+  frontLLTD: 'Lateral Load Transfer Distribution — front axle share of total cornering weight transfer. In figure 8, this applies equally to both turn directions.',
+  frontGripShare: 'Front axle share of total grip. Target is 55% — matching the car\'s front weight bias (3800 lbs × 55% front). Even though figure 8 loads symmetrically left/right, the car is still nose-heavy and the performance model penalizes deviation from 55%.',
+  bodyRoll: 'Estimated chassis lean at 1G. In figure 8 the car rolls left and right alternately — average is ~0°, but peak roll each way still affects tire geometry through corners.',
+  balanceScore: 'Front/rear grip balance. 100% = equal front and rear grip contribution (50/50 target for figure 8). Imbalance causes push or loose handling.',
+  toeCurrent: 'Current toe setting. For figure 8, toe-out sharpens turn-in for both left and right corners — same principle as oval but benefits both directions.',
+  toeOptimal: 'Model optimum: ¼" toe-out. Balances turn-in sharpness vs straight-line drag for the 350 ft straights on this figure 8 track.',
+  turnInGrip: 'Grip multiplier from toe angle. Peaks near ¼"–⅜" toe-out. Applies equally to left and right turn entries.',
+  toeDragPenalty: 'Straight-line speed loss from toe scrub. Figure 8 has 350 ft straights — more drag penalty than a short oval, so avoid excessive toe-out.',
 };
 
-// ── Phase tendency helper ─────────────────────────────────────────────────────
-function phaseLabel(bias) {
-  // bias > 0.5 = front-heavy load transfer = push; < 0.5 = rear-heavy = loose
+// ── Phase tendency helper (F8) ────────────────────────────────────────────────
+function phaseLabelF8(bias) {
   const dev = bias - 0.50;
   if      (dev < -0.20) return { label: 'Very Loose',   color: 'var(--red)' };
   if      (dev < -0.10) return { label: 'Loose',        color: 'orange' };
@@ -119,17 +111,13 @@ function phaseLabel(bias) {
   return                        { label: 'Very Tight',  color: 'var(--red)' };
 }
 
-// ── Handling Balance Gauge ────────────────────────────────────────────────────
-function BalanceGauge({ frontGripPct, frontLLTD, corners, setup }) {
-  // Positive = loose tendency, negative = push tendency
-  // Center on weight bias (55%) — that's the neutral handling point.
-  // On an oval you typically WANT slight loose (LLTD below 55%) for rotation.
-  const gripDev  = frontGripPct - 0.55;      // + = front has spare grip = loose
-  const lltdDev  = (frontLLTD - 0.55) * 0.3; // + = front overloaded = push (gentle scaling)
-  const tendency = gripDev - lltdDev;         // + = loose, - = push
+// ── Handling Balance Gauge (F8) ───────────────────────────────────────────────
+function BalanceGaugeF8({ frontGripPct, frontLLTD, corners, setup }) {
+  const gripDev  = frontGripPct - 0.55;
+  const lltdDev  = (frontLLTD - 0.55) * 0.3;
+  const tendency = gripDev - lltdDev;
 
   const gaugeMax = 0.12;
-  // gaugePos: 0 = full loose (left), 1 = full push (right)
   const gaugePos = Math.max(0, Math.min(1, 0.5 - tendency / (2 * gaugeMax)));
 
   let label, color;
@@ -141,109 +129,105 @@ function BalanceGauge({ frontGripPct, frontLLTD, corners, setup }) {
   else if (tendency <=  0.08) { label = 'Loose';          color = 'orange'; }
   else                        { label = 'Very Loose';     color = 'var(--red)'; }
 
-  // ── Phase breakdown — shocks, camber, pressure, toe, and grip scores ──
-  // bias: 0.5 = neutral, >0.5 = push/tight tendency, <0.5 = loose tendency
+  // Phase breakdown — shocks, camber, pressure, toe, and grip scores (F8: both turn directions)
   const rfS = 10 - setup.shocks.RF;
   const lfS = 10 - setup.shocks.LF;
   const rrS = 10 - setup.shocks.RR;
   const lrS = 10 - setup.shocks.LR;
   const total = Math.max(rfS + lfS + rrS + lrS, 1);
 
-  // ENTRY — which axle loads first on turn-in?
-  // RF/RR stiffness ratio: RF stiffer = front loads first = push; RR stiffer = rear loads = rotation.
-  // Toe: toe-in (toward 0 from -0.25 optimal) = front doesn't bite = push on entry.
-  // RF camber deviation: off ideal = less RF grip on initial load = push on entry.
-  // RF pressure: over-inflated = smaller contact patch = push on entry.
-  const entryOutsideBias = rfS / Math.max(rfS + rrS, 1);
+  // ENTRY — both turn directions: each front tire alternates as outside/inside.
+  // Left turn: RF/RR outside pair. Right turn: LF/LR outside pair.
+  const entryLeftBias  = rfS / Math.max(rfS + rrS, 1);
+  const entryRightBias = lfS / Math.max(lfS + lrS, 1);
+  const entryShockBias = (entryLeftBias + entryRightBias) / 2;
+  // Toe: symmetric — toe-in = less front bite = push on entry in both directions
   const toeEntryBias    = Math.max(0.2, Math.min(0.8, 0.5 + (setup.toe + 0.25) * 0.5));
-  const rfCamEntryBias  = Math.max(0.2, Math.min(0.8, 0.5 + corners.RF.camberDev * 0.04));
-  const rfPresEntryBias = Math.max(0.2, Math.min(0.8, 0.5 + corners.RF.psiDev * 0.012));
-  const entryBias = 0.35 * entryOutsideBias + 0.20 * frontLLTD + 0.20 * toeEntryBias + 0.15 * rfCamEntryBias + 0.10 * rfPresEntryBias;
-  const entry = phaseLabel(entryBias);
+  // Avg front camber deviation (both fronts alternate as outside in F8)
+  const avgFrontCamberDev = (corners.LF.camberDev + corners.RF.camberDev) / 2;
+  const camberEntryBias   = Math.max(0.2, Math.min(0.8, 0.5 + avgFrontCamberDev * 0.04));
+  // Avg front pressure deviation
+  const avgFrontPsiDev  = (corners.LF.psiDev + corners.RF.psiDev) / 2;
+  const presEntryBias   = Math.max(0.2, Math.min(0.8, 0.5 + avgFrontPsiDev * 0.012));
+  const entryBias = 0.35 * entryShockBias + 0.20 * frontLLTD + 0.20 * toeEntryBias + 0.15 * camberEntryBias + 0.10 * presEntryBias;
+  const entry = phaseLabelF8(entryBias);
 
-  // MID — steady-state corner.
-  // Primary: actual front/rear grip balance. frontGripPct > 0.55 = rear limited = loose;
-  // < 0.55 = front limited = push. This directly reflects camber, pressure, and temp effects.
+  // MID — steady-state: actual grip balance is primary.
+  // frontGripPct > 0.55 = rear limited = loose; < 0.55 = front limited = push.
   const midGripBias = Math.max(0.1, Math.min(0.9, 0.5 + (frontGripPct - 0.55) * 3));
   const midBias = 0.55 * midGripBias + 0.45 * frontLLTD;
-  const mid = phaseLabel(midBias);
+  const mid = phaseLabelF8(midBias);
 
-  // EXIT — off corner under throttle.
-  // Cross-weight (diagonal stiffness) determines how load redistributes as car unwinds.
-  // Rear grip quality: if rear grip scores lower than front, rear may step out on throttle.
-  // RR pressure: over-inflated = less rear contact patch = loose on exit.
+  // EXIT — off throttle in both directions.
+  // Rear grip quality: if rear scores lower than front, rear steps out on throttle.
+  // Avg rear pressure: over-inflated rear = less contact = loose on exit.
   const diagBias = (rfS + lrS) / Math.max(total, 1);
-  const rearGripAvg  = (corners.RR.adjustableScore + corners.LR.adjustableScore) / 2;
-  const frontGripAvg = (corners.RF.adjustableScore + corners.LF.adjustableScore) / 2;
-  const gripDiffBias   = Math.max(0.1, Math.min(0.9, 0.5 + (rearGripAvg - frontGripAvg) * 5));
-  const rrPresExitBias = Math.max(0.2, Math.min(0.8, 0.5 - corners.RR.psiDev * 0.012));
-  const exitBias = 0.30 * diagBias + 0.25 * frontLLTD + 0.25 * gripDiffBias + 0.20 * rrPresExitBias;
-  const exit = phaseLabel(exitBias);
+  const rearGripAvgF8  = (corners.RR.adjustableScore + corners.LR.adjustableScore) / 2;
+  const frontGripAvgF8 = (corners.RF.adjustableScore + corners.LF.adjustableScore) / 2;
+  const gripDiffBias   = Math.max(0.1, Math.min(0.9, 0.5 + (rearGripAvgF8 - frontGripAvgF8) * 5));
+  const avgRearPsiDev  = (corners.RR.psiDev + corners.LR.psiDev) / 2;
+  const rearPresExitBias = Math.max(0.2, Math.min(0.8, 0.5 - avgRearPsiDev * 0.012));
+  const exitBias = 0.30 * diagBias + 0.25 * frontLLTD + 0.25 * gripDiffBias + 0.20 * rearPresExitBias;
+  const exit = phaseLabelF8(exitBias);
 
-  // Phase notes — surface the dominant driver for each phase
+  // Phase notes — dominant driver for each phase
   let entryNote = '';
   const toeContrib    = Math.abs(toeEntryBias - 0.5);
-  const rfCamContrib  = Math.abs(rfCamEntryBias - 0.5);
-  const rfPresContrib = Math.abs(rfPresEntryBias - 0.5);
-  const shockEntryContrib = Math.abs(entryOutsideBias - 0.5);
-  if (toeContrib > 0.04 && toeContrib >= shockEntryContrib) {
+  const camberContrib = Math.abs(camberEntryBias - 0.5);
+  const presContrib   = Math.abs(presEntryBias - 0.5);
+  const shockContrib  = Math.abs(entryShockBias - 0.5);
+  if (toeContrib > 0.04 && toeContrib >= shockContrib) {
     entryNote = setup.toe > -0.25
-      ? `Toe-in reduces front turn-in grip — pushier entry (${Math.abs(setup.toe)}" ${setup.toe > 0 ? 'in' : 'out'})`
-      : `Aggressive toe-out (${Math.abs(setup.toe)}") — very sharp turn-in`;
-  } else if (rfCamContrib > 0.04 && rfCamContrib >= shockEntryContrib) {
-    entryNote = `RF camber ${corners.RF.camberDev.toFixed(1)}° off ideal — less front bite on turn-in`;
-  } else if (rfPresContrib > 0.04 && rfPresContrib >= shockEntryContrib) {
-    entryNote = corners.RF.psiDev > 0
-      ? `RF over-inflated ${corners.RF.psiDev.toFixed(1)} PSI above target — harder contact patch`
-      : `RF under-inflated ${Math.abs(corners.RF.psiDev).toFixed(1)} PSI below target`;
-  } else if (entryOutsideBias > 0.53) {
-    entryNote = 'RF strut stiffer than RR — front loads faster on turn-in';
-  } else if (entryOutsideBias < 0.47) {
-    entryNote = 'RR shock stiffer than RF — rear loads faster, car rotates on entry';
+      ? `Toe-in (${Math.abs(setup.toe)}" ${setup.toe > 0 ? 'in' : 'out'}) reduces front turn-in — push on entry`
+      : `Aggressive toe-out (${Math.abs(setup.toe)}") — sharp turn-in both directions`;
+  } else if (camberContrib > 0.04 && camberContrib >= shockContrib) {
+    entryNote = `Avg front camber ${avgFrontCamberDev.toFixed(1)}° off ideal — less front bite on entry`;
+  } else if (presContrib > 0.04 && presContrib >= shockContrib) {
+    entryNote = avgFrontPsiDev > 0
+      ? `Front tires over-inflated avg ${avgFrontPsiDev.toFixed(1)} PSI — harder contact patch`
+      : `Front tires under-inflated avg ${Math.abs(avgFrontPsiDev).toFixed(1)} PSI`;
+  } else {
+    entryNote = 'Avg of L+R turn-in shock loading';
   }
 
   let exitNote = '';
-  const rearGripDiff = rearGripAvg - frontGripAvg;
-  if (Math.abs(rearGripDiff) > 0.02) {
-    exitNote = rearGripDiff < 0
-      ? `Rear grip (${(rearGripAvg * 100).toFixed(0)}%) < front (${(frontGripAvg * 100).toFixed(0)}%) — rear may step out on throttle`
-      : `Rear grip (${(rearGripAvg * 100).toFixed(0)}%) > front — rear planted on exit`;
+  const rearGripDiffF8 = rearGripAvgF8 - frontGripAvgF8;
+  if (Math.abs(rearGripDiffF8) > 0.02) {
+    exitNote = rearGripDiffF8 < 0
+      ? `Rear grip (${(rearGripAvgF8 * 100).toFixed(0)}%) < front (${(frontGripAvgF8 * 100).toFixed(0)}%) — rear may step out on throttle`
+      : `Rear grip (${(rearGripAvgF8 * 100).toFixed(0)}%) > front — rear planted on exit`;
   } else {
-    const diagVal = (rfS + lrS) - (lfS + rrS);
-    if (diagVal > 2) exitNote = 'RF+LR diagonal stiffer — cross-weight holds rear on exit';
-    else if (diagVal < -2) exitNote = 'LF+RR diagonal stiffer — less cross-weight, rear can step out';
+    exitNote = 'Diagonal + LLTD under throttle';
   }
 
   const frontAvgScore = (corners.LF.adjustableScore + corners.RF.adjustableScore) / 2;
   const rearAvgScore  = (corners.LR.adjustableScore + corners.RR.adjustableScore) / 2;
-  const rfCamberOk    = corners.RF.camberDev < 0.5;
-  const frontPresOk   = Math.abs(corners.RF.psiDev) < 3 && Math.abs(corners.LF.psiDev) < 3;
-  const rearPresOk    = Math.abs(corners.RR.psiDev) < 3 && Math.abs(corners.LR.psiDev) < 3;
+  const camberOk      = corners.LF.camberDev < 0.5 && corners.RF.camberDev < 0.5;
+  const frontPresOk   = Math.abs(corners.LF.psiDev) < 3 && Math.abs(corners.RF.psiDev) < 3;
+  const rearPresOk    = Math.abs(corners.LR.psiDev) < 3 && Math.abs(corners.RR.psiDev) < 3;
 
   let description, action;
   if (tendency < -0.015) {
     const drivers = [];
-    if (frontLLTD > 0.60) drivers.push('high front LLTD — front shocks transferring more cornering load than rear');
-    if (frontGripPct < 0.53) drivers.push('front tires generating less grip than rears');
-    if (!rfCamberOk) drivers.push('RF camber could be improved');
-    if (!frontPresOk) drivers.push('front tire pressures off target');
+    if (frontLLTD > 0.60) drivers.push('high front LLTD — front struts transferring more cornering load than rear');
+    if (!camberOk) drivers.push('front camber could be improved toward optimal');
+    if (!frontPresOk) drivers.push('front tire pressures off optimal');
     if (frontAvgScore < rearAvgScore - 0.03) drivers.push('front grip scores lower than rear');
     description = drivers.length
-      ? `Car tends to push. Contributing factors: ${drivers.join('; ')}.`
-      : 'Front axle is working harder than the rear relative to weight distribution.';
-    action = 'To loosen: raise RF pressure (quickest fix — more RF grip turns the car), raise RR pressure (plants rear), raise LF pressure, lower LR pressure. If still pushing: soften front struts, stiffen rear shocks, or add RF negative camber.';
+      ? `Car tends to push in both directions. Contributing factors: ${drivers.join('; ')}.`
+      : 'Front axle working harder than rear in both turn directions.';
+    action = 'To loosen: adjust camber toward optimal, soften front struts, check front pressures.';
   } else if (tendency > 0.015) {
     const drivers = [];
     if (frontLLTD < 0.40) drivers.push('low front LLTD — rear shocks transferring more cornering load than front');
-    if (frontGripPct > 0.57) drivers.push('rear tires generating less grip than fronts');
-    if (!rearPresOk) drivers.push('rear tire pressures off target');
+    if (!rearPresOk) drivers.push('rear tire pressures off optimal');
     if (rearAvgScore < frontAvgScore - 0.03) drivers.push('rear grip scores lower than front');
     description = drivers.length
-      ? `Car tends to be loose. Contributing factors: ${drivers.join('; ')}.`
-      : 'Rear axle is working harder than the front relative to weight distribution.';
-    action = 'To tighten: lower RF pressure (less front grip — rear catches up), lower RR pressure (rear works harder), lower LF pressure, raise LR pressure. If still loose: stiffen front struts, soften rear shocks to shift load transfer toward the front.';
+      ? `Car tends to be loose in both directions. Contributing factors: ${drivers.join('; ')}.`
+      : 'Rear axle working harder than front in both turn directions.';
+    action = 'To tighten: stiffen front struts relative to rear shocks, check rear pressures.';
   } else {
-    description = 'Front and rear axles are well-balanced — grip and load are proportional to the car\'s weight distribution.';
+    description = 'Front and rear axles are well-balanced across both turn directions.';
     action = null;
   }
 
@@ -266,7 +250,6 @@ function BalanceGauge({ frontGripPct, frontLLTD, corners, setup }) {
         <div className="opt-hb-label" style={{ color }}>{label}</div>
       </div>
 
-      {/* Phase breakdown */}
       <div className="opt-phase-breakdown">
         <div className="opt-phase-title">Corner Phase Breakdown</div>
         <div className="opt-phase-grid">
@@ -296,8 +279,8 @@ function BalanceGauge({ frontGripPct, frontLLTD, corners, setup }) {
       </div>
       <div className="opt-stat-pair">
         <span>Front LLTD</span>
-        <span style={{ color: frontLLTD >= 0.35 && frontLLTD <= 0.60 ? 'var(--green)' : 'var(--yellow)' }}>
-          {(frontLLTD * 100).toFixed(1)}% <span className="opt-stat-ideal">(oval target 38–55%)</span>
+        <span style={{ color: frontLLTD >= 0.40 && frontLLTD <= 0.60 ? 'var(--green)' : 'var(--yellow)' }}>
+          {(frontLLTD * 100).toFixed(1)}% <span className="opt-stat-ideal">(F8 target 45–55%)</span>
         </span>
       </div>
       <div className="opt-hb-desc">{description}</div>
@@ -310,17 +293,13 @@ function CornerCard({ c, data, setup }) {
   const {
     load, estimatedTemp, hp, optHotPsi, recColdPsi, recHotPsi,
     psiGripFactor, isPresLimited, psiDev,
-    effectiveCamber, idealCamber, camberDev, camberFactor, dynamicGain,
-    optStaticCamber, front, outside, tempFactor, adjustableScore,
+    effectiveCamber, idealCamber, camberDev, camberFactor, casterGain,
+    optStaticCamber, front, tempFactor, casterFactor, adjustableScore,
   } = data;
 
   const camberOk = camberDev < 0.5;
   const presOk = Math.abs(psiDev) < 3;
   const recCold = Math.round(recColdPsi * 2) / 2;
-
-  const idealTip = front
-    ? (outside ? TIPS.idealCamber.outside : TIPS.idealCamber.inside)
-    : (outside ? TIPS.idealCamber.rearOutside : TIPS.idealCamber.rearInside);
 
   return (
     <div className="opt-corner-card">
@@ -337,7 +316,7 @@ function CornerCard({ c, data, setup }) {
       </div>
 
       <div className="opt-corner-meta">
-        <Tooltip text={TIPS.load}><span>{Math.round(load)} lbs</span></Tooltip>
+        <Tooltip text={TIPS.load}><span>{Math.round(load)} lbs avg</span></Tooltip>
         <Tooltip text={TIPS.estTemp}><span>{Math.round(estimatedTemp)}°F est.</span></Tooltip>
         <Tooltip text={TIPS.tempFactor}>
           <span style={{ color: scoreColor(tempFactor) }}>Temp {pct(tempFactor)}</span>
@@ -353,16 +332,16 @@ function CornerCard({ c, data, setup }) {
             <div className="opt-camber-math">
               <Tooltip text={TIPS.staticCamber}><span>{setup.camber[c]}° static</span></Tooltip>
               <Tooltip text={TIPS.casterGain}>
-                <span className="opt-math-op"> {dynamicGain >= 0 ? '+' : ''}{dynamicGain.toFixed(2)}° dynamic</span>
+                <span className="opt-math-op"> {casterGain >= 0 ? '+' : ''}{casterGain.toFixed(2)}° avg caster</span>
               </Tooltip>
               <Tooltip text={TIPS.effectiveCamber}>
-                <span className="opt-math-eq"> = {effectiveCamber.toFixed(2)}° eff.</span>
+                <span className="opt-math-eq"> = {effectiveCamber.toFixed(2)}° avg eff.</span>
               </Tooltip>
             </div>
             <div className="opt-stat-pair">
-              <Tooltip text={idealTip}><span>Ideal effective</span></Tooltip>
+              <Tooltip text={TIPS.idealCamber}><span>Ideal avg effective</span></Tooltip>
               <span style={{ color: camberOk ? 'var(--green)' : 'var(--yellow)' }}>
-                {idealCamber.toFixed(1)}°
+                {idealCamber.toFixed(2)}°
                 {!camberOk && optStaticCamber !== null && (
                   <span className="opt-rec-arrow"> → set {optStaticCamber}° static</span>
                 )}
@@ -372,15 +351,15 @@ function CornerCard({ c, data, setup }) {
         ) : (
           <>
             <div className="opt-stat-pair">
-              <Tooltip text={TIPS.effectiveCamber}><span>Dynamic (body roll)</span></Tooltip>
+              <Tooltip text={TIPS.effectiveCamber}><span>Avg dynamic (both turns)</span></Tooltip>
               <span>{effectiveCamber.toFixed(2)}°</span>
             </div>
             <div className="opt-stat-pair">
-              <Tooltip text={idealTip}><span>Ideal</span></Tooltip>
-              <span>{idealCamber.toFixed(1)}°</span>
+              <Tooltip text={TIPS.rearCamber}><span>Ideal</span></Tooltip>
+              <span>0.00°</span>
             </div>
             <Tooltip text={TIPS.solidAxle}>
-              <div className="opt-limited-note">Solid axle — adjust via shock balance</div>
+              <div className="opt-limited-note">Solid axle — roll averages to ~0° in figure 8</div>
             </Tooltip>
           </>
         )}
@@ -465,7 +444,7 @@ function CompactSetupForm({ setup, onChange }) {
         </div>
 
         <div className="opt-form-col">
-          <div className="opt-form-label">Camber (°)</div>
+          <div className="opt-form-label">Camber (°) <span className="opt-form-hint">Symmetric recommended</span></div>
           {['LF', 'RF'].map(c => (
             <div key={c} className="opt-form-field">
               <label>{c}</label>
@@ -476,7 +455,7 @@ function CompactSetupForm({ setup, onChange }) {
             </div>
           ))}
 
-          <div className="opt-form-label" style={{ marginTop: 12 }}>Caster (°)</div>
+          <div className="opt-form-label" style={{ marginTop: 12 }}>Caster (°) <span className="opt-form-hint">Symmetric recommended</span></div>
           {['LF', 'RF'].map(c => (
             <div key={c} className="opt-form-field">
               <label>{c}</label>
@@ -500,7 +479,7 @@ function CompactSetupForm({ setup, onChange }) {
         </div>
 
         <div className="opt-form-col">
-          <div className="opt-form-label">Cold Pressures (PSI)</div>
+          <div className="opt-form-label">Cold Pressures (PSI) <span className="opt-form-hint">Symmetric recommended</span></div>
           {CORNERS.map(c => (
             <div key={c} className="opt-form-field">
               <label>{c}</label>
@@ -516,18 +495,17 @@ function CompactSetupForm({ setup, onChange }) {
   );
 }
 
-export default function SetupOptimizer({ setup, setSetup, ambient, setAmbient }) {
-  const analysis = useMemo(() => analyzeSetup(setup, ambient), [setup, ambient]);
+export default function Figure8Optimizer({ setup, setSetup, ambient, setAmbient }) {
+  const analysis = useMemo(() => analyzeSetupF8(setup, ambient), [setup, ambient]);
   const {
-    corners, ss, roll, frontGripPct, balancePenalty,
+    corners, ss, roll, frontGripPct, balancePenalty, imbalance,
     toeGrip, toeDrag, toe,
-    lapTime, optLapTime, totalGain, recs,
+    lapTime, optLapTime, totalGain, recs, caster,
   } = analysis;
 
   const gap = lapTime - TARGET;
   const optGap = optLapTime - TARGET;
 
-  // Progress bar position helper (RANGE_MAX=slow, RANGE_MIN=fast, left=slow, right=fast)
   const barPos = (t) =>
     `${Math.max(0, Math.min(100, (RANGE_MAX - t) / (RANGE_MAX - RANGE_MIN) * 100))}%`;
 
@@ -552,8 +530,8 @@ export default function SetupOptimizer({ setup, setSetup, ambient, setAmbient })
       {/* ── Header ── */}
       <div className="opt-header">
         <div>
-          <h2>Setup Optimizer</h2>
-          <p className="opt-subtitle">Real-time analysis — every parameter recalculates instantly as you adjust.</p>
+          <h2>Figure 8 Setup Optimizer</h2>
+          <p className="opt-subtitle">Real-time analysis calibrated for bidirectional loading. Goal: break 23.1s.</p>
         </div>
         <div className="opt-lap-banner">
           <div className="opt-lap-item">
@@ -564,7 +542,7 @@ export default function SetupOptimizer({ setup, setSetup, ambient, setAmbient })
           <div className="opt-lap-item">
             <span className="opt-lap-label">Gap to {TARGET}s</span>
             <span className="opt-lap-time" style={{
-              color: gap <= 0 ? 'var(--green)' : gap < 0.2 ? 'var(--yellow)' : 'var(--red)',
+              color: gap <= 0 ? 'var(--green)' : gap < 0.3 ? 'var(--yellow)' : 'var(--red)',
             }}>
               {gap <= 0 ? `✓ −${Math.abs(gap).toFixed(3)}s` : `+${gap.toFixed(3)}s`}
             </span>
@@ -583,21 +561,18 @@ export default function SetupOptimizer({ setup, setSetup, ambient, setAmbient })
       <div className="opt-progress-wrap">
         <div className="opt-progress-track">
           <div className="opt-progress-fill" />
-          {/* Markers */}
           {[
-            { label: '17.8', t: 17.8 },
-            { label: '17.4', t: 17.4 },
-            { label: '17.1★', t: 17.1, star: true },
+            { label: '23.8', t: 23.8 },
+            { label: '23.5', t: 23.5 },
+            { label: '23.1★', t: 23.1, star: true },
           ].map(({ label, t, star }) => (
             <div key={t} className={`opt-progress-tick ${star ? 'target' : ''}`} style={{ left: barPos(t) }}>
               <div className="opt-tick-line" />
               <div className="opt-tick-label">{label}</div>
             </div>
           ))}
-          {/* Current */}
           <div className="opt-progress-dot current" style={{ left: barPos(lapTime) }}
             title={`Current: ${lapTime.toFixed(3)}s`} />
-          {/* Optimal */}
           {totalGain > 0.01 && (
             <div className="opt-progress-dot optimal" style={{ left: barPos(optLapTime) }}
               title={`Optimal: ${optLapTime.toFixed(3)}s`} />
@@ -619,20 +594,8 @@ export default function SetupOptimizer({ setup, setSetup, ambient, setAmbient })
           />
         </div>
         <div className="opt-presets">
-          <button className="sim-preset-btn" onClick={() => setSetup(deepClone(DEFAULT_SETUP))}>
-            Load Current Setup
-          </button>
-          <button className="sim-preset-btn" onClick={() => setSetup(deepClone(PETE_SETUP))}>
-            Load Pete
-          </button>
-          <button className="sim-preset-btn" onClick={() => setSetup(deepClone(DYLAN_SETUP))}>
-            Load Dylan
-          </button>
-          <button className="sim-preset-btn" onClick={() => setSetup(deepClone(JOSH_SETUP))}>
-            Load Josh
-          </button>
-          <button className="sim-preset-btn accent" onClick={() => setSetup(deepClone(RECOMMENDED_SETUP))}>
-            Load Recommended Setup
+          <button className="sim-preset-btn" onClick={() => setSetup(deepClone(DEFAULT_SETUP_F8))}>
+            Load F8 Baseline
           </button>
         </div>
       </div>
@@ -646,7 +609,7 @@ export default function SetupOptimizer({ setup, setSetup, ambient, setAmbient })
       {/* ── Per-corner analysis ── */}
       <div className="opt-section">
         <h3 className="opt-section-title">Per-Corner Analysis
-          <span className="opt-section-sub">Temperatures estimated at steady-state equilibrium</span>
+          <span className="opt-section-sub">Loads and temps averaged across left and right turns</span>
         </h3>
         <div className="opt-corners-grid">
           {CORNERS.map(c => (
@@ -658,10 +621,10 @@ export default function SetupOptimizer({ setup, setSetup, ambient, setAmbient })
       {/* ── Balance & Toe ── */}
       <div className="opt-section">
         <h3 className="opt-section-title">Balance & Toe</h3>
-        <BalanceGauge frontGripPct={frontGripPct} frontLLTD={ss.frontLLTD} corners={corners} setup={setup} />
+        <BalanceGaugeF8 frontGripPct={frontGripPct} frontLLTD={ss.frontLLTD} corners={corners} setup={setup} />
         <div className="opt-balance-row" style={{ marginTop: 14 }}>
           <div className="opt-balance-card">
-            <div className="opt-factor-title">Lateral Balance (at 1G)</div>
+            <div className="opt-factor-title">Lateral Balance</div>
             <div className="opt-stat-pair">
               <Tooltip text={TIPS.frontShock}><span>Front shock stiffness</span></Tooltip><span>{ss.front}</span>
             </div>
@@ -679,7 +642,7 @@ export default function SetupOptimizer({ setup, setSetup, ambient, setAmbient })
               </span>
             </div>
             <div className="opt-stat-pair">
-              <Tooltip text={TIPS.bodyRoll}><span>Body roll @ 1G</span></Tooltip><span>{roll.toFixed(1)}°</span>
+              <Tooltip text={TIPS.bodyRoll}><span>Peak body roll @ 1G</span></Tooltip><span>{roll.toFixed(1)}°</span>
             </div>
             <ScoreBar value={balancePenalty} label="Balance score" tip={TIPS.balanceScore} />
           </div>
@@ -769,10 +732,9 @@ export default function SetupOptimizer({ setup, setSetup, ambient, setAmbient })
       </div>
 
       <div className="sim-disclaimer">
-        <strong>Model note:</strong> Analysis uses steady-state equilibrium temperatures.
-        Camber recommendations use caster-induced dynamic camber gain of 0.18°/degree (RF outside)
-        and 0.10°/degree (LF inside), calibrated from geometric formula caster × sin(~10° steer angle).
-        All display scores match the lap time model exactly. Always verify camber with real pyrometer data.
+        <strong>Model note:</strong> Figure 8 analysis averages left and right turn loads — symmetric setup
+        (equal camber, equal pressures side-to-side) is expected to be optimal. Camber ideal is −2.75°
+        for both fronts (average of outside −4.5° and inside −1.0° demands). Always verify with real pyrometer data.
       </div>
     </div>
   );

@@ -5,14 +5,29 @@ import HandlingDiagnosis from './components/HandlingDiagnosis';
 import CrownVicShocks from './components/CrownVicShocks';
 import RaceSimulation from './components/RaceSimulation';
 import SetupOptimizer from './components/SetupOptimizer';
+import Figure8Simulation from './components/Figure8Simulation';
+import Figure8Optimizer from './components/Figure8Optimizer';
 import { analyzeFullCar } from './utils/tireAnalysis';
 import { DEFAULT_SETUP } from './utils/raceSimulation';
 import './App.css';
 
 function deepClone(o) { return JSON.parse(JSON.stringify(o)); }
 
+const TABS = [
+  { id: 'tires',      label: 'Tire Temperatures' },
+  { id: 'handling',   label: 'Handling Diagnosis' },
+  { id: 'shocks',     label: 'Shocks & Struts' },
+  { id: 'simulation', label: 'Race Simulation' },
+  { id: 'optimize',   label: 'Optimizer' },
+  { id: 'figure8',    label: 'Figure 8' },
+  { id: 'f8optimize', label: 'F8 Optimizer' },
+];
+
 function App() {
   const [activeTab, setActiveTab] = useState('tires');
+  const [menuOpen, setMenuOpen] = useState(false);
+
+  const selectTab = (id) => { setActiveTab(id); setMenuOpen(false); };
 
   // Shared setup state — used by both Race Simulation and Setup Optimizer
   const [setup, setSetup] = useState(deepClone(DEFAULT_SETUP));
@@ -66,21 +81,34 @@ function App() {
       </header>
 
       <nav className="tab-nav">
-        <button className={`tab ${activeTab === 'tires' ? 'active' : ''}`} onClick={() => setActiveTab('tires')}>
-          Tire Temperatures
+        {/* Desktop tab list */}
+        <div className="tab-list">
+          {TABS.map(t => (
+            <button key={t.id} className={`tab${activeTab === t.id ? ' active' : ''}`} onClick={() => selectTab(t.id)}>
+              {t.label}
+            </button>
+          ))}
+        </div>
+
+        {/* Mobile: hamburger + active tab label */}
+        <button className={`hamburger-btn${menuOpen ? ' open' : ''}`} onClick={() => setMenuOpen(m => !m)} aria-label="Navigation menu">
+          <span /><span /><span />
         </button>
-        <button className={`tab ${activeTab === 'handling' ? 'active' : ''}`} onClick={() => setActiveTab('handling')}>
-          Handling Diagnosis
-        </button>
-        <button className={`tab ${activeTab === 'shocks' ? 'active' : ''}`} onClick={() => setActiveTab('shocks')}>
-          Shocks &amp; Struts
-        </button>
-        <button className={`tab ${activeTab === 'simulation' ? 'active' : ''}`} onClick={() => setActiveTab('simulation')}>
-          Race Simulation
-        </button>
-        <button className={`tab ${activeTab === 'optimize' ? 'active' : ''}`} onClick={() => setActiveTab('optimize')}>
-          Optimizer
-        </button>
+        <span className="nav-active-label">{TABS.find(t => t.id === activeTab)?.label}</span>
+
+        {/* Mobile dropdown */}
+        {menuOpen && (
+          <>
+            <div className="mobile-menu-backdrop" onClick={() => setMenuOpen(false)} />
+            <div className="mobile-menu">
+              {TABS.map(t => (
+                <button key={t.id} className={`mobile-tab${activeTab === t.id ? ' active' : ''}`} onClick={() => selectTab(t.id)}>
+                  {t.label}
+                </button>
+              ))}
+            </div>
+          </>
+        )}
       </nav>
 
       <main className="app-main">
@@ -155,6 +183,12 @@ function App() {
         )}
         {activeTab === 'optimize' && (
           <SetupOptimizer setup={setup} setSetup={setSetup} ambient={ambient} setAmbient={setAmbient} />
+        )}
+        {activeTab === 'figure8' && (
+          <Figure8Simulation setup={setup} setSetup={setSetup} ambient={ambient} setAmbient={setAmbient} />
+        )}
+        {activeTab === 'f8optimize' && (
+          <Figure8Optimizer setup={setup} setSetup={setSetup} ambient={ambient} setAmbient={setAmbient} />
         )}
       </main>
 
