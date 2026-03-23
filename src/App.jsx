@@ -7,6 +7,7 @@ import RaceSimulation from './components/RaceSimulation';
 import SetupOptimizer from './components/SetupOptimizer';
 import Figure8Simulation from './components/Figure8Simulation';
 import Figure8Optimizer from './components/Figure8Optimizer';
+import SimulationMath from './components/SimulationMath';
 import { analyzeFullCar } from './utils/tireAnalysis';
 import { DEFAULT_SETUP } from './utils/raceSimulation';
 import './App.css';
@@ -21,6 +22,7 @@ const TABS = [
   { id: 'optimize',   label: 'Optimizer' },
   { id: 'figure8',    label: 'Figure 8' },
   { id: 'f8optimize', label: 'F8 Optimizer' },
+  { id: 'mathref',   label: 'Simulation Math' },
 ];
 
 function App() {
@@ -190,6 +192,7 @@ function App() {
         {activeTab === 'f8optimize' && (
           <Figure8Optimizer setup={setup} setSetup={setSetup} ambient={ambient} setAmbient={setAmbient} />
         )}
+        {activeTab === 'mathref' && <SimulationMath />}
       </main>
 
       <footer className="app-footer">
