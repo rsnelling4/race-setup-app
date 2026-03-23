@@ -601,51 +601,6 @@ export const JOSH_SETUP = {
   coldPsi: { LF: 24, RF: 35, LR: 17.5, RR: 32 },
 };
 
-// ============ BILSTEIN B6 SETUP ============
-// Performance damper upgrade while keeping OE spring rates.
-// Front: Bilstein B6 24-184731 (shock insert, keeps 475 lbs/in OE spring)
-// Rear:  Bilstein B6 24-184755 (shock insert, keeps 160 lbs/in OE rear spring)
-// Bilstein B6 = firmer than OE, monotube gas charged → rating ~5 (firmer than FCS rating 4)
-// Camber/caster/PSI: re-derived analytically for Bilstein damper LLTD characteristics
-export const BILSTEIN_B6_SETUP = {
-  shocks: { LF: 5, RF: 5, LR: 3, RR: 3 },
-  springs: { front: 475, rear: 160 },
-  camber: { LF: -0.75, RF: -3.0 },
-  caster: { LF: 3.0, RF: 5.0 },
-  toe: -0.25,
-  coldPsi: { LF: 26, RF: 33, LR: 17, RR: 34 },
-};
-
-// ============ ALDAN 550 SETUP ============
-// Moderate performance coilover: Aldan American 300183 (550 lbs/in front).
-// Front: Aldan 300183 single-adjustable coilover, 550 lbs/in spring, 0–2" lowered
-// Rear:  Aldan adjustable rear shocks + stock 160 lbs/in rear springs (factory coil retained)
-// 550 lbs/in = 15.8% stiffer than stock → less body roll → less caster-gain camber compensation needed
-// Optimal camber becomes more negative to compensate for reduced caster gain from less roll.
-export const ALDAN_550_SETUP = {
-  shocks: { LF: 5, RF: 5, LR: 3, RR: 3 },
-  springs: { front: 550, rear: 160 },
-  camber: { LF: -1.0, RF: -3.25 },
-  caster: { LF: 3.0, RF: 5.0 },
-  toe: -0.25,
-  coldPsi: { LF: 26, RF: 33, LR: 17, RR: 34 },
-};
-
-// ============ ALDAN 750 SETUP ============
-// Aggressive track coilover: Aldan American 300185 (750 lbs/in front).
-// Front: Aldan 300185 single-adjustable coilover, 750 lbs/in spring, 0–2" lowered
-// Rear:  Aldan adjustable rear shocks + stock 160 lbs/in rear springs
-// 750 lbs/in = 57.9% stiffer than stock → significantly reduced body roll
-// More negative RF camber needed to hit effective -4.5° with less body roll contribution.
-export const ALDAN_750_SETUP = {
-  shocks: { LF: 5, RF: 5, LR: 3, RR: 3 },
-  springs: { front: 750, rear: 160 },
-  camber: { LF: -1.5, RF: -3.5 },
-  caster: { LF: 3.0, RF: 5.0 },
-  toe: -0.25,
-  coldPsi: { LF: 26, RF: 33, LR: 17, RR: 34 },
-};
-
 // ============ FIGURE 8 DEFAULT SETUP ============
 // Retained as a symmetric reference setup for the F8 optimizer.
 export const DEFAULT_SETUP_F8 = {
