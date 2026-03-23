@@ -1,5 +1,6 @@
 import { useState } from 'react';
 import ReactMarkdown from 'react-markdown';
+import remarkGfm from 'remark-gfm';
 import mathContent from '../../SIMULATION_MATH.md?raw';
 
 const SECTIONS = [
@@ -111,6 +112,7 @@ export default function SimulationMath() {
       {activeSection !== null && content && (
         <div className="sim-math-content">
           <ReactMarkdown
+            remarkPlugins={[remarkGfm]}
             components={{
               // Style tables
               table: ({ children }) => (
