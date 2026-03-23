@@ -1,18 +1,17 @@
 import { useState } from 'react';
-import { simulateRaceF8, DEFAULT_SETUP_F8 } from '../utils/raceSimulation';
+import { simulateRaceF8, DEFAULT_SETUP_F8, F8_BASELINE_SETUP } from '../utils/raceSimulation';
 import { REAR_SHOCKS, FRONT_STRUTS, shockLabel } from '../data/shockOptions';
 import NumericInput from './NumericInput';
 
 const CORNERS = ['LF', 'RF', 'LR', 'RR'];
 
-// Recommended F8 setup — symmetric camber since both left and right turns
-// Pressures match baseline real-world run: RF:34, LF:34, RR:29, LR:29
+// Recommended F8 setup — grid-search optimized (34,884 combos @ 75°F, best lap 23.152s)
 const RECOMMENDED_F8_SETUP = {
-  shocks: { LF: 4, RF: 4, LR: 3, RR: 3 },
-  camber: { LF: -2.5, RF: -2.5 },
-  caster: { LF: 4.0, RF: 4.0 },
+  shocks: { LF: 1, RF: 1, LR: 1, RR: 1 },
+  camber: { LF: -3.5, RF: -3.5 },
+  caster: { LF: 5.0, RF: 5.0 },
   toe: -0.25,
-  coldPsi: { LF: 34, RF: 34, LR: 29, RR: 29 },
+  coldPsi: { LF: 35, RF: 35, LR: 30, RR: 30 },
 };
 
 function deepClone(obj) {
@@ -30,10 +29,10 @@ function formatMins(s) {
 }
 
 function tempColor(t) {
-  if (t < 90) return 'var(--accent)';
-  if (t < 130) return 'var(--green)';
-  if (t < 160) return 'var(--yellow)';
-  return 'var(--red)';
+  if (t < 100) return 'var(--accent)';  // cold: below optimal grip window
+  if (t < 165) return 'var(--green)';   // optimal: 100–165°F
+  if (t < 185) return 'var(--yellow)';  // warm: grip starting to drop
+  return 'var(--red)';                  // overheating
 }
 
 function deltaColor(delta) {
@@ -84,6 +83,9 @@ function SetupForm({ setup, onChange, onRun, onPreset }) {
       <div className="sim-presets">
         <button className="sim-preset-btn" onClick={() => onPreset('default')}>
           Load Default Setup
+        </button>
+        <button className="sim-preset-btn" onClick={() => onPreset('baseline')}>
+          Load Baseline
         </button>
         <button className="sim-preset-btn accent" onClick={() => onPreset('f8')}>
           Load F8 Recommended
@@ -142,7 +144,7 @@ function SetupForm({ setup, onChange, onRun, onPreset }) {
       </div>
 
       <div className="sim-form-section">
-        <h4>Caster (degrees) <span className="sim-hint">Symmetric recommended — equal caster for balanced left/right handling</span></h4>
+        <h4>Caster (degrees) <span className="sim-hint">Symmetric required — unequal caster (e.g. LF 5.5° vs RF 3.75°) causes heavy steering one direction and uneven tire temps L vs R. Match both sides.</span></h4>
         <div className="sim-input-grid two-col">
           {['LF', 'RF'].map(c => (
             <div key={c} className="sim-input-group">
@@ -381,6 +383,7 @@ export default function Figure8Simulation({ setup, setSetup, ambient, setAmbient
 
   const handlePreset = (type) => {
     if (type === 'default') setSetup(deepClone(DEFAULT_SETUP_F8));
+    else if (type === 'baseline') setSetup(deepClone(F8_BASELINE_SETUP));
     else setSetup(deepClone(RECOMMENDED_F8_SETUP));
   };
 
@@ -416,7 +419,7 @@ export default function Figure8Simulation({ setup, setSetup, ambient, setAmbient
         </div>
         <div className="sim-context-card">
           <h4>Calibration</h4>
-          <p>Baseline: 23.5s/lap @ 65°F — symmetric tire loading, all tires work equally hard. Goal: 23.1s</p>
+          <p>Baseline: 23.283s/lap @ 75°F (real-world run, Load Baseline setup). LF runs ~10°F hotter than RF due to asymmetric caster — symmetric model matches right-side temps. Goal: 23.1s</p>
         </div>
       </div>
 
@@ -505,7 +508,10 @@ export default function Figure8Simulation({ setup, setSetup, ambient, setAmbient
 
       <div className="sim-disclaimer">
         <strong>Note:</strong> Figure 8 physics averages left and right turn loads — all tires work symmetrically.
-        Symmetric camber (~-2.5° both fronts), equal pressures, and balanced shocks are recommended.
+        Symmetric camber (~-2.5° to -3.0° both fronts), equal caster (both sides matched), equal pressures,
+        and balanced shocks are recommended. Unequal caster is the most common cause of the car turning
+        better one direction than the other — higher caster on one side creates heavier steering effort
+        and more tire scrub in the turns where that tire is on the outside.
         Results are directionally accurate for comparing setups.
       </div>
     </div>

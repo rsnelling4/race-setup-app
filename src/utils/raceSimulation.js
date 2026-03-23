@@ -566,15 +566,32 @@ export const JOSH_SETUP = {
 };
 
 // ============ FIGURE 8 DEFAULT SETUP ============
-// Calibrated to real baseline run — symmetric pressures for bidirectional loading
-// Pyrometer equilibrium: RF O:144 M:142 I:142, RR O:147 M:146 I:133,
-//                        LR O:143 M:145 I:132, LF O:146 M:140 I:139
+// Retained as a symmetric reference setup for the F8 optimizer.
 export const DEFAULT_SETUP_F8 = {
   shocks: { LF: 4, RF: 4, LR: 3, RR: 3 },
   camber: { LF: -2.5, RF: -2.5 },
   caster: { LF: 4.0, RF: 4.0 },
   toe: -0.25,
   coldPsi: { LF: 34, RF: 34, LR: 29, RR: 29 },
+};
+
+// ============ FIGURE 8 BASELINE SETUP ============
+// Real-world calibration run: 20 laps @ 75°F → 23.283s best lap.
+// LF/RF: FCS 1336349 (rating 4), LR/RR: KYB 555603 (rating 2)
+// Camber: LF -2.75° RF -3.0°  Caster: LF 5.5° RF 3.75°
+// Cold PSI: all fronts 35, all rears 30
+// Pyrometer (avg): LF I:133 M:130 O:136, RF I:125 M:125 O:120,
+//                  LR I:128 M:129 O:127, RR I:120 M:121 O:120
+// NOTE: LF runs ~10°F hotter than RF, LR ~8°F hotter than RR.
+//   Cause: asymmetric caster (LF 5.5° vs RF 3.75°) loads LF harder when it is
+//   the outside tire in right turns. The symmetric F8 thermal model cannot predict
+//   this L/R difference; right-side temps (RF/RR) are the best model calibration point.
+export const F8_BASELINE_SETUP = {
+  shocks: { LF: 4, RF: 4, LR: 2, RR: 2 },
+  camber: { LF: -2.75, RF: -3.0 },
+  caster: { LF: 5.5, RF: 3.75 },
+  toe: -0.25,
+  coldPsi: { LF: 35, RF: 35, LR: 30, RR: 30 },
 };
 
 // ============ MAIN SIMULATION ============
@@ -1255,6 +1272,17 @@ function calcPerformanceF8(setup, tires, ambient) {
 // Zone multipliers averaged across left+right roles — much more even than oval
 const F8_ZONE = [0.94, 1.0, 1.06];
 
+// F8 heat generation multiplier.
+// The figure 8 generates more heat per second than the oval: tighter corners (149 ft vs 105 ft),
+// more steering angle, bidirectional scrub. Calibrated so the right-side tires (RF/RR) reach
+// equilibrium temps matching the real-world baseline run (RF ~125°F, RR ~121°F @ 75°F ambient).
+// Left-side tires (LF/LR) run 8–13°F hotter than the symmetric model predicts due to asymmetric
+// caster (LF 5.5° vs RF 3.75°) loading LF harder in right turns — this cannot be captured by
+// the symmetric F8 model.
+// Derivation: RF wf=1.10: tEq = 75 + (0.53×1.18 + 0.00453×1.10×75)/0.02 ≈ 125°F ✓
+//             RR wf=0.90: tEq = 75 + (0.53×1.18 + 0.00453×0.90×75)/0.02 ≈ 121°F ✓
+const F8_HEAT_MULT = 1.18;
+
 function updateTireTempsF8(tires, workFactors, ambient, lapTime, setup) {
   const newTires = {};
   const toe    = setup.toe    !== undefined ? setup.toe    : -0.25;
@@ -1290,7 +1318,7 @@ function updateTireTempsF8(tires, workFactors, ambient, lapTime, setup) {
     const newZones = {};
     for (const zone of zones) {
       const T = tires[c][zone.key];
-      const heatIn  = (THERMAL.heatBase + THERMAL.heatLoad * wf * THERMAL.refSpeed) * lapTime * zone.mult;
+      const heatIn  = (THERMAL.heatBase * F8_HEAT_MULT + THERMAL.heatLoad * wf * THERMAL.refSpeed) * lapTime * zone.mult;
       const heatOut = THERMAL.coolRate * (T - ambient) * lapTime;
       newZones[zone.key] = T + (heatIn - heatOut) / THERMAL.thermalMass;
     }
@@ -1305,20 +1333,22 @@ function updateTireTempsF8(tires, workFactors, ambient, lapTime, setup) {
   return newTires;
 }
 
-const BASELINE_LAP_F8 = 23.5;
+// Calibrated to real-world run: F8_BASELINE_SETUP, 20 laps @ 75°F → 23.283s best lap.
+// Pyrometer (I/M/O): LF 133/130/136, RF 125/125/120, LR 128/129/127, RR 120/121/120
+const BASELINE_LAP_F8 = 23.283;
 let _baselineMetricF8 = null;
 
 function getBaselineMetricF8() {
   if (_baselineMetricF8 === null) {
-    // Real pyrometer equilibrium from baseline figure 8 run (65°F ambient)
-    // RF O:144 M:142 I:142, RR O:147 M:146 I:133, LR O:143 M:145 I:132, LF O:146 M:140 I:139
+    // Real pyrometer data from F8_BASELINE_SETUP, 20 laps @ 75°F ambient.
+    // LF runs ~10°F hotter than RF due to asymmetric caster (not modeled by symmetric F8 engine).
     const calibTires = {
-      LF: { inside: 139, middle: 140, outside: 146, temp: 141.7, wear: 0 },
-      RF: { inside: 142, middle: 142, outside: 144, temp: 142.7, wear: 0 },
-      LR: { inside: 132, middle: 145, outside: 143, temp: 140.0, wear: 0 },
-      RR: { inside: 133, middle: 146, outside: 147, temp: 142.0, wear: 0 },
+      LF: { inside: 133, middle: 130, outside: 136, temp: 133.0, wear: 0 },
+      RF: { inside: 125, middle: 125, outside: 120, temp: 123.3, wear: 0 },
+      LR: { inside: 128, middle: 129, outside: 127, temp: 128.0, wear: 0 },
+      RR: { inside: 120, middle: 121, outside: 120, temp: 120.3, wear: 0 },
     };
-    _baselineMetricF8 = calcPerformanceF8(DEFAULT_SETUP_F8, calibTires, 65);
+    _baselineMetricF8 = calcPerformanceF8(F8_BASELINE_SETUP, calibTires, 75);
   }
   return _baselineMetricF8;
 }
