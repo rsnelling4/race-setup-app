@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { simulateRace, DEFAULT_SETUP, RECOMMENDED_SETUP, PETE_SETUP, DYLAN_SETUP, JOSH_SETUP } from '../utils/raceSimulation';
+import { simulateRace, DEFAULT_SETUP, RECOMMENDED_SETUP, PETE_SETUP, DYLAN_SETUP, JOSH_SETUP, BILSTEIN_B6_SETUP, ALDAN_550_SETUP, ALDAN_750_SETUP } from '../utils/raceSimulation';
 import { REAR_SHOCKS, FRONT_STRUTS, shockLabel } from '../data/shockOptions';
 import NumericInput from './NumericInput';
 
@@ -93,6 +93,15 @@ function SetupForm({ setup, onChange, onRun, onPreset }) {
         </button>
         <button className="sim-preset-btn" onClick={() => onPreset('josh')}>
           Load Josh
+        </button>
+        <button className="sim-preset-btn" onClick={() => onPreset('bilstein')}>
+          Load Bilstein B6
+        </button>
+        <button className="sim-preset-btn" onClick={() => onPreset('aldan550')}>
+          Load Aldan 550
+        </button>
+        <button className="sim-preset-btn" onClick={() => onPreset('aldan750')}>
+          Load Aldan 750
         </button>
         <button className="sim-preset-btn accent" onClick={() => onPreset('recommended')}>
           Load Recommended Setup
@@ -385,6 +394,9 @@ export default function RaceSimulation({ setup, setSetup, ambient, setAmbient })
     else if (type === 'pete') setSetup(deepClone(PETE_SETUP));
     else if (type === 'dylan') setSetup(deepClone(DYLAN_SETUP));
     else if (type === 'josh') setSetup(deepClone(JOSH_SETUP));
+    else if (type === 'bilstein') setSetup(deepClone(BILSTEIN_B6_SETUP));
+    else if (type === 'aldan550') setSetup(deepClone(ALDAN_550_SETUP));
+    else if (type === 'aldan750') setSetup(deepClone(ALDAN_750_SETUP));
     else setSetup(deepClone(RECOMMENDED_SETUP));
   };
 

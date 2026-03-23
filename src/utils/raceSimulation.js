@@ -27,6 +27,14 @@ const RANKINE = 459.67;       // °F to °R offset
 const OVAL_CORNER_G = 0.375;
 const F8_CORNER_G   = 0.28;
 
+// ============ SPRING RATES ============
+// Actual measured/confirmed spring rates.
+// Front: FCS 1336349 / Monroe 271346 taxi-police package = 475 lbs/in (matches P71 stock)
+// Front: Monroe 171346 civilian = ~440 lbs/in (softer spring, different part than police)
+// Rear: P71 stock coil spring = 160 lbs/in (separate from shock absorber)
+const BASE_SPRING_FRONT = 475; // lbs/in — 2008 P71 stock front
+const BASE_SPRING_REAR  = 160; // lbs/in — P71 stock rear coil spring
+
 // ============ TRACK ============
 // Measured via Google Earth: frontstretch 325 ft, backstretch 333 ft, corner width 53 ft.
 // Average straight = 329 ft. For a 1/4-mile (1320 ft) track: R = (1320-658)/(2π) ≈ 105 ft.
@@ -183,7 +191,15 @@ function hotPressure(coldPsi, tireTemp) {
 function shockStiffness(setup) {
   const f = (10 - setup.shocks.LF) + (10 - setup.shocks.RF);
   const r = (10 - setup.shocks.LR) + (10 - setup.shocks.RR);
-  return { front: f, rear: r, total: f + r, frontLLTD: f / Math.max(f + r, 1) };
+  // Spring-rate contribution to LLTD: stiffer front spring → more front lateral load transfer
+  const springF = setup.springs?.front ?? BASE_SPRING_FRONT;
+  const springR = setup.springs?.rear  ?? BASE_SPRING_REAR;
+  const springLLTD = (springF / BASE_SPRING_FRONT) /
+    ((springF / BASE_SPRING_FRONT) + (springR / BASE_SPRING_REAR));
+  const damperLLTD = f / Math.max(f + r, 1);
+  // 60% springs (steady-state physics), 40% dampers (transient/adjustable)
+  const frontLLTD = 0.6 * springLLTD + 0.4 * damperLLTD;
+  return { front: f, rear: r, total: f + r, frontLLTD };
 }
 
 // Body roll angle (degrees) at given lateral G
@@ -191,6 +207,22 @@ function bodyRoll(lateralG, totalStiffness) {
   const baseRoll = 3.5;     // deg/G at baseline stiffness
   const baseStiff = 28;     // baseline total (user's current: 12+16)
   return lateralG * baseRoll * baseStiff / Math.max(totalStiffness, 4);
+}
+
+// Effective roll stiffness combining spring rates (70%) and damper ratings (30%).
+// Springs are the dominant steady-state factor; dampers affect transient weight transfer rate.
+// Calibrated so baseline (475F/160R springs + 4/4/2/2 dampers) returns exactly 28,
+// preserving all existing bodyRoll() calibration.
+function rollStiffness(setup) {
+  const springF = setup.springs?.front ?? BASE_SPRING_FRONT;
+  const springR = setup.springs?.rear  ?? BASE_SPRING_REAR;
+  const ss      = shockStiffness(setup);
+  // Normalize springs to baseline (1.0 = stock P71): both front and rear normalize independently
+  const springScale = (springF / BASE_SPRING_FRONT + springR / BASE_SPRING_REAR) / 2;
+  // Normalize damper total to baseline (28 at 4/4/2/2)
+  const damperNorm  = ss.total / 28;
+  // At baseline: (0.7×1.0 + 0.3×1.0) × 28 = 28 ✓
+  return Math.max(4, (0.7 * springScale + 0.3 * damperNorm) * 28);
 }
 
 // ============ WEIGHT TRANSFER ============
@@ -217,7 +249,7 @@ function calcPerformance(setup, tires, ambient) {
   const loads = tireLoads(refG, ss.frontLLTD);
   // Pressure optimum uses actual cornering G — 1G loads give absurd optPsi (52 PSI RF, 14 PSI LF)
   const cornerLoads = tireLoads(OVAL_CORNER_G, ss.frontLLTD);
-  const roll = bodyRoll(refG, ss.total);
+  const roll = bodyRoll(refG, rollStiffness(setup));
 
   // Toe and caster from setup (with defaults for backward compat)
   const toe = setup.toe !== undefined ? setup.toe : -0.25;
@@ -349,8 +381,7 @@ function updateTireTemps(tires, workFactors, ambient, lapTime, setup) {
   const toe = setup.toe !== undefined ? setup.toe : -0.25;
   const caster = setup.caster || { LF: 3.5, RF: 5.0 };
   // Body roll used for both rear solid-axle camber and SLA front camber
-  const ss = shockStiffness(setup);
-  const roll = bodyRoll(1.0, ss.total);
+  const roll = bodyRoll(1.0, rollStiffness(setup));
 
   for (const c of CORNERS) {
     const wf = workFactors[c];
@@ -514,6 +545,7 @@ function metricToSpeeds(metric) {
 // ============ DEFAULT SETUP (user's current) ============
 export const DEFAULT_SETUP = {
   shocks: { LF: 4, RF: 4, LR: 2, RR: 2 },
+  springs: { front: 475, rear: 160 },
   camber: { LF: -1.5, RF: -3.0 },
   caster: { LF: 3.5, RF: 5.0 },
   toe: -0.25, // 1/4" toe out (negative = toe out)
@@ -529,6 +561,7 @@ export const DEFAULT_SETUP = {
 // PSI analytically derived: optimal hot PSI from corner loads at OVAL_CORNER_G.
 export const RECOMMENDED_SETUP = {
   shocks: { LF: 8, RF: 6, LR: 1, RR: 1 },
+  springs: { front: 440, rear: 160 },
   camber: { LF: -0.5, RF: -3.0 },
   caster: { LF: 3.0, RF: 5.0 },
   toe: -0.25,
@@ -539,6 +572,7 @@ export const RECOMMENDED_SETUP = {
 // Pete's race setup — LF/RF FCS 1336349 (rating 4), LR/RR KYB 555603 (rating 2)
 export const PETE_SETUP = {
   shocks: { LF: 4, RF: 4, LR: 2, RR: 2 },
+  springs: { front: 475, rear: 160 },
   camber: { LF: -2.25, RF: -2.75 },
   caster: { LF: 3.5, RF: 8.0 },
   toe: -0.25,
@@ -549,6 +583,7 @@ export const PETE_SETUP = {
 // Dylan's race setup — LF/RF FCS 1336349 (rating 4), LR/RR KYB 555603 (rating 2)
 export const DYLAN_SETUP = {
   shocks: { LF: 4, RF: 4, LR: 2, RR: 2 },
+  springs: { front: 475, rear: 160 },
   camber: { LF: -2.0, RF: -2.75 },
   caster: { LF: 4.0, RF: 3.25 },
   toe: -0.25,
@@ -559,16 +594,63 @@ export const DYLAN_SETUP = {
 // Josh's race setup — LF/RF FCS 1336349 (rating 4), LR/RR KYB 555603 (rating 2)
 export const JOSH_SETUP = {
   shocks: { LF: 4, RF: 4, LR: 2, RR: 2 },
+  springs: { front: 475, rear: 160 },
   camber: { LF: -0.75, RF: -1.75 },
   caster: { LF: 5.0, RF: 7.0 },
   toe: -0.25,
   coldPsi: { LF: 24, RF: 35, LR: 17.5, RR: 32 },
 };
 
+// ============ BILSTEIN B6 SETUP ============
+// Performance damper upgrade while keeping OE spring rates.
+// Front: Bilstein B6 24-184731 (shock insert, keeps 475 lbs/in OE spring)
+// Rear:  Bilstein B6 24-184755 (shock insert, keeps 160 lbs/in OE rear spring)
+// Bilstein B6 = firmer than OE, monotube gas charged → rating ~5 (firmer than FCS rating 4)
+// Camber/caster/PSI: re-derived analytically for Bilstein damper LLTD characteristics
+export const BILSTEIN_B6_SETUP = {
+  shocks: { LF: 5, RF: 5, LR: 3, RR: 3 },
+  springs: { front: 475, rear: 160 },
+  camber: { LF: -0.75, RF: -3.0 },
+  caster: { LF: 3.0, RF: 5.0 },
+  toe: -0.25,
+  coldPsi: { LF: 26, RF: 33, LR: 17, RR: 34 },
+};
+
+// ============ ALDAN 550 SETUP ============
+// Moderate performance coilover: Aldan American 300183 (550 lbs/in front).
+// Front: Aldan 300183 single-adjustable coilover, 550 lbs/in spring, 0–2" lowered
+// Rear:  Aldan adjustable rear shocks + stock 160 lbs/in rear springs (factory coil retained)
+// 550 lbs/in = 15.8% stiffer than stock → less body roll → less caster-gain camber compensation needed
+// Optimal camber becomes more negative to compensate for reduced caster gain from less roll.
+export const ALDAN_550_SETUP = {
+  shocks: { LF: 5, RF: 5, LR: 3, RR: 3 },
+  springs: { front: 550, rear: 160 },
+  camber: { LF: -1.0, RF: -3.25 },
+  caster: { LF: 3.0, RF: 5.0 },
+  toe: -0.25,
+  coldPsi: { LF: 26, RF: 33, LR: 17, RR: 34 },
+};
+
+// ============ ALDAN 750 SETUP ============
+// Aggressive track coilover: Aldan American 300185 (750 lbs/in front).
+// Front: Aldan 300185 single-adjustable coilover, 750 lbs/in spring, 0–2" lowered
+// Rear:  Aldan adjustable rear shocks + stock 160 lbs/in rear springs
+// 750 lbs/in = 57.9% stiffer than stock → significantly reduced body roll
+// More negative RF camber needed to hit effective -4.5° with less body roll contribution.
+export const ALDAN_750_SETUP = {
+  shocks: { LF: 5, RF: 5, LR: 3, RR: 3 },
+  springs: { front: 750, rear: 160 },
+  camber: { LF: -1.5, RF: -3.5 },
+  caster: { LF: 3.0, RF: 5.0 },
+  toe: -0.25,
+  coldPsi: { LF: 26, RF: 33, LR: 17, RR: 34 },
+};
+
 // ============ FIGURE 8 DEFAULT SETUP ============
 // Retained as a symmetric reference setup for the F8 optimizer.
 export const DEFAULT_SETUP_F8 = {
   shocks: { LF: 4, RF: 4, LR: 3, RR: 3 },
+  springs: { front: 475, rear: 160 },
   camber: { LF: -2.5, RF: -2.5 },
   caster: { LF: 4.0, RF: 4.0 },
   toe: -0.25,
@@ -588,6 +670,7 @@ export const DEFAULT_SETUP_F8 = {
 //   this L/R difference; right-side temps (RF/RR) are the best model calibration point.
 export const F8_BASELINE_SETUP = {
   shocks: { LF: 4, RF: 4, LR: 2, RR: 2 },
+  springs: { front: 475, rear: 160 },
   camber: { LF: -2.75, RF: -3.0 },
   caster: { LF: 5.5, RF: 3.75 },
   toe: -0.25,
@@ -676,7 +759,7 @@ export function analyzeSetup(setup, ambientTemp = 65) {
   // Use actual cornering G for pressure targets — 1G gives absurd RF/LF optPsi
   const cornerLoads = tireLoads(OVAL_CORNER_G, ss.frontLLTD);
   const avgLoad = VEH.weight / 4;
-  const roll = bodyRoll(1.0, ss.total);
+  const roll = bodyRoll(1.0, rollStiffness(setup));
   const toe = setup.toe !== undefined ? setup.toe : -0.25;
   const caster = setup.caster || { LF: 3.5, RF: 5.0 };
 
@@ -931,7 +1014,7 @@ export function analyzeSetupF8(setup, ambientTemp = 65) {
     RR: (loadsL.RR + loadsR.RR) / 2,
   };
   const avgLoad = VEH.weight / 4;
-  const roll = bodyRoll(1.0, ss.total);
+  const roll = bodyRoll(1.0, rollStiffness(setup));
   const toe = setup.toe !== undefined ? setup.toe : -0.25;
   const caster = setup.caster || { LF: 4.0, RF: 4.0 };
 
@@ -1211,7 +1294,7 @@ function calcPerformanceF8(setup, tires, ambient) {
   // Pressure optimum uses actual F8 cornering G (not 1G) — per-turn 1G loads swing wildly
   const cLoadsL = tireLoads(F8_CORNER_G, ss.frontLLTD);
   const cLoadsR = { LF: cLoadsL.RF, RF: cLoadsL.LF, LR: cLoadsL.RR, RR: cLoadsL.LR };
-  const roll   = bodyRoll(refG, ss.total);
+  const roll   = bodyRoll(refG, rollStiffness(setup));
   const toe    = setup.toe    !== undefined ? setup.toe    : -0.25;
   const caster = setup.caster || { LF: 3.5, RF: 5.0 };
   const avgLoad = VEH.weight / 4;

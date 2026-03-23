@@ -1,5 +1,5 @@
 import { useMemo, useState, useRef } from 'react';
-import { analyzeSetup, DEFAULT_SETUP, RECOMMENDED_SETUP, PETE_SETUP, DYLAN_SETUP, JOSH_SETUP } from '../utils/raceSimulation';
+import { analyzeSetup, DEFAULT_SETUP, RECOMMENDED_SETUP, PETE_SETUP, DYLAN_SETUP, JOSH_SETUP, BILSTEIN_B6_SETUP, ALDAN_550_SETUP, ALDAN_750_SETUP } from '../utils/raceSimulation';
 import { REAR_SHOCKS, FRONT_STRUTS, shockLabel } from '../data/shockOptions';
 import NumericInput from './NumericInput';
 
@@ -630,6 +630,15 @@ export default function SetupOptimizer({ setup, setSetup, ambient, setAmbient })
           </button>
           <button className="sim-preset-btn" onClick={() => setSetup(deepClone(JOSH_SETUP))}>
             Load Josh
+          </button>
+          <button className="sim-preset-btn" onClick={() => setSetup(deepClone(BILSTEIN_B6_SETUP))}>
+            Load Bilstein B6
+          </button>
+          <button className="sim-preset-btn" onClick={() => setSetup(deepClone(ALDAN_550_SETUP))}>
+            Load Aldan 550
+          </button>
+          <button className="sim-preset-btn" onClick={() => setSetup(deepClone(ALDAN_750_SETUP))}>
+            Load Aldan 750
           </button>
           <button className="sim-preset-btn accent" onClick={() => setSetup(deepClone(RECOMMENDED_SETUP))}>
             Load Recommended Setup
