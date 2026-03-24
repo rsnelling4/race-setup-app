@@ -19,13 +19,31 @@
 const G = 32.174;            // ft/s²
 const RANKINE = 459.67;       // °F to °R offset
 
-// Actual cornering lateral G — calibrated from real-world pressure targets (not from speed/radius).
-// At OVAL_CORNER_G with the measured corner radius (105 ft):
-//   Oval: v = sqrt(0.375 × 32.174 × 105) = 35.6 ft/s ≈ 24 mph at apex
-//   Figure 8: 25 mph @ 149 ft radius → G = 36.7²/(149×32.174) = 0.28G
-// Using actual G for pressure targets gives RF≈40 PSI, LF≈26 PSI — matching real-world data.
+// CALIBRATION CONSTANTS — used for load/pressure/thermal calculations only.
+// These are NOT the actual racing speeds. They are calibrated values that, when used
+// in the load-transfer formula, produce optimal pressure targets that match real-world data:
+//   OVAL: RF ≈ 39 PSI hot (35 PSI cold at 130°F) — consistent with observed pyrometer sessions
+//   F8:   symmetric loads, RF/LF ≈ 35 PSI cold — consistent with F8 baseline session
+//
+// WHY these differ from actual corner G:
+//   Back-calculation from observed lap times (kinematics, see suggested.md §2) gives:
+//     Oval: v_corner ≈ 47.6 mph (1.04G at 145 ft effective racing line radius)
+//     F8:   v_corner ≈ 33.3 mph (0.50G at 149 ft loop radius)
+//   Using 1.04G for pressure targets would give RF ≈ 54 PSI cold — far too high.
+//   The lower calibration values represent time-averaged load (including straights at 0G)
+//   and implicitly absorb the unmodeled anti-roll bar stiffness in body-roll calculations.
+//   Do NOT change these without re-calibrating against observed pyrometer data.
 const OVAL_CORNER_G = 0.375;
 const F8_CORNER_G   = 0.28;
+
+// ACTUAL RACING LINE CONSTANTS — used only for speed display (metricToSpeeds).
+// Back-calculated from observed baseline lap times via kinematic equation:
+//   Oval: 2×t_corner + 2×t_straight = 17.4s → v_corner = 47.6 mph at effective R = 145 ft
+//   (Driver swings ~40 ft wide from the 105 ft inside radius → effective racing line R ≈ 145 ft)
+//   F8: 2×t_loop + 2×t_straight = 23.283s → v_corner = 33.3 mph, lateral G ≈ 0.50G @ 149 ft
+const OVAL_RACING_G  = 1.044; // actual lateral G on effective racing line
+const OVAL_RACING_R  = 145;   // ft — effective racing line radius (105 ft inside + ~40 ft arc swing)
+const F8_RACING_G    = 0.498; // actual lateral G at F8 loop, back-calculated from 23.283s
 
 // ============ SPRING RATES ============
 // Actual measured/confirmed spring rates.
@@ -516,14 +534,16 @@ function metricToLapTime(metric) {
 }
 
 // Physics-derived speeds.
-// Corner: v = sqrt(G_lateral × g × R_racing) — minimum speed at apex.
+// Corner: back-calculated from 17.4s baseline via kinematics (see suggested.md §2).
+//   v_corner = sqrt(OVAL_RACING_G × g × OVAL_RACING_R) ≈ 47.6 mph on the effective racing line.
+//   NOT derived from OVAL_CORNER_G (0.375) — that is a pressure/load calibration constant.
 // Straight peak: car accelerates from corner exit to peak then brakes back to corner entry.
 //   v_peak² = v_corner² + 2·a_acc·L·a_brake / (a_acc + a_brake)
 function metricToSpeeds(metric) {
   const scale = Math.sqrt(metric / getBaselineMetric());
 
-  // Corner apex speed from lateral G and radius
-  const v_corner = Math.sqrt(OVAL_CORNER_G * G * TRACK.cornerRadius);        // ft/s
+  // Corner speed from back-calculated actual racing G and effective racing line radius
+  const v_corner = Math.sqrt(OVAL_RACING_G * G * OVAL_RACING_R);              // ft/s ≈ 69.8 (47.6 mph)
   const cornerBaseMph = v_corner / 1.4667;
 
   // Engine thrust force at low speed (2nd gear, conservative peak-torque estimate)
@@ -559,13 +579,18 @@ export const DEFAULT_SETUP = {
 //         LR/RR Monroe 550018 Magnum Severe Service (rating 1 — stiffest available)
 // Camber analytically derived: ideal effective LF=0°, RF=-4.5° minus caster+body-roll gains.
 // PSI analytically derived: optimal hot PSI from corner loads at OVAL_CORNER_G.
+// RF cold PSI: load-physics analysis (suggested.md §6) gives optimal hot RF = 39.1 PSI →
+// cold at 130°F eq = 35.0 PSI. Updated from grid-search value of 32.5 to 34 PSI.
+// LF cold PSI: optimal hot LF = 26.9 PSI → cold at 100°F eq = 25.4 PSI. Rounds to 26.
+// RR cold PSI: optimal hot RR = 36.6 PSI → cold at 130°F eq = 32.8 PSI. ~33.5 is close.
+// LR cold PSI: optimal hot LR = 17.4 PSI → cold at 95°F eq = 16.6 PSI. Rounds to 16.5.
 export const RECOMMENDED_SETUP = {
   shocks: { LF: 8, RF: 6, LR: 1, RR: 1 },
   springs: { front: 440, rear: 160 },
   camber: { LF: -0.5, RF: -3.0 },
   caster: { LF: 3.0, RF: 5.0 },
   toe: -0.25,
-  coldPsi: { LF: 26, RF: 32.5, LR: 16.5, RR: 33.5 },
+  coldPsi: { LF: 26, RF: 34, LR: 16.5, RR: 33.5 },
 };
 
 // ============ PETE SETUP ============
@@ -1398,8 +1423,9 @@ function metricToLapTimeF8(metric) {
 function metricToSpeedsF8(metric) {
   const scale = Math.sqrt(metric / getBaselineMetricF8());
 
-  // Corner apex speed from lateral G and loop radius
-  const v_corner = Math.sqrt(F8_CORNER_G * G * TRACK_F8.loopRadius);         // ft/s
+  // Corner speed from back-calculated actual racing G at F8 loop (see suggested.md §2).
+  // F8_RACING_G (0.498) is back-calculated from 23.283s baseline — NOT from F8_CORNER_G (0.28).
+  const v_corner = Math.sqrt(F8_RACING_G * G * TRACK_F8.loopRadius);          // ft/s ≈ 48.8 (33.3 mph)
   const cornerBaseMph = v_corner / 1.4667;
 
   // Peak straight speed (same engine/braking physics as oval)
