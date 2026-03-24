@@ -3381,3 +3381,57 @@
   .sim-math-header h2 { font-size: 1.4rem; }
 }
 
+/* ===== SUGGESTED SETUP HIGHLIGHT CARDS ===== */
+.suggested-highlights {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 12px;
+  margin-bottom: 28px;
+}
+.suggested-highlight-card {
+  border-radius: 10px;
+  padding: 16px;
+  text-align: center;
+  border: 1px solid;
+}
+.suggested-highlight-card.green {
+  background: rgba(34, 197, 94, 0.08);
+  border-color: rgba(34, 197, 94, 0.3);
+}
+.suggested-highlight-card.blue {
+  background: rgba(59, 130, 246, 0.08);
+  border-color: rgba(59, 130, 246, 0.3);
+}
+.suggested-highlight-card.purple {
+  background: rgba(167, 139, 250, 0.08);
+  border-color: rgba(167, 139, 250, 0.3);
+}
+.sh-label {
+  font-size: 0.75rem;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  color: var(--text-secondary);
+  margin-bottom: 6px;
+}
+.suggested-highlight-card.green .sh-label { color: #86efac; }
+.suggested-highlight-card.blue  .sh-label { color: #93c5fd; }
+.suggested-highlight-card.purple .sh-label { color: #c4b5fd; }
+.sh-value {
+  font-size: 1.5rem;
+  font-weight: 700;
+  color: var(--text-primary);
+  margin-bottom: 4px;
+}
+.suggested-highlight-card.green .sh-value { color: #22c55e; }
+.suggested-highlight-card.blue  .sh-value { color: #3b82f6; }
+.suggested-highlight-card.purple .sh-value { color: #a78bfa; }
+.sh-desc {
+  font-size: 0.8rem;
+  color: var(--text-secondary);
+  line-height: 1.4;
+}
+@media (max-width: 600px) {
+  .suggested-highlights { grid-template-columns: 1fr; }
+}
+
