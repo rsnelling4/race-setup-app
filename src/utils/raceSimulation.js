@@ -123,14 +123,15 @@ function tempGripFactor(temp) {
 }
 
 // Pressure: deviation from load-optimal reduces grip.
-// 0.010/PSI = 1% grip per PSI of deviation — calibrated so a 2-3 PSI change
-// meaningfully shifts handling balance (RF pressure directly affects push/loose).
-// Floor 0.82 = 18% max loss (hits at 18 PSI off — catastrophically wrong pressure).
+// 0.006/PSI = 0.6% grip per PSI of deviation — affects lap time.
+// Handling balance is more sensitive to pressure than lap time; the balance
+// gauge applies an additional correction (see BalanceGauge in SetupOptimizer).
+// Floor 0.82 = 18% max loss (hits at ~30 PSI off — catastrophically wrong pressure).
 function pressureGripFactor(hotPsi, tireLoad) {
   const avgLoad = VEH.weight / 4;
   const optPsi = 30 * (tireLoad / avgLoad);
   const dev = Math.abs(hotPsi - optPsi);
-  return Math.max(0.82, 1 - 0.010 * dev);
+  return Math.max(0.82, 1 - 0.006 * dev);
 }
 
 // Camber: deviation from ideal effective camber for the cornering condition.

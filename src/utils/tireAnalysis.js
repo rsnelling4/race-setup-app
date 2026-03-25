@@ -455,19 +455,26 @@ export function formatPosition(pos) {
  *   Shocks control roll stiffness: stiffer compression = more LLTD at that corner.
  *   Front LLTD up = more push. Rear LLTD up = more loose.
  *
- * Pressure and handling (from oval racing convention):
- *   Higher RF PSI → RF grips better (more cornering stiffness at design load) → front turns → LOOSE
- *   Lower RF PSI  → RF less grip → front washes → TIGHT
- *   Higher RR PSI → RR grips better → rear planted → TIGHT
- *   Lower RR PSI  → RR loses grip → rear slides → LOOSE
- *   Higher LR PSI → tighter from middle out
- *   Lower LR PSI  → looser from middle out
+ * Pressure and handling (for Crown Vic P71 at typical Setup B pressures):
+ *   Effects depend on whether each tire is above or below its load-optimal hot PSI.
+ *   RF/LF/LR are typically BELOW optimal → raising moves toward optimal → more grip.
+ *   RR is typically AT or SLIGHTLY ABOVE optimal → lowering moves toward optimal → more grip.
+ *
+ *   Higher RF PSI → toward optimal → more RF grip → front bites → LOOSE
+ *   Lower RF PSI  → away from optimal → less RF grip → front washes → TIGHT
+ *   Higher RR PSI → past optimal → less RR contact → rear reaches limit sooner → LOOSE
+ *   Lower RR PSI  → toward optimal → more RR contact → rear planted → TIGHT
+ *   Higher LR PSI → toward optimal → more inside rear grip → TIGHT from middle out
+ *   Lower LR PSI  → away from optimal → less inside rear grip → LOOSE from middle out
+ *   Higher LF PSI → toward optimal → slightly more front grip → mild LOOSE
+ *   Lower LF PSI  → less front grip → mild TIGHT
  */
 const perTireRecommendations = {
   // ── TIGHT (UNDERSTEER / PUSH) ─────────────────────────────────────────────
-  // To fix push: increase front grip OR reduce front LLTD relative to rear.
-  // Pressure to LOOSEN: raise RF (more RF grip), raise RR (rear planted → less rotation, but
-  //   allows front to work = net loosening). Raise LF (front looser). Lower LR (looser mid-corner).
+  // To fix push: increase front grip OR reduce rear LLTD relative to front.
+  // Pressure to LOOSEN: raise RF (RF below optimal → toward optimal → more grip → front bites).
+  //   Raise RR (RR at/above optimal → past optimal → less RR grip → rear rotates more freely).
+  //   Raise LF (toward optimal → more front grip). Lower LR (away from optimal → rear less stable).
   // Camber: add negative camber to RF for more grip. LF is inside tire — leave it alone.
   // Shocks: soften RF compression (less front LLTD), stiffen RR compression (more rear LLTD).
   //         Soften LF rebound (LF extends freely = less front roll resistance = less push).
@@ -561,9 +568,10 @@ const perTireRecommendations = {
   },
 
   // ── LOOSE (OVERSTEER) ─────────────────────────────────────────────────────
-  // To fix loose: increase rear grip OR reduce rear LLTD relative to front.
-  // Pressure to TIGHTEN: lower RF (less RF grip = front follows rear), lower RR (rear gets more relative grip).
-  //   Lower LF (less front rotation). Raise LR (tighter mid-corner).
+  // To fix loose: increase rear grip OR reduce front LLTD relative to rear.
+  // Pressure to TIGHTEN: lower RF (RF away from optimal → less front grip → front doesn't over-rotate).
+  //   Lower RR (RR toward optimal → more RR contact → rear planted). Raise LR (toward optimal → more rear grip).
+  //   Lower LF (away from optimal → less front rotation).
   // Camber: slightly reduce RF negative camber to reduce front rotation tendency.
   //         LF is inside — leave alone.
   // Shocks: stiffen RF compression (more front LLTD = front limits before rear = more stable rear).
@@ -666,7 +674,7 @@ export function getHandlingRecommendations(condition, phase) {
         { component: 'RF Shock (Compression)', adjustment: 'Stiffen RF compression', effect: 'Increases front roll resistance — more front LLTD keeps the front as the limiting factor, stabilizing the rear on turn-in' },
         { component: 'LR Shock (Rebound)', adjustment: 'Soften LR rebound', effect: 'Left rear extends freely as the car rolls left, allowing the rear axle to stay planted on entry' },
         { component: 'RR Shock (Compression)', adjustment: 'Soften RR compression', effect: 'Reduces rear LLTD — the RR stays more loaded rather than transferring all load off the rear' },
-        { component: 'Tire Pressure', adjustment: 'Lower RF 1-2 PSI, raise LR 1-2 PSI', effect: 'Reduces front rotation tendency and tightens the mid-corner balance' },
+        { component: 'Tire Pressure', adjustment: 'Lower RF 1-2 PSI · Lower RR 1-2 PSI · Raise LR 1-2 PSI', effect: 'Lower RF reduces front-end rotation (less front grip = front doesn\'t bite as hard on turn-in). Lower RR moves it toward optimal hot pressure — more RR contact = rear planted. Raise LR adds inside rear grip to stabilize the axle on entry.' },
       ]
     },
     loose_middle: {
@@ -676,13 +684,14 @@ export function getHandlingRecommendations(condition, phase) {
         { component: 'RF Shock (Compression)', adjustment: 'Stiffen RF compression', effect: 'Increases front roll stiffness — shifts the handling balance so the front reaches its grip limit before the rear' },
         { component: 'RR Shock (Compression)', adjustment: 'Soften RR compression', effect: 'Reduces rear LLTD — the rear stays more evenly loaded rather than shedding load to the inside (LR), giving the RR more sustained grip' },
         { component: 'LR Shock (Rebound)', adjustment: 'Soften LR rebound', effect: 'Allows the left rear to unload naturally, reducing rear roll resistance imbalance in sustained cornering' },
-        { component: 'Tire Pressure', adjustment: 'Lower RF 1-2 PSI, raise LR 1-2 PSI', effect: 'Reduces front grip and tightens mid-corner balance' },
+        { component: 'Tire Pressure', adjustment: 'Lower RF 1-2 PSI · Lower RR 1-2 PSI · Raise LR 1-2 PSI', effect: 'Lower RF reduces front grip so the front doesn\'t over-rotate mid-corner. Lower RR toward optimal = more RR contact = rear holds through the apex. Raise LR adds inside rear bite for a more stable mid-corner platform.' },
       ]
     },
     loose_exit: {
       title: 'Loose on Exit (Oversteer on throttle application)',
       description: 'The rear steps out when applying throttle. Weight transfers rearward faster than rear grip can build.',
       changes: [
+        { component: 'Tire Pressure', adjustment: 'Lower RF 1 PSI · Lower RR 1-2 PSI · Raise LR 1-2 PSI', effect: 'Lower RF reduces front-end pull so the rear isn\'t dragged around on throttle. Lower RR toward its optimal hot pressure — more RR contact patch = rear plants under acceleration. Raise LR adds drive-side bite for smoother power application.' },
         { component: 'RR Shock (Compression)', adjustment: 'Soften RR compression', effect: 'Allows the RR to absorb the weight transfer more smoothly when throttle is applied, maintaining contact' },
         { component: 'RR Shock (Rebound)', adjustment: 'Stiffen RR rebound', effect: 'Keeps the RR compressed and planted as power loads the rear, preventing the tire from bouncing off the track' },
         { component: 'RF/LF Shock (Rebound)', adjustment: 'Stiffen front rebound', effect: 'Slows how fast the front unloads under acceleration — keeps the front engaged so the car tracks straight rather than rotating' },
@@ -706,17 +715,17 @@ export function getHandlingRecommendations(condition, phase) {
         { component: 'RF Shock (Compression)', adjustment: 'Soften RF compression', effect: 'Reduces front roll stiffness — lowers front LLTD so the RF stays more evenly loaded through sustained cornering' },
         { component: 'RR Shock (Compression)', adjustment: 'Stiffen RR compression', effect: 'Increases rear LLTD — the rear reaches its grip limit before the front, which rotates the car more freely' },
         { component: 'RF Camber', adjustment: 'Add 0.25° negative camber to RF', effect: 'Improves RF contact patch through the corner, helping the front grip in sustained lateral load' },
-        { component: 'Tire Pressure', adjustment: 'Raise RF 1-2 PSI', effect: 'Higher RF pressure increases cornering stiffness at the design load, improving mid-corner RF grip' },
+        { component: 'Tire Pressure', adjustment: 'Raise RF 1-2 PSI · Raise LF 1 PSI · Raise RR 1 PSI', effect: 'Raise RF toward its optimal hot pressure — more RF contact patch = front bites mid-corner. Raise LF adds inside front grip. Raise RR moves it slightly above optimal = less RR grip = rear reaches its limit sooner, encouraging the car to rotate.' },
       ]
     },
     tight_exit: {
       title: 'Tight on Exit (Understeer on acceleration)',
       description: 'The car pushes wide when applying throttle. The front unloads too fast as weight transfers rearward.',
       changes: [
+        { component: 'Tire Pressure', adjustment: 'Raise RF 1-2 PSI · Raise LF 1 PSI · Raise RR 1 PSI', effect: 'Raise RF toward optimal = more RF grip = front bites longer under throttle load. Raise LF adds inside front grip. Raise RR takes it slightly past optimal = less RR grip = rear starts to rotate, which un-sticks the nose.' },
         { component: 'RF/LF Shock (Rebound)', adjustment: 'Stiffen front rebound', effect: 'Slows how fast the front extends as weight transfers rearward — keeps the front engaged in steering longer on corner exit' },
         { component: 'RR Shock (Compression)', adjustment: 'Stiffen RR compression', effect: 'Controls rear squat under power, preventing excessive weight from dumping off the front and onto the rear too quickly' },
         { component: 'RF Camber', adjustment: 'Add 0.25-0.5° negative camber to RF', effect: 'More RF grip on exit helps the front maintain steering authority even as the rear loads up under throttle' },
-        { component: 'Tire Pressure', adjustment: 'Raise RF 1-2 PSI', effect: 'Increases RF cornering stiffness — front holds grip better during the combined lateral + longitudinal load on exit' },
       ]
     }
   };

@@ -94,22 +94,26 @@ function HandlingDiagnosis() {
         </div>
       )}
       <div className="handling-tips-considerations">
-        <h3>Things to Consider (Tire Pressure Impact)</h3>
+        <h3>Tire Pressure &amp; Handling — Quick Reference</h3>
+        <p style={{ fontSize: '0.82rem', color: 'var(--text-muted)', marginBottom: 8 }}>
+          These effects assume pressures are near the load-optimal target for each corner.
+          RF and LF typically run slightly below optimal; RR typically runs near or slightly above.
+          Small changes (0.5–2 PSI) have the most predictable effects — always adjust one tire at a time.
+        </p>
         <ul>
-          <li>Higher psi in RF will loosen the car.</li>
-          <li>Lower psi in the RF will tighten the car.</li>
-          <li>Higher psi in RR will loosen the car.</li>
-          <li>Lower psi in the RR will tighten the car.</li>
-          <li>Higher psi in the LR will tighten the car from the middle out.</li>
-          <li>Lower psi in the LR will loosen the car from the middle out.</li>
-          <li>Higher psi in the LF will loosen the car.</li>
-          <li>Lower psi in the LF will tighten the car.</li>
-          <li>The lower the psi in a tire the hotter it will run.</li>
-          <li>The higher the psi in a tire the colder it will run.</li>
-          <li>Excessively low front tire psi will create a push.</li>
-          <li>Excessively low rear tire psi will create a loose condition.</li>
-          <li>Increasing the split (more RR psi than LR) increases stagger, helping the car to turn in the middle of a corner.</li>
-          <li>Increasing the split of the left & right side psi (more psi on the right) increases the pull to the left.</li>
+          <li><strong>RF higher PSI</strong> — moves RF toward optimal hot pressure → more front grip → <em>loosens</em> the car</li>
+          <li><strong>RF lower PSI</strong> — moves RF away from optimal → less front grip → <em>tightens</em> the car</li>
+          <li><strong>RR higher PSI</strong> — moves RR past its optimal → less rear contact → rear reaches grip limit sooner → <em>loosens</em> the car</li>
+          <li><strong>RR lower PSI</strong> — moves RR back toward optimal → more rear contact → rear plants → <em>tightens</em> the car</li>
+          <li><strong>LR higher PSI</strong> — moves LR toward optimal → more inside rear grip → <em>tightens</em> from the middle out</li>
+          <li><strong>LR lower PSI</strong> — moves LR away from optimal → less inside rear grip → <em>loosens</em> from the middle out</li>
+          <li><strong>LF higher PSI</strong> — moves LF toward optimal → more inside front grip → <em>loosens</em> the car slightly</li>
+          <li><strong>LF lower PSI</strong> — less inside front grip → <em>tightens</em> the car slightly</li>
+          <li>Lower PSI = larger contact patch = more heat generated. Higher PSI = smaller patch = runs cooler but can crown and lose grip.</li>
+          <li>Excessively low front PSI (far below optimal) will create a push — tire deforms too much, loses cornering stiffness.</li>
+          <li>Excessively low rear PSI will create a loose condition — rear loses cornering grip.</li>
+          <li><strong>RR/LR stagger split</strong> — more RR PSI than LR increases effective stagger and helps the car turn in the middle of a corner.</li>
+          <li><strong>Right-side vs left-side split</strong> — more PSI on the right side increases pull to the left and helps cornering in left-turn ovals.</li>
         </ul>
       </div>
     </div>

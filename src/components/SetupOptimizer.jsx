@@ -121,10 +121,29 @@ function phaseLabel(bias) {
 
 // ── Handling Balance Gauge ────────────────────────────────────────────────────
 function BalanceGauge({ frontGripPct, frontLLTD, corners, setup }) {
+  // Pressure balance correction.
+  // Uses absolute deviation from load-optimal: ANY deviation (over OR under) loses grip.
+  // RF/LF off-optimal → less front grip → push tendency (negative).
+  // RR/LR off-optimal → less rear grip → loose tendency (positive).
+  //
+  // This matches oval racing convention for typical Setup B pressure positions:
+  //   RF/LF/LR are below optimal → raising toward optimal = more grip.
+  //     RF higher = more front grip = loose. RF lower = less grip = tight.
+  //   RR is slightly above optimal → lowering toward optimal = more grip.
+  //     RR lower = more rear grip = tight. RR higher = less grip = loose.
+  //
+  // Scaled so 3-5 PSI of RF or RR spans one full balance zone boundary.
+  const presAdj =
+    -Math.abs(corners.RF.psiDev) * 0.010 +
+     Math.abs(corners.RR.psiDev) * 0.008 +
+    -Math.abs(corners.LF.psiDev) * 0.004 +
+     Math.abs(corners.LR.psiDev) * 0.003;
+  const balFrontGripPct = Math.max(0.3, Math.min(0.7, frontGripPct + presAdj));
+
   // Positive = loose tendency, negative = push tendency
   // Center on weight bias (55%) — that's the neutral handling point.
   // On an oval you typically WANT slight loose (LLTD below 55%) for rotation.
-  const gripDev  = frontGripPct - 0.55;      // + = front has spare grip = loose
+  const gripDev  = balFrontGripPct - 0.55;    // + = front has spare grip = loose
   const lltdDev  = (frontLLTD - 0.55) * 0.3; // + = front overloaded = push (gentle scaling)
   const tendency = gripDev - lltdDev;         // + = loose, - = push
 
@@ -157,14 +176,14 @@ function BalanceGauge({ frontGripPct, frontLLTD, corners, setup }) {
   const entryOutsideBias = rfS / Math.max(rfS + rrS, 1);
   const toeEntryBias    = Math.max(0.2, Math.min(0.8, 0.5 + (setup.toe + 0.25) * 0.5));
   const rfCamEntryBias  = Math.max(0.2, Math.min(0.8, 0.5 + corners.RF.camberDev * 0.04));
-  const rfPresEntryBias = Math.max(0.2, Math.min(0.8, 0.5 + corners.RF.psiDev * 0.012));
-  const entryBias = 0.35 * entryOutsideBias + 0.20 * frontLLTD + 0.20 * toeEntryBias + 0.15 * rfCamEntryBias + 0.10 * rfPresEntryBias;
+  const rfPresEntryBias = Math.max(0.2, Math.min(0.8, 0.5 + corners.RF.psiDev * 0.022));
+  const entryBias = 0.32 * entryOutsideBias + 0.17 * frontLLTD + 0.18 * toeEntryBias + 0.14 * rfCamEntryBias + 0.19 * rfPresEntryBias;
   const entry = phaseLabel(entryBias);
 
   // MID — steady-state corner.
-  // Primary: actual front/rear grip balance. frontGripPct > 0.55 = rear limited = loose;
-  // < 0.55 = front limited = push. This directly reflects camber, pressure, and temp effects.
-  const midGripBias = Math.max(0.1, Math.min(0.9, 0.5 + (frontGripPct - 0.55) * 3));
+  // Primary: pressure-adjusted front/rear grip balance. balFrontGripPct > 0.55 = rear limited = loose;
+  // < 0.55 = front limited = push. Includes amplified pressure correction.
+  const midGripBias = Math.max(0.1, Math.min(0.9, 0.5 + (balFrontGripPct - 0.55) * 3));
   const midBias = 0.55 * midGripBias + 0.45 * frontLLTD;
   const mid = phaseLabel(midBias);
 
@@ -176,8 +195,8 @@ function BalanceGauge({ frontGripPct, frontLLTD, corners, setup }) {
   const rearGripAvg  = (corners.RR.adjustableScore + corners.LR.adjustableScore) / 2;
   const frontGripAvg = (corners.RF.adjustableScore + corners.LF.adjustableScore) / 2;
   const gripDiffBias   = Math.max(0.1, Math.min(0.9, 0.5 + (rearGripAvg - frontGripAvg) * 5));
-  const rrPresExitBias = Math.max(0.2, Math.min(0.8, 0.5 - corners.RR.psiDev * 0.012));
-  const exitBias = 0.30 * diagBias + 0.25 * frontLLTD + 0.25 * gripDiffBias + 0.20 * rrPresExitBias;
+  const rrPresExitBias = Math.max(0.2, Math.min(0.8, 0.5 - corners.RR.psiDev * 0.020));
+  const exitBias = 0.27 * diagBias + 0.22 * frontLLTD + 0.24 * gripDiffBias + 0.27 * rrPresExitBias;
   const exit = phaseLabel(exitBias);
 
   // Phase notes — surface the dominant driver for each phase
@@ -278,7 +297,7 @@ function BalanceGauge({ frontGripPct, frontLLTD, corners, setup }) {
           <div className="opt-phase-row">
             <span className="opt-phase-name">Mid</span>
             <span className="opt-phase-label" style={{ color: mid.color }}>{mid.label}</span>
-            <span className="opt-phase-note">Front grip {(frontGripPct * 100).toFixed(0)}% (ideal 55%) · LLTD {(frontLLTD * 100).toFixed(0)}%</span>
+            <span className="opt-phase-note">Front grip {(balFrontGripPct * 100).toFixed(0)}% (ideal 55%) · LLTD {(frontLLTD * 100).toFixed(0)}%</span>
           </div>
           <div className="opt-phase-row">
             <span className="opt-phase-name">Exit</span>
@@ -291,7 +310,7 @@ function BalanceGauge({ frontGripPct, frontLLTD, corners, setup }) {
       <div className="opt-stat-pair" style={{ marginTop: 4 }}>
         <span>Front grip share</span>
         <span style={{ color: Math.abs(gripDev) < 0.02 ? 'var(--green)' : 'var(--yellow)' }}>
-          {(frontGripPct * 100).toFixed(1)}% <span className="opt-stat-ideal">(ideal 55%)</span>
+          {(balFrontGripPct * 100).toFixed(1)}% <span className="opt-stat-ideal">(ideal 55%)</span>
         </span>
       </div>
       <div className="opt-stat-pair">
@@ -302,6 +321,94 @@ function BalanceGauge({ frontGripPct, frontLLTD, corners, setup }) {
       </div>
       <div className="opt-hb-desc">{description}</div>
       {action && <div className="opt-hb-action">{action}</div>}
+    </div>
+  );
+}
+
+// ── Static Camber Calculator ──────────────────────────────────────────────────
+// Coefficients mirror raceSimulation.js exactly.
+// RF (outside, jounce): casterCoeff=0.18, rollCoeff=0.35, ideal=-4.5°
+// LF (inside, droop):   casterCoeff=0.10, rollCoeff=0.15, ideal=0°
+const CALC = {
+  RF: { outside: true,  casterCoeff: 0.18, rollCoeff: 0.35, ideal: -4.5 },
+  LF: { outside: false, casterCoeff: 0.10, rollCoeff: 0.15, ideal:  0.0 },
+};
+const OVAL_CORNER_G_CALC = 0.375;
+
+function CamberCalc({ roll, setupCaster }) {
+  const cornerRoll = roll * OVAL_CORNER_G_CALC;
+
+  const [caster, setCaster] = useState({
+    LF: setupCaster?.LF ?? 3.5,
+    RF: setupCaster?.RF ?? 5.0,
+  });
+
+  const compute = (c) => {
+    const { outside, casterCoeff, rollCoeff, ideal } = CALC[c];
+    const casterGain = outside ? -(caster[c] * casterCoeff) :  (caster[c] * casterCoeff);
+    const rollGain   = outside ? -(cornerRoll * rollCoeff)  :  (cornerRoll * rollCoeff);
+    const totalGain  = casterGain + rollGain;
+    const optStatic  = Math.round((ideal - casterGain - rollGain) * 4) / 4;
+    return { casterGain, rollGain, totalGain, ideal, optStatic };
+  };
+
+  return (
+    <div className="opt-camber-calc">
+      <div className="opt-factor-title">Static Camber Calculator</div>
+      <p className="opt-calc-desc">
+        Enter caster → model returns the static setting that hits the ideal effective camber
+        at mid-corner. Body roll uses your current setup stiffness
+        ({cornerRoll.toFixed(2)}° in corners).
+      </p>
+      <div className="opt-calc-grid">
+        {['LF', 'RF'].map(c => {
+          const { casterGain, rollGain, totalGain, ideal, optStatic } = compute(c);
+          const label = c === 'RF' ? 'Right Front (outside)' : 'Left Front (inside)';
+          return (
+            <div key={c} className="opt-balance-card opt-calc-card">
+              <div className="opt-calc-header">{label}</div>
+
+              <div className="opt-form-field" style={{ marginBottom: 10 }}>
+                <label>Caster (°)</label>
+                <input type="number" step="0.25" min="0" max="12" className="opt-input"
+                  value={caster[c]}
+                  onChange={e => setCaster(prev => ({ ...prev, [c]: parseFloat(e.target.value) || 0 }))}
+                />
+              </div>
+
+              <div className="opt-stat-pair">
+                <span>Caster gain</span>
+                <span>{casterGain >= 0 ? '+' : ''}{casterGain.toFixed(2)}°</span>
+              </div>
+              <div className="opt-stat-pair">
+                <span>Body roll gain</span>
+                <span>{rollGain >= 0 ? '+' : ''}{rollGain.toFixed(2)}°</span>
+              </div>
+              <div className="opt-stat-pair">
+                <span>Total dynamic gain</span>
+                <span style={{ color: 'var(--accent)' }}>
+                  {totalGain >= 0 ? '+' : ''}{totalGain.toFixed(2)}°
+                </span>
+              </div>
+              <div className="opt-stat-pair">
+                <span>Ideal effective</span>
+                <span>{ideal.toFixed(1)}°</span>
+              </div>
+
+              <div className="opt-calc-result">
+                Set static to <strong>{optStatic}°</strong>
+              </div>
+
+              <div className="opt-calc-check">
+                {optStatic}° + ({totalGain >= 0 ? '+' : ''}{totalGain.toFixed(2)}°) ={' '}
+                <span style={{ color: 'var(--green)' }}>
+                  {(optStatic + totalGain).toFixed(2)}° eff.
+                </span>
+              </div>
+            </div>
+          );
+        })}
+      </div>
     </div>
   );
 }
@@ -648,6 +755,12 @@ export default function SetupOptimizer({ setup, setSetup, ambient, setAmbient, i
       <div className="opt-section">
         <h3 className="opt-section-title">Setup Parameters</h3>
         <CompactSetupForm setup={setup} onChange={setSetup} />
+      </div>
+
+      {/* ── Camber Calculator ── */}
+      <div className="opt-section">
+        <h3 className="opt-section-title">Camber Calculator</h3>
+        <CamberCalc roll={roll} setupCaster={setup.caster} />
       </div>
 
       {/* ── Per-corner analysis ── */}
