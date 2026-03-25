@@ -374,7 +374,7 @@ function CompareSummary({ a, b }) {
 }
 
 // ============ MAIN COMPONENT ============
-export default function RaceSimulation({ setup, setSetup, ambient, setAmbient }) {
+export default function RaceSimulation({ setup, setSetup, ambient, setAmbient, inflationTemp, setInflationTemp }) {
   const [numLaps, setNumLaps] = useState(25);
   const [resultA, setResultA] = useState(null);
   const [resultB, setResultB] = useState(null);
@@ -389,11 +389,11 @@ export default function RaceSimulation({ setup, setSetup, ambient, setAmbient })
   };
 
   const handleRun = () => {
-    const result = simulateRace(setup, ambient, numLaps);
+    const result = simulateRace(setup, ambient, numLaps, inflationTemp);
     if (activeResult === 'A') {
-      setResultA({ ...result, setup: deepClone(setup), ambient, numLaps });
+      setResultA({ ...result, setup: deepClone(setup), ambient, inflationTemp, numLaps });
     } else {
-      setResultB({ ...result, setup: deepClone(setup), ambient, numLaps });
+      setResultB({ ...result, setup: deepClone(setup), ambient, inflationTemp, numLaps });
     }
   };
 
@@ -432,6 +432,14 @@ export default function RaceSimulation({ setup, setSetup, ambient, setAmbient })
             type="number" min="30" max="120" step="5"
             value={ambient}
             onChange={e => setAmbient(parseFloat(e.target.value) || 65)}
+          />
+        </div>
+        <div className="sim-input-group">
+          <label>Tires Set At (°F)</label>
+          <input
+            type="number" min="30" max="120" step="1"
+            value={inflationTemp}
+            onChange={e => setInflationTemp(parseFloat(e.target.value) || 68)}
           />
         </div>
         <div className="sim-input-group">
@@ -475,7 +483,7 @@ export default function RaceSimulation({ setup, setSetup, ambient, setAmbient })
             Results — Setup {activeResult}
             {displayResult.ambient && (
               <span className="sim-results-cond">
-                {displayResult.numLaps} laps @ {displayResult.ambient}°F
+                {displayResult.numLaps} laps @ {displayResult.ambient}°F ambient, set @ {displayResult.inflationTemp ?? 68}°F
               </span>
             )}
           </h3>

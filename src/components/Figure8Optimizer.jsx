@@ -83,7 +83,7 @@ const TIPS = {
   solidAxle: 'The rear axle is solid — both wheels tilt together with body roll. In figure 8, body roll averages to near-zero across both turn directions, so rear dynamic camber stays close to optimal.',
   camberScore: 'Grip multiplier from camber alignment. 100% = effective camber matches the model ideal of −2.75° for this tire. Each degree of deviation costs roughly 1.2% grip.',
   pressureSection: 'Tire pressure affects contact patch shape. Figure 8 loading is symmetric — LF/RF see equal average loads, as do LR/RR. Equal pressures side-to-side are appropriate.',
-  coldHot: 'Cold PSI is what you set in the garage (~68°F). Hot PSI is calculated via ideal gas law using 68°F as the cold reference — NOT the racing ambient. At 200°F tires: 34 cold → ~42.5 PSI hot (+8.5 PSI). On a hot day tires run hotter, so hot PSI rises more than you might expect.',
+  coldHot: 'Cold PSI is what you set when inflating the tires. Hot PSI is calculated via ideal gas law using the "Tires Set At" temperature as the cold reference. At 200°F tires set at 85°F: 34 cold → ~40.9 PSI hot. Setting tires on a hot day means less pressure rise during racing.',
   optimalHot: 'Load-optimal hot pressure for this corner. Since figure 8 loads are symmetric, LF≈RF and LR≈RR should have equal optimal pressures.',
   presScore: 'Grip multiplier from tire pressure. 100% = hot pressure matches the load-optimal target. Each PSI of deviation costs ~0.25% grip.',
   loadMismatch: 'Corner load is far from average — the mathematically optimal pressure is outside a practical range.',
@@ -495,8 +495,8 @@ function CompactSetupForm({ setup, onChange }) {
   );
 }
 
-export default function Figure8Optimizer({ setup, setSetup, ambient, setAmbient }) {
-  const analysis = useMemo(() => analyzeSetupF8(setup, ambient), [setup, ambient]);
+export default function Figure8Optimizer({ setup, setSetup, ambient, setAmbient, inflationTemp, setInflationTemp }) {
+  const analysis = useMemo(() => analyzeSetupF8(setup, ambient, inflationTemp), [setup, ambient, inflationTemp]);
   const {
     corners, ss, roll, frontGripPct, balancePenalty, imbalance,
     toeGrip, toeDrag, toe,
@@ -591,6 +591,13 @@ export default function Figure8Optimizer({ setup, setSetup, ambient, setAmbient 
           <input type="number" min="30" max="120" step="5" className="opt-input"
             value={ambient}
             onChange={e => setAmbient(parseFloat(e.target.value) || 65)}
+          />
+        </div>
+        <div className="opt-form-field">
+          <label>Tires Set At (°F)</label>
+          <input type="number" min="30" max="120" step="1" className="opt-input"
+            value={inflationTemp}
+            onChange={e => setInflationTemp(parseFloat(e.target.value) || 68)}
           />
         </div>
         <div className="opt-presets">

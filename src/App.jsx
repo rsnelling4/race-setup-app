@@ -36,6 +36,7 @@ function App() {
   // Shared setup state — used by both Race Simulation and Setup Optimizer
   const [setup, setSetup] = useState(deepClone(DEFAULT_SETUP));
   const [ambient, setAmbient] = useState(65);
+  const [inflationTemp, setInflationTemp] = useState(85);
 
   const [tireData, setTireData] = useState({
     LF: { inside: '', middle: '', outside: '', pressure: '' },
@@ -183,16 +184,16 @@ function App() {
         {activeTab === 'handling' && <HandlingDiagnosis />}
         {activeTab === 'shocks' && <CrownVicShocks />}
         {activeTab === 'simulation' && (
-          <RaceSimulation setup={setup} setSetup={setSetup} ambient={ambient} setAmbient={setAmbient} />
+          <RaceSimulation setup={setup} setSetup={setSetup} ambient={ambient} setAmbient={setAmbient} inflationTemp={inflationTemp} setInflationTemp={setInflationTemp} />
         )}
         {activeTab === 'optimize' && (
-          <SetupOptimizer setup={setup} setSetup={setSetup} ambient={ambient} setAmbient={setAmbient} />
+          <SetupOptimizer setup={setup} setSetup={setSetup} ambient={ambient} setAmbient={setAmbient} inflationTemp={inflationTemp} setInflationTemp={setInflationTemp} />
         )}
         {activeTab === 'figure8' && (
-          <Figure8Simulation setup={setup} setSetup={setSetup} ambient={ambient} setAmbient={setAmbient} />
+          <Figure8Simulation setup={setup} setSetup={setSetup} ambient={ambient} setAmbient={setAmbient} inflationTemp={inflationTemp} setInflationTemp={setInflationTemp} />
         )}
         {activeTab === 'f8optimize' && (
-          <Figure8Optimizer setup={setup} setSetup={setSetup} ambient={ambient} setAmbient={setAmbient} />
+          <Figure8Optimizer setup={setup} setSetup={setSetup} ambient={ambient} setAmbient={setAmbient} inflationTemp={inflationTemp} setInflationTemp={setInflationTemp} />
         )}
         {activeTab === 'mathref' && <SimulationMath />}
         {activeTab === 'suggested' && <SuggestedSetup />}

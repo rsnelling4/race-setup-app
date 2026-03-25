@@ -193,15 +193,19 @@ function toeDragFactor(toeInches) {
   return 1.0 + 0.001 * absToe * absToe;
 }
 
-// Temperature at which cold PSI is measured (morning before racing)
-// Independent of racing ambient — you inflate in the garage, not on track.
-const COLD_PSI_TEMP = 68; // °F
+// Temperature at which cold PSI is measured — where and when you inflated the tires.
+// 68°F = cool garage (historical calibration default).
+// 85-90°F = typical track-side inflation on a summer race day.
+// This matters: inflating at 90°F vs 68°F changes the target cold PSI by ~4%.
+const COLD_PSI_TEMP = 68; // °F — calibration default only; UI passes actual inflationTemp
 
 // Hot pressure from cold + tire temp via ideal gas law: P2 = P1 × (T2/T1), absolute temps
-// Reference T1 = COLD_PSI_TEMP (when you inflated), not racing ambient.
-// At 200°F tires from 68°F cold: 34 × (200+460)/(68+460) = +8.5 PSI ≈ 10 PSI on a hot day ✓
-function hotPressure(coldPsi, tireTemp) {
-  return coldPsi * (tireTemp + RANKINE) / (COLD_PSI_TEMP + RANKINE);
+// inflationTemp = temperature when cold PSI was set (not race ambient).
+// At 200°F tires, cold set at 68°F: 34 × (200+460)/(68+460) = 42.5 PSI ✓
+// At 200°F tires, cold set at 90°F: 34 × (200+460)/(90+460) = 40.8 PSI (lower — tire was
+// already warm when set, so it rises less during racing).
+function hotPressure(coldPsi, tireTemp, inflationTemp = COLD_PSI_TEMP) {
+  return coldPsi * (tireTemp + RANKINE) / (inflationTemp + RANKINE);
 }
 
 // ============ SHOCK → ROLL STIFFNESS ============
@@ -261,7 +265,7 @@ const CORNERS = ['LF', 'RF', 'LR', 'RR'];
 const OUTSIDE = { LF: false, RF: true, LR: false, RR: true };
 const IS_FRONT = { LF: true, RF: true, LR: false, RR: false };
 
-function calcPerformance(setup, tires, ambient) {
+function calcPerformance(setup, tires, inflationTemp = COLD_PSI_TEMP) {
   const refG = 1.0;
   const ss = shockStiffness(setup);
   const loads = tireLoads(refG, ss.frontLLTD);
@@ -281,7 +285,7 @@ function calcPerformance(setup, tires, ambient) {
     const load = loads[c];
     // Use average temp for grip calculation
     const avgTemp = tires[c].temp;
-    const hp = hotPressure(setup.coldPsi[c], avgTemp, ambient);
+    const hp = hotPressure(setup.coldPsi[c], avgTemp, inflationTemp);
     let mu = 1.0;
 
     // Temperature
@@ -394,7 +398,7 @@ function eqTires(setup, ambientTemp, wfFn) {
 // ============ I/M/O TIRE TEMPERATURE UPDATE ============
 // Each tire tracks inside, middle, outside temperatures separately.
 // The "temp" field is the average used for grip calculations.
-function updateTireTemps(tires, workFactors, ambient, lapTime, setup) {
+function updateTireTemps(tires, workFactors, ambient, lapTime, setup, inflationTemp = COLD_PSI_TEMP) {
   const newTires = {};
   const toe = setup.toe !== undefined ? setup.toe : -0.25;
   const caster = setup.caster || { LF: 3.5, RF: 5.0 };
@@ -459,7 +463,7 @@ function updateTireTemps(tires, workFactors, ambient, lapTime, setup) {
 
     // Pressure effect on temperature: over-inflation → hotter middle
     const avgTemp = (tires[c].inside + tires[c].middle + tires[c].outside) / 3;
-    const hp = hotPressure(setup.coldPsi[c], avgTemp, ambient);
+    const hp = hotPressure(setup.coldPsi[c], avgTemp, inflationTemp);
     const avgLoad = VEH.weight / 4;
     const cornerLoadsTherm = tireLoads(OVAL_CORNER_G, shockStiffness(setup).frontLLTD);
     const optPsi = 30 * (cornerLoadsTherm[c] / avgLoad);
@@ -523,7 +527,7 @@ function getBaselineMetric() {
       LR: { inside: 101, middle: 102, outside: 91, temp: 98, wear: 0 },
       RR: { inside: 100, middle: 117, outside: 130, temp: 116, wear: 0 },
     };
-    _baselineMetric = calcPerformance(DEFAULT_SETUP, calibTires, 65);
+    _baselineMetric = calcPerformance(DEFAULT_SETUP, calibTires);
   }
   return _baselineMetric;
 }
@@ -658,7 +662,7 @@ export const F8_BASELINE_SETUP = {
 };
 
 // ============ MAIN SIMULATION ============
-export function simulateRace(setup, ambientTemp = 65, numLaps = 25) {
+export function simulateRace(setup, ambientTemp = 65, numLaps = 25, inflationTemp = COLD_PSI_TEMP) {
   // Initialize tires with I/M/O at slightly above ambient
   let tires = {};
   for (const c of CORNERS) {
@@ -670,14 +674,14 @@ export function simulateRace(setup, ambientTemp = 65, numLaps = 25) {
   const laps = [];
 
   for (let i = 1; i <= numLaps; i++) {
-    const metric = calcPerformance(setup, tires, ambientTemp);
+    const metric = calcPerformance(setup, tires, inflationTemp);
     const lapTime = metricToLapTime(metric);
     const speeds = metricToSpeeds(metric);
 
     // Hot pressures (based on avg temp)
     const hPsi = {};
     for (const c of CORNERS) {
-      hPsi[c] = Math.round(hotPressure(setup.coldPsi[c], tires[c].temp, ambientTemp) * 10) / 10;
+      hPsi[c] = Math.round(hotPressure(setup.coldPsi[c], tires[c].temp, inflationTemp) * 10) / 10;
     }
 
     // Per-tire grip
@@ -714,7 +718,7 @@ export function simulateRace(setup, ambientTemp = 65, numLaps = 25) {
     });
 
     // Update temps for next lap
-    tires = updateTireTemps(tires, workFactors, ambientTemp, lapTime, setup);
+    tires = updateTireTemps(tires, workFactors, ambientTemp, lapTime, setup, inflationTemp);
   }
 
   const times = laps.map(l => l.time);
@@ -733,7 +737,7 @@ export function simulateRace(setup, ambientTemp = 65, numLaps = 25) {
 
 // ============ SETUP ANALYZER ============
 // Returns real-time per-corner analysis, balance, toe, and ranked recommendations.
-export function analyzeSetup(setup, ambientTemp = 65) {
+export function analyzeSetup(setup, ambientTemp = 65, inflationTemp = COLD_PSI_TEMP) {
   const ss = shockStiffness(setup);
   const loads = tireLoads(1.0, ss.frontLLTD);
   // Use actual cornering G for pressure targets — 1G gives absurd RF/LF optPsi
@@ -764,14 +768,14 @@ export function analyzeSetup(setup, ambientTemp = 65) {
 
     // Pressure — use actual cornering G loads (not 1G) for realistic optPsi
     // At OVAL_CORNER_G: RF≈40 PSI, LF≈26 PSI, RR≈36 PSI, LR≈19 PSI (matches real-world data)
-    const hp = hotPressure(setup.coldPsi[c], tEq, ambientTemp);
+    const hp = hotPressure(setup.coldPsi[c], tEq, inflationTemp);
     const optHotPsi = 30 * (cornerLoads[c] / avgLoad);
     const psiDev = hp - optHotPsi;
     const psiGripFactor = pressureGripFactor(hp, cornerLoads[c]);
     // XL-rated Ironman iMove Gen3 AS 235/55R17: 51 PSI cold max → use 51 PSI as hot ceiling.
     const isPresLimited = optHotPsi < 18 || optHotPsi > 51;
     const recHotPsi = Math.min(Math.max(18, optHotPsi), 51);
-    const recColdPsi = recHotPsi * (COLD_PSI_TEMP + RANKINE) / (tEq + RANKINE);
+    const recColdPsi = recHotPsi * (inflationTemp + RANKINE) / (tEq + RANKINE);
 
     // Camber
     let effectiveCamber, idealCamber, camberDev, camberFactor;
@@ -825,7 +829,7 @@ export function analyzeSetup(setup, ambientTemp = 65) {
   const toeDrag = toeDragFactor(toe);
 
   // Current metric + lap time (using equilibrium temps)
-  const metric = calcPerformance(setup, refTires, ambientTemp);
+  const metric = calcPerformance(setup, refTires, inflationTemp);
   const lapTime = metricToLapTime(metric);
 
   // Recommendations
@@ -835,7 +839,7 @@ export function analyzeSetup(setup, ambientTemp = 65) {
     mutate(s);
     // Recompute equilibrium temps for mutated setup — load shifts (from shock changes etc.)
     // cascade into temperature, which feeds tempGripFactor. Using stale refTires would miss this.
-    return lapTime - metricToLapTime(calcPerformance(s, eqTires(s, ambientTemp, calcWorkFactors), ambientTemp));
+    return lapTime - metricToLapTime(calcPerformance(s, eqTires(s, ambientTemp, calcWorkFactors), inflationTemp));
   };
   const recs = [];
 
@@ -955,7 +959,7 @@ export function analyzeSetup(setup, ambientTemp = 65) {
     const m2 = rec.id.match(/^([a-z]{2})-shock$/);
     if (m2) optSetup.shocks[m2[1].toUpperCase()] = rec.optimalVal;
   }
-  const optMetric = calcPerformance(optSetup, eqTires(optSetup, ambientTemp, calcWorkFactors), ambientTemp);
+  const optMetric = calcPerformance(optSetup, eqTires(optSetup, ambientTemp, calcWorkFactors), inflationTemp);
   const optLapTime = metricToLapTime(optMetric);
 
   return {
@@ -982,7 +986,7 @@ export function analyzeSetup(setup, ambientTemp = 65) {
 // Display factors mirror calcPerformanceF8 exactly so scores reflect actual lap time impact.
 const F8_IDEAL_AVG_EFFECTIVE_CAMBER = -2.25; // avg of outside ideal (−4.5°) + inside ideal (0°, flat)
 
-export function analyzeSetupF8(setup, ambientTemp = 65) {
+export function analyzeSetupF8(setup, ambientTemp = 65, inflationTemp = COLD_PSI_TEMP) {
   const ss = shockStiffness(setup);
   // Average loads across L+R turns = static loads (lateral transfer cancels)
   const loadsL = tireLoads(1.0, ss.frontLLTD);
@@ -1015,13 +1019,13 @@ export function analyzeSetupF8(setup, ambientTemp = 65) {
     const tEq = refTires[c].temp;
 
     // Pressure — symmetric loads front-to-front and rear-to-rear, but fronts heavier than rears
-    const hp = hotPressure(setup.coldPsi[c], tEq, ambientTemp);
+    const hp = hotPressure(setup.coldPsi[c], tEq, inflationTemp);
     const optHotPsi = 30 * (load / avgLoad);
     const psiDev = hp - optHotPsi;
     const psiGripFactor = pressureGripFactor(hp, load);
     const isPresLimited = optHotPsi < 18 || optHotPsi > 51;
     const recHotPsi = Math.min(Math.max(18, optHotPsi), 51);
-    const recColdPsi = recHotPsi * (COLD_PSI_TEMP + RANKINE) / (tEq + RANKINE);
+    const recColdPsi = recHotPsi * (inflationTemp + RANKINE) / (tEq + RANKINE);
 
     let effectiveCamber, idealCamber, camberDev, camberFactor;
     let casterGain = 0, casterFactor = 1, optStaticCamber = null;
@@ -1091,7 +1095,7 @@ export function analyzeSetupF8(setup, ambientTemp = 65) {
   const toeGrip = toeGripFactor(toe);
   const toeDrag = toeDragFactor(toe);
 
-  const metric = calcPerformanceF8(setup, refTires, ambientTemp);
+  const metric = calcPerformanceF8(setup, refTires, inflationTemp);
   const lapTime = metricToLapTimeF8(metric);
 
   // Recommendations — testGain uses calcPerformanceF8 directly (ground truth)
@@ -1099,7 +1103,7 @@ export function analyzeSetupF8(setup, ambientTemp = 65) {
   const testGain = (mutate) => {
     const s = clone(setup);
     mutate(s);
-    return lapTime - metricToLapTimeF8(calcPerformanceF8(s, eqTires(s, ambientTemp, calcWorkFactorsF8), ambientTemp));
+    return lapTime - metricToLapTimeF8(calcPerformanceF8(s, eqTires(s, ambientTemp, calcWorkFactorsF8), inflationTemp));
   };
   const recs = [];
 
@@ -1221,7 +1225,7 @@ export function analyzeSetupF8(setup, ambientTemp = 65) {
     const m2 = rec.id.match(/^([a-z]{2})-shock$/);
     if (m2) optSetup.shocks[m2[1].toUpperCase()] = rec.optimalVal;
   }
-  const optMetric = calcPerformanceF8(optSetup, eqTires(optSetup, ambientTemp, calcWorkFactorsF8), ambientTemp);
+  const optMetric = calcPerformanceF8(optSetup, eqTires(optSetup, ambientTemp, calcWorkFactorsF8), inflationTemp);
   const optLapTime = metricToLapTimeF8(optMetric);
 
   return {
@@ -1266,7 +1270,7 @@ function calcWorkFactorsF8(setup) {
   };
 }
 
-function calcPerformanceF8(setup, tires, ambient) {
+function calcPerformanceF8(setup, tires, inflationTemp = COLD_PSI_TEMP) {
   const refG   = 1.0;
   const ss     = shockStiffness(setup);
   const loadsL = tireLoads(refG, ss.frontLLTD);
@@ -1290,7 +1294,7 @@ function calcPerformanceF8(setup, tires, ambient) {
       const outside  = isLeft ? OUTSIDE[c] : !OUTSIDE[c];
       const load     = isLeft ? loadsL[c]  : loadsR[c];
       const cLoad    = isLeft ? cLoadsL[c] : cLoadsR[c]; // corner G for pressure
-      const hp       = hotPressure(setup.coldPsi[c], avgTemp, ambient);
+      const hp       = hotPressure(setup.coldPsi[c], avgTemp, inflationTemp);
 
       let mu = 1.0;
       mu *= tempGripFactor(avgTemp);
@@ -1346,7 +1350,7 @@ const F8_ZONE = [0.94, 1.0, 1.06];
 //             RR wf=0.90: tEq = 75 + (0.53×1.18 + 0.00453×0.90×75)/0.02 ≈ 121°F ✓
 const F8_HEAT_MULT = 1.18;
 
-function updateTireTempsF8(tires, workFactors, ambient, lapTime, setup) {
+function updateTireTempsF8(tires, workFactors, ambient, lapTime, setup, inflationTemp = COLD_PSI_TEMP) {
   const newTires = {};
   const toe    = setup.toe    !== undefined ? setup.toe    : -0.25;
   const caster = setup.caster || { LF: 3.5, RF: 5.0 };
@@ -1368,7 +1372,7 @@ function updateTireTempsF8(tires, workFactors, ambient, lapTime, setup) {
 
     const camberShift = -camberAvg * 0.02;
     const avgTemp = (tires[c].inside + tires[c].middle + tires[c].outside) / 3;
-    const hp      = hotPressure(setup.coldPsi[c], avgTemp, ambient);
+    const hp      = hotPressure(setup.coldPsi[c], avgTemp, inflationTemp);
     const psiMiddleBoost = (hp - 30 * wf) * 0.003;
     const toeMiddleBoost = front ? Math.abs(toe) * 0.008 : 0;
 
@@ -1411,7 +1415,7 @@ function getBaselineMetricF8() {
       LR: { inside: 128, middle: 129, outside: 127, temp: 128.0, wear: 0 },
       RR: { inside: 120, middle: 121, outside: 120, temp: 120.3, wear: 0 },
     };
-    _baselineMetricF8 = calcPerformanceF8(F8_BASELINE_SETUP, calibTires, 75);
+    _baselineMetricF8 = calcPerformanceF8(F8_BASELINE_SETUP, calibTires);
   }
   return _baselineMetricF8;
 }
@@ -1442,7 +1446,7 @@ function metricToSpeedsF8(metric) {
   };
 }
 
-export function simulateRaceF8(setup, ambientTemp = 65, numLaps = 20) {
+export function simulateRaceF8(setup, ambientTemp = 65, numLaps = 20, inflationTemp = COLD_PSI_TEMP) {
   let tires = {};
   for (const c of CORNERS) {
     const t = ambientTemp + 5;
@@ -1453,12 +1457,12 @@ export function simulateRaceF8(setup, ambientTemp = 65, numLaps = 20) {
   const laps = [];
 
   for (let i = 1; i <= numLaps; i++) {
-    const metric  = calcPerformanceF8(setup, tires, ambientTemp);
+    const metric  = calcPerformanceF8(setup, tires, inflationTemp);
     const lapTime = metricToLapTimeF8(metric);
     const speeds  = metricToSpeedsF8(metric);
     const hPsi    = {};
     for (const c of CORNERS) {
-      hPsi[c] = Math.round(hotPressure(setup.coldPsi[c], tires[c].temp, ambientTemp) * 10) / 10;
+      hPsi[c] = Math.round(hotPressure(setup.coldPsi[c], tires[c].temp, inflationTemp) * 10) / 10;
     }
     laps.push({
       lap: i,
@@ -1479,7 +1483,7 @@ export function simulateRaceF8(setup, ambientTemp = 65, numLaps = 20) {
         LR: Math.round(tires.LR.wear*10000)/10000, RR: Math.round(tires.RR.wear*10000)/10000,
       },
     });
-    tires = updateTireTempsF8(tires, workFactors, ambientTemp, lapTime, setup);
+    tires = updateTireTempsF8(tires, workFactors, ambientTemp, lapTime, setup, inflationTemp);
   }
 
   const times = laps.map(l => l.time);

@@ -90,7 +90,7 @@ const TIPS = {
   solidAxle: 'The rear axle is solid (live axle) — both rear wheels tilt together with body roll. You cannot set rear camber directly. Reducing body roll (stiffer rear shocks) brings dynamic camber closer to ideal.',
   camberScore: 'Grip multiplier from camber alignment. 100% = effective camber matches the model\'s ideal for this corner. Each degree of deviation costs roughly 1.2% grip.',
   pressureSection: 'Tire pressure affects contact patch shape. Under-inflated tires flex excessively and overheat the edges; over-inflated tires crown and only use the center of the tread.',
-  coldHot: 'Cold PSI is what you set in the garage (~68°F). Hot PSI is the pressure at racing temperature — calculated using the ideal gas law with 68°F as the cold reference. At 200°F tires: 34 cold → ~42.5 PSI hot (+8.5 PSI). Ambient temperature does NOT affect this — only the difference between your inflation temp and the tire\'s racing temp matters.',
+  coldHot: 'Cold PSI is what you set when inflating the tires. Hot PSI is calculated via ideal gas law using the "Tires Set At" temperature as the cold reference. At 200°F tires set at 85°F: 34 cold → ~40.9 PSI hot. Setting tires on a hot day means less pressure rise — and shifts target cold PSI higher.',
   optimalHot: 'The hot pressure that gives maximum grip for this corner\'s load. Heavily loaded tires (RF, RR) need higher pressure to support the load; lightly loaded tires (LF, LR) need less.',
   presScore: 'Grip multiplier from tire pressure. 100% = hot pressure matches the load-optimal target. Each PSI of deviation costs ~0.25% grip.',
   loadMismatch: 'This corner\'s load is far from the car\'s average, so the mathematically optimal pressure is outside a practical range. Run the lowest safe pressure for lightly loaded corners and the highest safe pressure for heavily loaded ones.',
@@ -516,8 +516,8 @@ function CompactSetupForm({ setup, onChange }) {
   );
 }
 
-export default function SetupOptimizer({ setup, setSetup, ambient, setAmbient }) {
-  const analysis = useMemo(() => analyzeSetup(setup, ambient), [setup, ambient]);
+export default function SetupOptimizer({ setup, setSetup, ambient, setAmbient, inflationTemp, setInflationTemp }) {
+  const analysis = useMemo(() => analyzeSetup(setup, ambient, inflationTemp), [setup, ambient, inflationTemp]);
   const {
     corners, ss, roll, frontGripPct, balancePenalty,
     toeGrip, toeDrag, toe,
@@ -616,6 +616,13 @@ export default function SetupOptimizer({ setup, setSetup, ambient, setAmbient })
           <input type="number" min="30" max="120" step="5" className="opt-input"
             value={ambient}
             onChange={e => setAmbient(parseFloat(e.target.value) || 65)}
+          />
+        </div>
+        <div className="opt-form-field">
+          <label>Tires Set At (°F)</label>
+          <input type="number" min="30" max="120" step="1" className="opt-input"
+            value={inflationTemp}
+            onChange={e => setInflationTemp(parseFloat(e.target.value) || 68)}
           />
         </div>
         <div className="opt-presets">
