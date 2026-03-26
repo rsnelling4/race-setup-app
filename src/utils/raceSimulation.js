@@ -215,9 +215,12 @@ function hotPressure(coldPsi, tireTemp, inflationTemp = COLD_PSI_TEMP) {
 function shockStiffness(setup) {
   const f = (10 - setup.shocks.LF) + (10 - setup.shocks.RF);
   const r = (10 - setup.shocks.LR) + (10 - setup.shocks.RR);
-  // Spring-rate contribution to LLTD: stiffer front spring → more front lateral load transfer
-  const springF = setup.springs?.front ?? BASE_SPRING_FRONT;
-  const springR = setup.springs?.rear  ?? BASE_SPRING_REAR;
+  // Front spring: average LF+RF (may differ when different assemblies are used on each side).
+  // Supports both new per-corner format { LF, RF, LR, RR } and legacy { front, rear }.
+  const springLF = setup.springs?.LF ?? setup.springs?.front ?? BASE_SPRING_FRONT;
+  const springRF = setup.springs?.RF ?? setup.springs?.front ?? BASE_SPRING_FRONT;
+  const springF  = (springLF + springRF) / 2;
+  const springR  = setup.springs?.LR ?? setup.springs?.rear  ?? BASE_SPRING_REAR;
   const springLLTD = (springF / BASE_SPRING_FRONT) /
     ((springF / BASE_SPRING_FRONT) + (springR / BASE_SPRING_REAR));
   const damperLLTD = f / Math.max(f + r, 1);
@@ -238,9 +241,11 @@ function bodyRoll(lateralG, totalStiffness) {
 // Calibrated so baseline (475F/160R springs + 4/4/2/2 dampers) returns exactly 28,
 // preserving all existing bodyRoll() calibration.
 function rollStiffness(setup) {
-  const springF = setup.springs?.front ?? BASE_SPRING_FRONT;
-  const springR = setup.springs?.rear  ?? BASE_SPRING_REAR;
-  const ss      = shockStiffness(setup);
+  const springLF = setup.springs?.LF ?? setup.springs?.front ?? BASE_SPRING_FRONT;
+  const springRF = setup.springs?.RF ?? setup.springs?.front ?? BASE_SPRING_FRONT;
+  const springF  = (springLF + springRF) / 2;
+  const springR  = setup.springs?.LR ?? setup.springs?.rear  ?? BASE_SPRING_REAR;
+  const ss       = shockStiffness(setup);
   // Normalize springs to baseline (1.0 = stock P71): both front and rear normalize independently
   const springScale = (springF / BASE_SPRING_FRONT + springR / BASE_SPRING_REAR) / 2;
   // Normalize damper total to baseline (28 at 4/4/2/2)
@@ -571,7 +576,7 @@ function metricToSpeeds(metric) {
 // ============ DEFAULT SETUP (user's current) ============
 export const DEFAULT_SETUP = {
   shocks: { LF: 4, RF: 4, LR: 2, RR: 2 },
-  springs: { front: 475, rear: 160 },
+  springs: { LF: 475, RF: 475, LR: 160, RR: 160 },
   camber: { LF: -1.5, RF: -3.0 },
   caster: { LF: 3.5, RF: 5.0 },
   toe: -0.25, // 1/4" toe out (negative = toe out)
@@ -592,7 +597,7 @@ export const DEFAULT_SETUP = {
 // LR cold PSI: optimal hot LR = 17.4 PSI → cold at 95°F eq = 16.6 PSI. Rounds to 16.5.
 export const RECOMMENDED_SETUP = {
   shocks: { LF: 8, RF: 6, LR: 1, RR: 1 },
-  springs: { front: 440, rear: 160 },
+  springs: { LF: 440, RF: 440, LR: 160, RR: 160 },
   camber: { LF: -0.5, RF: -3.0 },
   caster: { LF: 3.0, RF: 5.0 },
   toe: -0.25,
@@ -603,7 +608,7 @@ export const RECOMMENDED_SETUP = {
 // Pete's race setup — LF/RF FCS 1336349 (rating 4), LR/RR KYB 555603 (rating 2)
 export const PETE_SETUP = {
   shocks: { LF: 4, RF: 4, LR: 2, RR: 2 },
-  springs: { front: 475, rear: 160 },
+  springs: { LF: 475, RF: 475, LR: 160, RR: 160 },
   camber: { LF: -2.25, RF: -2.75 },
   caster: { LF: 3.5, RF: 8.0 },
   toe: -0.25,
@@ -614,7 +619,7 @@ export const PETE_SETUP = {
 // Dylan's race setup — LF/RF FCS 1336349 (rating 4), LR/RR KYB 555603 (rating 2)
 export const DYLAN_SETUP = {
   shocks: { LF: 4, RF: 4, LR: 2, RR: 2 },
-  springs: { front: 475, rear: 160 },
+  springs: { LF: 475, RF: 475, LR: 160, RR: 160 },
   camber: { LF: -2.0, RF: -2.75 },
   caster: { LF: 4.0, RF: 3.25 },
   toe: -0.25,
@@ -625,7 +630,7 @@ export const DYLAN_SETUP = {
 // Josh's race setup — LF/RF FCS 1336349 (rating 4), LR/RR KYB 555603 (rating 2)
 export const JOSH_SETUP = {
   shocks: { LF: 4, RF: 4, LR: 2, RR: 2 },
-  springs: { front: 475, rear: 160 },
+  springs: { LF: 475, RF: 475, LR: 160, RR: 160 },
   camber: { LF: -0.75, RF: -1.75 },
   caster: { LF: 5.0, RF: 7.0 },
   toe: -0.25,
@@ -636,7 +641,7 @@ export const JOSH_SETUP = {
 // Retained as a symmetric reference setup for the F8 optimizer.
 export const DEFAULT_SETUP_F8 = {
   shocks: { LF: 4, RF: 4, LR: 3, RR: 3 },
-  springs: { front: 475, rear: 160 },
+  springs: { LF: 475, RF: 475, LR: 160, RR: 160 },
   camber: { LF: -2.5, RF: -2.5 },
   caster: { LF: 4.0, RF: 4.0 },
   toe: -0.25,
@@ -656,7 +661,7 @@ export const DEFAULT_SETUP_F8 = {
 //   this L/R difference; right-side temps (RF/RR) are the best model calibration point.
 export const F8_BASELINE_SETUP = {
   shocks: { LF: 4, RF: 4, LR: 2, RR: 2 },
-  springs: { front: 475, rear: 160 },
+  springs: { LF: 475, RF: 475, LR: 160, RR: 160 },
   camber: { LF: -2.75, RF: -3.0 },
   caster: { LF: 5.5, RF: 3.75 },
   toe: -0.25,

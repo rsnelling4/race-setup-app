@@ -4,6 +4,11 @@ import { REAR_SHOCKS, FRONT_STRUTS, shockLabel } from '../data/shockOptions';
 import NumericInput from './NumericInput';
 
 const CORNERS = ['LF', 'RF', 'LR', 'RR'];
+const FRONT_SPRING_OPTIONS = [
+  { value: 700, label: '700 lbs/in — Pre-2003 / Heavy Duty' },
+  { value: 475, label: '475 lbs/in — Police / Taxi (P71 stock)' },
+  { value: 440, label: '440 lbs/in — Civilian / Base' },
+];
 const CORNER_LABELS = { LF: 'Left Front', RF: 'Right Front', LR: 'Left Rear', RR: 'Right Rear' };
 const TARGET = 17.1;
 const RANGE_MIN = 16.8;
@@ -557,10 +562,10 @@ function CompactSetupForm({ setup, onChange }) {
     const s = deepClone(setup);
     s.shocks[corner] = found.rating;
     // Complete strut assemblies (Quick-Strut, Strut-Plus) include their own coil spring.
-    // When one is selected for a front corner, update the front spring rate accordingly.
-    // Damper-only parts leave the existing car spring in place (P71 stock = 475 lbs/in).
-    if (isFront) {
-      s.springs.front = found.springRate ?? 475;
+    // Auto-fill that corner's spring rate as a convenience — user can override via selector.
+    // Damper-only parts leave the existing spring rate unchanged.
+    if (isFront && found.springRate) {
+      s.springs[corner] = found.springRate;
     }
     onChange(s);
   };
@@ -593,6 +598,22 @@ function CompactSetupForm({ setup, onChange }) {
               </div>
             );
           })}
+
+          <div className="opt-form-label" style={{ marginTop: 12 }}>Front Spring Rates</div>
+          {['LF', 'RF'].map(c => (
+            <div key={c} className="opt-form-field">
+              <label>{c}</label>
+              <select
+                className="opt-select"
+                value={setup.springs[c] ?? 475}
+                onChange={e => update(`springs.${c}`, parseInt(e.target.value))}
+              >
+                {FRONT_SPRING_OPTIONS.map(o => (
+                  <option key={o.value} value={o.value}>{o.label}</option>
+                ))}
+              </select>
+            </div>
+          ))}
         </div>
 
         <div className="opt-form-col">
