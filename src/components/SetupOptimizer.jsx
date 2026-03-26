@@ -550,11 +550,18 @@ function CompactSetupForm({ setup, onChange }) {
   };
 
   const updateShock = (corner, label) => {
-    const list = (corner === 'LF' || corner === 'RF') ? FRONT_STRUTS : REAR_SHOCKS;
+    const isFront = corner === 'LF' || corner === 'RF';
+    const list = isFront ? FRONT_STRUTS : REAR_SHOCKS;
     const found = list.find(s => shockLabel(s) === label);
     if (!found) return;
     const s = deepClone(setup);
     s.shocks[corner] = found.rating;
+    // Complete strut assemblies (Quick-Strut, Strut-Plus) include their own coil spring.
+    // When one is selected for a front corner, update the front spring rate accordingly.
+    // Damper-only parts leave the existing car spring in place (P71 stock = 475 lbs/in).
+    if (isFront) {
+      s.springs.front = found.springRate ?? 475;
+    }
     onChange(s);
   };
 
