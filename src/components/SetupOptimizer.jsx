@@ -327,11 +327,13 @@ function BalanceGauge({ frontGripPct, frontLLTD, corners, setup }) {
 
 // ── Static Camber Calculator ──────────────────────────────────────────────────
 // Coefficients mirror raceSimulation.js exactly.
-// RF (outside, jounce): casterCoeff=0.18, rollCoeff=0.35, ideal=-4.5°
-// LF (inside, droop):   casterCoeff=0.10, rollCoeff=0.15, ideal=0°
+// RF (outside, jounce): casterCoeff=0.18, rollCoeff=0.35, ideal=-4.5° (chassis-relative)
+// LF (inside, droop):   casterCoeff=0.10, rollCoeff=0.15, ideal=+cornerRoll (dynamic)
+//   LF chassis-relative ideal = +cornerRoll so that after body-roll frame correction
+//   (tireToGround = effectiveCamber − cornerRoll) the tire sits flat to pavement (0° ground).
 const CALC = {
   RF: { outside: true,  casterCoeff: 0.18, rollCoeff: 0.35, ideal: -4.5 },
-  LF: { outside: false, casterCoeff: 0.10, rollCoeff: 0.15, ideal:  0.0 },
+  LF: { outside: false, casterCoeff: 0.10, rollCoeff: 0.15, ideal: null }, // computed dynamically
 };
 const OVAL_CORNER_G_CALC = 0.375;
 
@@ -344,12 +346,20 @@ function CamberCalc({ roll, setupCaster }) {
   });
 
   const compute = (c) => {
-    const { outside, casterCoeff, rollCoeff, ideal } = CALC[c];
+    const { outside, casterCoeff, rollCoeff } = CALC[c];
+    const ideal = outside ? CALC[c].ideal : cornerRoll; // LF: chassis-relative ideal = cornerRoll
     const casterGain = outside ? -(caster[c] * casterCoeff) :  (caster[c] * casterCoeff);
     const rollGain   = outside ? -(cornerRoll * rollCoeff)  :  (cornerRoll * rollCoeff);
     const totalGain  = casterGain + rollGain;
     const optStatic  = Math.round((ideal - casterGain - rollGain) * 4) / 4;
-    return { casterGain, rollGain, totalGain, ideal, optStatic };
+    const effectiveCamber = optStatic + totalGain;
+    // Tire-to-ground angle: rotate from chassis frame to ground frame using body roll.
+    // RF (outside): chassis rolls away → ground camber = effectiveCamber + cornerRoll
+    // LF (inside):  chassis rolls toward → ground camber = effectiveCamber − cornerRoll
+    const groundCamber = outside
+      ? effectiveCamber + cornerRoll
+      : effectiveCamber - cornerRoll;
+    return { casterGain, rollGain, totalGain, ideal, optStatic, groundCamber };
   };
 
   return (
@@ -362,7 +372,7 @@ function CamberCalc({ roll, setupCaster }) {
       </p>
       <div className="opt-calc-grid">
         {['LF', 'RF'].map(c => {
-          const { casterGain, rollGain, totalGain, ideal, optStatic } = compute(c);
+          const { casterGain, rollGain, totalGain, ideal, optStatic, groundCamber } = compute(c);
           const label = c === 'RF' ? 'Right Front (outside)' : 'Left Front (inside)';
           return (
             <div key={c} className="opt-balance-card opt-calc-card">
@@ -391,8 +401,8 @@ function CamberCalc({ roll, setupCaster }) {
                 </span>
               </div>
               <div className="opt-stat-pair">
-                <span>Ideal effective</span>
-                <span>{ideal.toFixed(1)}°</span>
+                <span>Ideal effective (chassis)</span>
+                <span>{ideal.toFixed(2)}°</span>
               </div>
 
               <div className="opt-calc-result">
@@ -403,6 +413,13 @@ function CamberCalc({ roll, setupCaster }) {
                 {optStatic}° + ({totalGain >= 0 ? '+' : ''}{totalGain.toFixed(2)}°) ={' '}
                 <span style={{ color: 'var(--green)' }}>
                   {(optStatic + totalGain).toFixed(2)}° eff.
+                </span>
+              </div>
+
+              <div className="opt-stat-pair" style={{ marginTop: 6, borderTop: '1px solid var(--border)', paddingTop: 6 }}>
+                <span>Tire-to-ground angle</span>
+                <span style={{ color: Math.abs(groundCamber) < 0.15 ? 'var(--green)' : 'var(--accent)' }}>
+                  {groundCamber >= 0 ? '+' : ''}{groundCamber.toFixed(2)}°
                 </span>
               </div>
             </div>

@@ -139,15 +139,16 @@ function pressureGripFactor(hotPsi, tireLoad) {
 // Outside front (RF in left turns): jounce/compression. SLA geometry (shorter upper arm)
 //   gains NEGATIVE camber in jounce — the key SLA advantage over MacPherson, which gains
 //   positive camber in jounce. Ideal effective ≈ -4.5° at 1G.
-// Inside front (LF): droop/extension. Gains POSITIVE camber (top tilts outward), same
-//   direction as MacPherson droop. Less critical since inside tire carries low load.
-//   Ideal effective ≈ 0° (flat contact patch).
-function camberGripFactor(actualCamber, isOutside, lateralG) {
+// Inside front (LF): droop/extension. Gains POSITIVE camber (top tilts outward).
+//   Ideal chassis-relative effective = +cornerRoll, so that after the body-roll frame
+//   correction (tireToGround = effectiveCamber − cornerRoll) the tire sits flat to the
+//   pavement (0° ground camber). Passing cornerRoll = 0 defaults to the old flat-patch model.
+function camberGripFactor(actualCamber, isOutside, lateralG, cornerRoll = 0) {
   let ideal;
   if (isOutside) {
     ideal = -(2.5 + lateralG * 2.0);  // -4.5° at 1G (calibrated to pyrometer data)
   } else {
-    ideal = 0;                         // 0° — flat contact patch is optimal for inside front
+    ideal = cornerRoll;                // chassis-relative ideal: +cornerRoll → 0° ground camber
   }
   const dev = Math.abs(actualCamber - ideal);
   return Math.max(0.88, 1 - 0.012 * dev);
@@ -317,7 +318,7 @@ function calcPerformance(setup, tires, inflationTemp = COLD_PSI_TEMP) {
         ? -(cornerRoll * 0.35)  // RF in jounce: SLA gains negative camber
         :  (cornerRoll * 0.15); // LF in droop: gains positive camber (low inside load)
       const effectiveCamber = setup.camber[c] + casterCamberGain + bodyRollCamber;
-      mu *= camberGripFactor(effectiveCamber, outside, refG);
+      mu *= camberGripFactor(effectiveCamber, outside, refG, cornerRoll);
       // Caster direct effect (trail, stability)
       mu *= casterGripFactor(caster[c], outside, true);
     } else {
@@ -788,9 +789,9 @@ export function analyzeSetup(setup, ambientTemp = 65, inflationTemp = COLD_PSI_T
       const cornerRoll = roll * OVAL_CORNER_G;
       bodyRollCamber = outside ? -(cornerRoll * 0.35) : (cornerRoll * 0.15);
       effectiveCamber = setup.camber[c] + casterGain + bodyRollCamber;
-      idealCamber = outside ? -4.5 : 0.0;
+      idealCamber = outside ? -4.5 : cornerRoll; // LF: chassis-relative ideal for 0° ground camber
       camberDev = Math.abs(effectiveCamber - idealCamber);
-      camberFactor = camberGripFactor(effectiveCamber, outside, 1.0);
+      camberFactor = camberGripFactor(effectiveCamber, outside, 1.0, cornerRoll);
       casterFactor = casterGripFactor(caster[c], outside, true);
       optStaticCamber = Math.round((idealCamber - casterGain - bodyRollCamber) * 4) / 4;
     } else {
