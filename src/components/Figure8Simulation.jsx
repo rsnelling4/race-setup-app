@@ -411,7 +411,7 @@ export default function Figure8Simulation({ setup, setSetup, ambient, setAmbient
       <div className="sim-context-cards">
         <div className="sim-context-card">
           <h4>Vehicle</h4>
-          <p>2008 Crown Vic P71 — 3800 lbs, 4.6L V8 (~300 HP), 3.73 gears, stripped + cage</p>
+          <p>2008 Crown Vic P71 — 4100 lbs, 4.6L V8 (~300 HP), 3.73 gears, stripped + cage</p>
         </div>
         <div className="sim-context-card">
           <h4>Track</h4>

@@ -26,11 +26,12 @@ const TRACK = { cornerRadius: 105, bankingDeg: 3 };
 TRACK.bankingRad = TRACK.bankingDeg * Math.PI / 180;
 
 const VEH = {
-  weight:    3800,
-  mass:      3800 / G,
-  frontBias: 0.55,
-  cgHeight:  22 / 12,
-  trackWidth:63 / 12,
+  weight:          4100,
+  mass:            4100 / G,
+  frontBias:       0.55,
+  cgHeight:        22 / 12,
+  rollCenterHeight: 3 / 12, // ft — front roll center height (3 inches, measured)
+  trackWidth:      63 / 12,
 };
 
 const THERMAL = {
@@ -89,11 +90,11 @@ function shockStiffness(lfR, rfR, lrR, rrR) {
 }
 
 function bodyRoll(lateralG, totalStiffness) {
-  return lateralG * 3.5 * 28 / Math.max(totalStiffness, 4);
+  return lateralG * 3.1 * 28 / Math.max(totalStiffness, 4); // 3.1°/G measured at corner speed
 }
 
 function tireLoads(lateralG, frontLLTD) {
-  const lat = VEH.weight * lateralG * VEH.cgHeight / VEH.trackWidth;
+  const lat = VEH.weight * lateralG * (VEH.cgHeight - VEH.rollCenterHeight) / VEH.trackWidth;
   const fs  = VEH.weight * VEH.frontBias / 2;
   const rs  = VEH.weight * (1 - VEH.frontBias) / 2;
   return {
@@ -132,7 +133,7 @@ function calcPerformance(ss, camber, caster, toe, coldPsi, tireTemps, ambient) {
 
     if (front) {
       const casterGain   = outside ? -(caster[c] * 0.18 * refG) : (caster[c] * 0.10 * refG);
-      const brCamber     = outside ? -(cornerRoll * 0.35) : (cornerRoll * 0.15);
+      const brCamber     = outside ? -(cornerRoll * 0.355) : (cornerRoll * 0.15); // 0.355=1.1°/3.1°
       const effCamber    = camber[c] + casterGain + brCamber;
       mu *= camberGripFactor(effCamber, outside, refG);
       mu *= casterGripFactor(caster[c], outside);
@@ -350,7 +351,7 @@ for (const { lfR, rfR, lrR, rrR, ss } of shockConfigs) {
       staticLF = Math.round(staticLF * 4) / 4; // round to 0.25°
 
       const rfCasterGain = -(cRF * 0.18);
-      const rfBodyRoll   = -(cornerRoll * 0.35);
+      const rfBodyRoll   = -(cornerRoll * 0.355); // 0.355=1.1°/3.1°
       let staticRF = -4.5 - rfCasterGain - rfBodyRoll; // ideal effective RF = -4.5°
       staticRF = Math.max(CAMBER_RF_MIN, Math.min(CAMBER_RF_MAX, staticRF));
       staticRF = Math.round(staticRF * 4) / 4;

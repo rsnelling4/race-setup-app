@@ -26,12 +26,13 @@ const COLD_PSI_TEMP = 68;
 const F8_HEAT_MULT  = 1.18;
 
 const VEH = {
-  weight:    3800,
-  mass:      3800 / G,
-  frontBias: 0.55,
-  cgHeight:  22 / 12,
-  trackWidth:63 / 12,
-  tireRadius:13.6 / 12,
+  weight:          4100,
+  mass:            4100 / G,
+  frontBias:       0.55,
+  cgHeight:        22 / 12,
+  rollCenterHeight: 3 / 12, // ft — front roll center height (3 inches, measured)
+  trackWidth:      63 / 12,
+  tireRadius:      13.6 / 12,
 };
 
 const THERMAL = {
@@ -89,11 +90,11 @@ function shockStiffness(lfR, rfR, lrR, rrR) {
 }
 
 function bodyRoll(lateralG, totalStiffness) {
-  return lateralG * 3.5 * 28 / Math.max(totalStiffness, 4);
+  return lateralG * 3.1 * 28 / Math.max(totalStiffness, 4); // 3.1°/G measured at corner speed
 }
 
 function tireLoads(lateralG, frontLLTD) {
-  const lat = VEH.weight * lateralG * VEH.cgHeight / VEH.trackWidth;
+  const lat = VEH.weight * lateralG * (VEH.cgHeight - VEH.rollCenterHeight) / VEH.trackWidth;
   const fs  = VEH.weight * VEH.frontBias / 2;
   const rs  = VEH.weight * (1 - VEH.frontBias) / 2;
   return {

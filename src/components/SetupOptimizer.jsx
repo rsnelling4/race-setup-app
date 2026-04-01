@@ -84,16 +84,19 @@ const TIPS = {
   tempFactor: 'Grip multiplier from tire temperature. These all-season tires are optimal between 100–165°F. Below 100°F the tire is cold and loses grip; above 165°F heat starts to degrade the compound.',
   camberSection: 'Camber is the inward/outward tilt of the tire. Negative camber tilts the top of the tire inward. The outside front (RF in a left turn) needs negative camber to stay flat on the road under cornering load.',
   staticCamber: 'Your static alignment setting in degrees. Negative = top of tire tilted inward toward the car. This is what you set in the garage.',
-  casterGain: 'Combined dynamic camber change from caster and SLA body roll. Caster: opposite directions on each wheel — RF (outside) gains negative camber (~0.18°/deg caster), LF (inside) gains positive (~0.10°/deg). SLA body roll: RF gains additional negative camber in jounce; LF gains slight positive in droop. Net effect moves each tire toward or away from its ideal contact patch angle.',
-  effectiveCamber: 'The actual camber angle at mid-corner: static setting plus caster-induced gain. This is what the tire "sees" during the hardest part of the corner. The goal is to keep the contact patch as flat as possible under body roll.',
+  casterGain: 'Combined dynamic camber change from three sources: (1) Caster geometry — RF gains negative camber (~0.18°/deg caster), LF gains positive (~0.10°/deg). (2) SLA body roll — RF gains additional negative in jounce (0.355°/° roll), LF gains slight positive in droop. (3) KPI (kingpin inclination 9.5°) — adds +0.03° positive camber to RF, −0.03° to LF at ~10° steer. KPI effect is small but included for accuracy.',
+  effectiveCamber: 'Chassis-relative effective camber at mid-corner: static setting plus caster gain, SLA body-roll gain, and KPI-induced camber. This is the angle relative to the car body — not the same as tire-to-road angle.',
+  groundCamber: 'Tire-to-road angle at mid-corner — the contact patch metric. Accounts for body roll rotating the chassis: outside tire\'s ground camber = effective + cornerRoll; inside = effective − cornerRoll. This is what actually determines how the contact patch loads.',
   idealCamber: {
-    outside: 'Model target for the outside front (RF) at 1G: −4.5°. Calibrated from pyrometer data — the RF consistently shows outside edge hotter than inside, meaning the tire needs more negative camber than a generic model would suggest. More negative camber shifts load toward the inside edge for a flatter contact patch.',
-    inside: 'Model target for the inside front (LF): 0° effective (flat contact patch). With SLA suspension, caster adds slight positive camber gain (+0.35° at 3.5° caster) and body roll adds a small positive shift in droop. These dynamic gains partially offset the static negative camber — the optimal static setting is around −0.5° to −0.75° to achieve near-0° effective. Running too much static negative camber on the LF (inside tire) loads the inside edge unnecessarily — the pyrometer inside-hot pattern on the LF is the key indicator.',
-    rearOutside: 'Ideal dynamic camber for the outside rear (RR): −1.0°. With a solid axle the rear tilts with body roll — stiffer shocks reduce roll and keep camber closer to optimal.',
-    rearInside: 'Ideal dynamic camber for the inside rear (LR): 0°. The inside rear is very lightly loaded in a left turn; near-zero camber is optimal.',
+    outside: 'Target ground camber for the outside front (RF): −2.0°. At 0° ground the contact patch is geometrically flat, but under cornering load the outside tread crown lifts slightly — a small negative ground angle compensates. Calibrated for the Ironman 235/55R17 tall sidewall; a stiffer low-profile tire would need more negative. Refine this target with camber sweep tests: the setting that produces even I/M/O pyrometer temps is the true optimum.',
+    inside: 'Target ground camber for the inside front (LF): 0° (flat contact patch). The inside front is lightly loaded — maximum contact patch area matters more than centrifugal compensation.',
+    rearOutside: 'Target ground camber for the outside rear (RR): 0°. With a solid axle the tire tilts with body roll — the car rolls outward, adding positive ground camber to the outside rear. Stiffer rear shocks reduce roll and keep this closer to 0°.',
+    rearInside: 'Target ground camber for the inside rear (LR): 0°. The inside rear is very lightly loaded. No adjustment possible — controlled only by reducing body roll.',
   },
-  solidAxle: 'The rear axle is solid (live axle) — both rear wheels tilt together with body roll. You cannot set rear camber directly. Reducing body roll (stiffer rear shocks) brings dynamic camber closer to ideal.',
-  camberScore: 'Grip multiplier from camber alignment. 100% = effective camber matches the model\'s ideal for this corner. Each degree of deviation costs roughly 1.2% grip.',
+  solidAxle: 'The rear axle is solid (live axle) — both rear wheels tilt together with body roll. You cannot set rear camber directly. Reducing body roll (stiffer rear shocks) brings ground camber closer to 0° on both rears.',
+  camberScore: 'Grip multiplier from camber alignment. 100% = ground camber matches the target for this corner. Each degree of deviation from target costs roughly 1.2% grip.',
+  alignmentRange: 'P71 front camber adjustable range: approximately −0.5° to −3.0° with stock eccentric alignment bolts. Values outside this range require aftermarket camber bolts or alignment shims.',
+  sidewallCamber: 'Positive camber added at the contact patch by sidewall compliance. The 235/55R17 55-series sidewall deflects outward under load, shifting the contact patch and effectively leaning the tire away from center. This is load-dependent (heavier corner = more deflection) and must be offset by additional static negative camber. Data: Ironman iMove Gen3 AS 235/55R17, section height 5.09\", load-deflection curve measured at 500/1000/1500/1929 lbs.',
   pressureSection: 'Tire pressure affects contact patch shape. Under-inflated tires flex excessively and overheat the edges; over-inflated tires crown and only use the center of the tread.',
   coldHot: 'Cold PSI is what you set when inflating the tires. Hot PSI is calculated via ideal gas law using the "Tires Set At" temperature as the cold reference. At 200°F tires set at 85°F: 34 cold → ~40.9 PSI hot. Setting tires on a hot day means less pressure rise — and shifts target cold PSI higher.',
   optimalHot: 'The hot pressure that gives maximum grip for this corner\'s load. Heavily loaded tires (RF, RR) need higher pressure to support the load; lightly loaded tires (LF, LR) need less.',
@@ -332,13 +335,14 @@ function BalanceGauge({ frontGripPct, frontLLTD, corners, setup }) {
 
 // ── Static Camber Calculator ──────────────────────────────────────────────────
 // Coefficients mirror raceSimulation.js exactly.
-// RF (outside, jounce): casterCoeff=0.18, rollCoeff=0.35, ideal=-4.5° (chassis-relative)
-// LF (inside, droop):   casterCoeff=0.10, rollCoeff=0.15, ideal=+cornerRoll (dynamic)
-//   LF chassis-relative ideal = +cornerRoll so that after body-roll frame correction
-//   (tireToGround = effectiveCamber − cornerRoll) the tire sits flat to pavement (0° ground).
+// All ideals now in GROUND FRAME (tire-to-road angle) — consistent with camberGripFactor.
+//   RF (outside): idealGround = -2.0° → chassis-relative ideal = idealGround - cornerRoll
+//   LF (inside):  idealGround =  0.0° → chassis-relative ideal = idealGround + cornerRoll
+// rollCoeff 0.355 = 1.1° camber gain / 3.1° body roll (measured: 1.7" wheel disp × 0.65°/in)
+const IDEAL_GROUND = { RF: -2.0, LF: 0.0 }; // ° ground camber targets
 const CALC = {
-  RF: { outside: true,  casterCoeff: 0.18, rollCoeff: 0.35, ideal: -4.5 },
-  LF: { outside: false, casterCoeff: 0.10, rollCoeff: 0.15, ideal: null }, // computed dynamically
+  RF: { outside: true,  casterCoeff: 0.18, rollCoeff: 0.355 },
+  LF: { outside: false, casterCoeff: 0.10, rollCoeff: 0.15  },
 };
 const OVAL_CORNER_G_CALC = 0.375;
 
@@ -352,19 +356,21 @@ function CamberCalc({ roll, setupCaster }) {
 
   const compute = (c) => {
     const { outside, casterCoeff, rollCoeff } = CALC[c];
-    const ideal = outside ? CALC[c].ideal : cornerRoll; // LF: chassis-relative ideal = cornerRoll
+    // Convert ground-frame ideal → chassis-relative ideal effective camber
+    // RF: ground = effective + cornerRoll → effective = idealGround - cornerRoll
+    // LF: ground = effective - cornerRoll → effective = idealGround + cornerRoll
+    const idealGround = IDEAL_GROUND[c];
+    const idealEffective = outside ? idealGround - cornerRoll : idealGround + cornerRoll;
     const casterGain = outside ? -(caster[c] * casterCoeff) :  (caster[c] * casterCoeff);
     const rollGain   = outside ? -(cornerRoll * rollCoeff)  :  (cornerRoll * rollCoeff);
     const totalGain  = casterGain + rollGain;
-    const optStatic  = Math.round((ideal - casterGain - rollGain) * 4) / 4;
+    const optStatic  = Math.round((idealEffective - casterGain - rollGain) * 4) / 4;
     const effectiveCamber = optStatic + totalGain;
-    // Tire-to-ground angle: rotate from chassis frame to ground frame using body roll.
-    // RF (outside): chassis rolls away → ground camber = effectiveCamber + cornerRoll
-    // LF (inside):  chassis rolls toward → ground camber = effectiveCamber − cornerRoll
+    // Ground camber: rotate chassis-relative → ground frame
     const groundCamber = outside
       ? effectiveCamber + cornerRoll
       : effectiveCamber - cornerRoll;
-    return { casterGain, rollGain, totalGain, ideal, optStatic, groundCamber };
+    return { casterGain, rollGain, totalGain, idealGround, idealEffective, optStatic, groundCamber };
   };
 
   return (
@@ -377,7 +383,7 @@ function CamberCalc({ roll, setupCaster }) {
       </p>
       <div className="opt-calc-grid">
         {['LF', 'RF'].map(c => {
-          const { casterGain, rollGain, totalGain, ideal, optStatic, groundCamber } = compute(c);
+          const { casterGain, rollGain, totalGain, idealGround, idealEffective, optStatic, groundCamber } = compute(c);
           const label = c === 'RF' ? 'Right Front (outside)' : 'Left Front (inside)';
           return (
             <div key={c} className="opt-balance-card opt-calc-card">
@@ -407,7 +413,7 @@ function CamberCalc({ roll, setupCaster }) {
               </div>
               <div className="opt-stat-pair">
                 <span>Ideal effective (chassis)</span>
-                <span>{ideal.toFixed(2)}°</span>
+                <span>{idealEffective.toFixed(2)}°</span>
               </div>
 
               <div className="opt-calc-result">
@@ -422,9 +428,9 @@ function CamberCalc({ roll, setupCaster }) {
               </div>
 
               <div className="opt-stat-pair" style={{ marginTop: 6, borderTop: '1px solid var(--border)', paddingTop: 6 }}>
-                <span>Tire-to-ground angle</span>
-                <span style={{ color: Math.abs(groundCamber) < 0.15 ? 'var(--green)' : 'var(--accent)' }}>
-                  {groundCamber >= 0 ? '+' : ''}{groundCamber.toFixed(2)}°
+                <span>Ground camber → target</span>
+                <span style={{ color: Math.abs(groundCamber - idealGround) < 0.15 ? 'var(--green)' : 'var(--accent)' }}>
+                  {groundCamber >= 0 ? '+' : ''}{groundCamber.toFixed(2)}° → {idealGround >= 0 ? '+' : ''}{idealGround.toFixed(1)}°
                 </span>
               </div>
             </div>
@@ -439,8 +445,8 @@ function CornerCard({ c, data, setup }) {
   const {
     load, estimatedTemp, hp, optHotPsi, recColdPsi, recHotPsi,
     psiGripFactor, isPresLimited, psiDev,
-    effectiveCamber, idealCamber, camberDev, camberFactor, dynamicGain,
-    optStaticCamber, front, outside, tempFactor, adjustableScore,
+    effectiveCamber, groundCamber, idealGroundCamber, camberDev, camberFactor, dynamicGain,
+    optStaticCamber, alignmentOutOfRange, sidewallCamber, front, outside, tempFactor, adjustableScore,
   } = data;
 
   const camberOk = camberDev < 0.5;
@@ -485,28 +491,45 @@ function CornerCard({ c, data, setup }) {
                 <span className="opt-math-op"> {dynamicGain >= 0 ? '+' : ''}{dynamicGain.toFixed(2)}° dynamic</span>
               </Tooltip>
               <Tooltip text={TIPS.effectiveCamber}>
-                <span className="opt-math-eq"> = {effectiveCamber.toFixed(2)}° eff.</span>
+                <span className="opt-math-eq"> = {effectiveCamber !== null ? effectiveCamber.toFixed(2) : '—'}° eff.</span>
               </Tooltip>
             </div>
             <div className="opt-stat-pair">
-              <Tooltip text={idealTip}><span>Ideal effective</span></Tooltip>
+              <Tooltip text={TIPS.groundCamber}><span>Ground camber</span></Tooltip>
               <span style={{ color: camberOk ? 'var(--green)' : 'var(--yellow)' }}>
-                {idealCamber.toFixed(1)}°
+                {groundCamber !== null ? (groundCamber >= 0 ? '+' : '') + groundCamber.toFixed(2) : '—'}°
+              </span>
+            </div>
+            <div className="opt-stat-pair" style={{ color: 'var(--text-muted)', fontSize: '0.85em' }}>
+              <Tooltip text={TIPS.sidewallCamber}><span>  ↳ sidewall compliance</span></Tooltip>
+              <span>+{sidewallCamber !== undefined ? sidewallCamber.toFixed(2) : '—'}°</span>
+            </div>
+            <div className="opt-stat-pair">
+              <Tooltip text={idealTip}><span>Target ground</span></Tooltip>
+              <span style={{ color: camberOk ? 'var(--green)' : 'var(--yellow)' }}>
+                {idealGroundCamber !== undefined ? (idealGroundCamber >= 0 ? '+' : '') + idealGroundCamber.toFixed(1) : '—'}°
                 {!camberOk && optStaticCamber !== null && (
                   <span className="opt-rec-arrow"> → set {optStaticCamber}° static</span>
                 )}
               </span>
             </div>
+            {alignmentOutOfRange && optStaticCamber !== null && (
+              <Tooltip text={TIPS.alignmentRange}>
+                <div className="opt-limited-note" style={{ color: 'var(--yellow)' }}>
+                  ⚠ {optStaticCamber}° outside stock hardware range (−0.5° to −3.0°)
+                </div>
+              </Tooltip>
+            )}
           </>
         ) : (
           <>
             <div className="opt-stat-pair">
-              <Tooltip text={TIPS.effectiveCamber}><span>Dynamic (body roll)</span></Tooltip>
-              <span>{effectiveCamber.toFixed(2)}°</span>
+              <Tooltip text={TIPS.groundCamber}><span>Ground camber</span></Tooltip>
+              <span>{groundCamber !== null ? (groundCamber >= 0 ? '+' : '') + groundCamber.toFixed(2) : '—'}°</span>
             </div>
             <div className="opt-stat-pair">
-              <Tooltip text={idealTip}><span>Ideal</span></Tooltip>
-              <span>{idealCamber.toFixed(1)}°</span>
+              <Tooltip text={idealTip}><span>Target ground</span></Tooltip>
+              <span>{idealGroundCamber !== undefined ? (idealGroundCamber >= 0 ? '+' : '') + idealGroundCamber.toFixed(1) : '—'}°</span>
             </div>
             <Tooltip text={TIPS.solidAxle}>
               <div className="opt-limited-note">Solid axle — adjust via shock balance</div>

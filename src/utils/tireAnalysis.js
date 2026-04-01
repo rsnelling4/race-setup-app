@@ -5,7 +5,7 @@
 // Optimal HOT tire pressures for Crown Vic P71 on a left-turn oval.
 // Derived from: optPsi = 30 × (cornerLoad / avgLoad)
 //   at OVAL_CORNER_G = 0.375G (27 mph @ 130 ft radius),
-//   frontLLTD = 0.46 (recommended shock setup), vehicle weight = 3800 lbs.
+//   frontLLTD = 0.46 (recommended shock setup), vehicle weight = 4100 lbs.
 //   RF cornerLoad ≈ 1274 lbs → 40 PSI hot   (outside loaded)
 //   LF cornerLoad ≈ 816 lbs  → 26 PSI hot   (inside, lightly loaded)
 //   RR cornerLoad ≈ 1124 lbs → 35 PSI hot   (outside rear)

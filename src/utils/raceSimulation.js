@@ -41,7 +41,7 @@ const F8_CORNER_G   = 0.28;
 //   Oval: 2×t_corner + 2×t_straight = 17.4s → v_corner = 47.6 mph at effective R = 145 ft
 //   (Driver swings ~40 ft wide from the 105 ft inside radius → effective racing line R ≈ 145 ft)
 //   F8: 2×t_loop + 2×t_straight = 23.283s → v_corner = 33.3 mph, lateral G ≈ 0.50G @ 149 ft
-const OVAL_RACING_G  = 1.044; // actual lateral G on effective racing line
+const OVAL_RACING_G  = 0.813; // actual lateral G on effective racing line — back-calculated from 42 mph (61.6 ft/s) at R=145 ft: v²/(g×R)=61.6²/(32.174×145)=0.813G
 const OVAL_RACING_R  = 145;   // ft — effective racing line radius (105 ft inside + ~40 ft arc swing)
 const F8_RACING_G    = 0.498; // actual lateral G at F8 loop, back-calculated from 23.283s
 
@@ -69,10 +69,11 @@ TRACK.totalLength = 2 * TRACK.straightLength + 2 * TRACK.cornerArc;
 
 // ============ VEHICLE ============
 const VEH = {
-  weight: 3800,
-  mass: 3800 / G,
+  weight: 4100,
+  mass: 4100 / G,
   frontBias: 0.55,
   cgHeight: 22 / 12,      // ft
+  rollCenterHeight: 3 / 12, // ft — front roll center height (measured: 3 inches)
   trackWidth: 63 / 12,    // ft
   tireRadius: 13.6 / 12,  // ft — 235/55R17: 129.25mm sidewall + 215.9mm wheel = 13.59" ✓
   frontalArea: 25,         // ft²
@@ -83,6 +84,70 @@ const VEH = {
   brakingG: 0.5,           // lift + light brake on short oval
   wheelbase: 114.7 / 12,  // ft (Crown Vic wheelbase)
 };
+
+// ============ FRONT SUSPENSION GEOMETRY ============
+// Kingpin inclination (KPI): 9.5° (measured/confirmed for P71 front SLA)
+// Wheel: 17×7 steel, offset +44.45 mm = +1.75" (factory P71)
+// Tire radius: 13.6" (235/55R17)
+//
+// Scrub radius = tireRadius × tan(KPI) − wheelOffset
+//   = 13.6 × tan(9.5°) − 1.75 = 13.6 × 0.1673 − 1.75 = 2.275 − 1.75 = +0.525"
+// Positive scrub: kingpin axis meets ground inboard of contact patch center.
+// Creates self-centering moment and mild pull toward a braking wheel.
+//
+// KPI-induced camber gain during steering (adds positive camber to outside tire):
+//   Δcamber = sin(KPI) × sin(steerAngle)
+//   At 10° steer: sin(9.5°) × sin(10°) = 0.165 × 0.174 = +0.029°
+// This is a ~+0.03° positive camber addition to RF — below practical measurement resolution.
+// Included for completeness; has negligible effect on recommendations (<0.1° total).
+const GEOM = {
+  kpi:         9.5,                          // ° — kingpin inclination (measured)
+  wheelOffset: 1.75,                         // inches — P71 17×7 factory wheel
+  scrubRadius: 13.6 * Math.tan(9.5 * Math.PI / 180) - 1.75, // ≈ 0.525"
+  steerAngle:  10,                           // ° — estimated front steer at corner apex
+  // KPI camber gain: positive on outside tire (RF), negative on inside (LF)
+  kpiCamberGain: Math.sin(9.5 * Math.PI / 180) * Math.sin(10 * Math.PI / 180), // ≈ +0.029°
+};
+
+// ============ TIRE SIDEWALL COMPLIANCE ============
+// Ironman iMove Gen3 AS 235/55R17 103V XL — measured load vs. deflection curve:
+//   500 lbs  →  9.5 mm deflection  (light load / straightaway)
+//   1000 lbs → 18.9 mm             (static corner weight, P71 front)
+//   1500 lbs → 28.4 mm             (1.5G cornering, RF at apex)
+//   1929 lbs → 36.5 mm             (rated load, LI 103)
+// Section height: 5.09" (129.25 mm). Section width: 9.25" (235 mm).
+// Rim width: 7" (178 mm). Sidewall overhang each side: (235-178)/2 = 28.5 mm.
+//
+// Sidewall compliance camber: under cornering load the tire sidewall deflects,
+// shifting the contact patch outward relative to the wheel center. This adds POSITIVE
+// camber at the contact patch — the tire leans away from the load.
+//
+// Formula (SAE radial tire compliance model for 55-series all-season H/V-rated):
+//   sidewallCamber = (load / ratedLoad) × (sectionHeight / sectionWidth) × K
+//   K = 1.2° — empirical coefficient for 55-series radial street tire
+//   = load × SIDEWALL_COEFF   (°/lb)
+//
+// At RF apex load ~1300 lbs: +0.45° positive camber at contact patch.
+// At RR load     ~1100 lbs: +0.38°
+// At LF load      ~600 lbs: +0.21°
+// This must be compensated with additional static negative camber.
+//
+// The sidewall camber is added to geometric ground camber BEFORE the grip calculation.
+// camberGripFactor receives (geometricGroundCamber + sidewallCamber) as its input.
+const TIRE = {
+  ratedLoad:      1929,    // lbs — LI 103
+  sectionHeight:  5.09,    // inches
+  sectionWidth:   9.25,    // inches (235 mm)
+  // 235/55R17 load-deflection: nearly linear at ~52.9 lbs/mm = 1345 lbs/in
+  // K = 1.2° compliance coefficient for 55-series all-season radial
+  sidewallCoeff: 1.2 * (5.09 / 9.25) / 1929, // °/lb ≈ 0.000342 °/lb
+};
+
+// Returns the sidewall-compliance camber addition (always positive — outward lean).
+// This is added to geometric ground camber before grip evaluation.
+function sidewallCamberDeg(cornerLoad) {
+  return cornerLoad * TIRE.sidewallCoeff;
+}
 
 // ============ TIRE THERMAL MODEL ============
 // Now tracks Inside/Middle/Outside temperatures separately.
@@ -134,23 +199,41 @@ function pressureGripFactor(hotPsi, tireLoad) {
   return Math.max(0.82, 1 - 0.006 * dev);
 }
 
-// Camber: deviation from ideal effective camber for the cornering condition.
-// Crown Vic P71 uses SLA (short-long arm / double wishbone) front suspension.
-// Outside front (RF in left turns): jounce/compression. SLA geometry (shorter upper arm)
-//   gains NEGATIVE camber in jounce — the key SLA advantage over MacPherson, which gains
-//   positive camber in jounce. Ideal effective ≈ -4.5° at 1G.
-// Inside front (LF): droop/extension. Gains POSITIVE camber (top tilts outward).
-//   Ideal chassis-relative effective = +cornerRoll, so that after the body-roll frame
-//   correction (tireToGround = effectiveCamber − cornerRoll) the tire sits flat to the
-//   pavement (0° ground camber). Passing cornerRoll = 0 defaults to the old flat-patch model.
-function camberGripFactor(actualCamber, isOutside, lateralG, cornerRoll = 0) {
+// Camber grip factor — operates in GROUND FRAME (tire-to-road angle).
+// Ground camber is what actually determines contact patch loading.
+//   groundCamber > 0: top of tire leans outward from car centerline (positive = bad for cornering)
+//   groundCamber < 0: top leans inward (negative camber, loads outside edge)
+//
+// Conversion from chassis-frame effective camber:
+//   RF (outside): groundCamber = effectiveCamber + cornerRoll  (chassis rolls away from corner)
+//   LF (inside):  groundCamber = effectiveCamber - cornerRoll  (chassis rolls toward corner)
+//   Rear (solid axle, outside): groundCamber = roll (no static camber, just body roll)
+//   Rear (solid axle, inside):  groundCamber = -roll
+//
+// Ideal ground camber:
+//   Outside front (RF): Not 0° — slight negative needed to counter centrifugal crown and load.
+//     Empirical for bias-ply/street tires on short oval: ≈ -1.5° to -2.5° ground.
+//     Calibrated to -2.0° ground for the Ironman 235/55R17 (tall compliant sidewall absorbs
+//     some of the load skew that a stiff R-compound needs more static camber to manage).
+//     NOTE: To refine this, measure camber thrust curve vs. load with a proper tire test or
+//     back-calculate from I/O pyrometer splits at various static settings.
+//   Inside front (LF): 0° ground — flat patch maximizes contact area on lightly loaded inside.
+//   Outside rear (RR): 0° ground — solid axle, can't adjust; 0° is the physics-correct target.
+//   Inside rear (LR): 0° ground — same reasoning.
+const IDEAL_GROUND_CAMBER_RF = -2.0;  // ° — outside front (RF). Calibrated estimate; see above.
+const IDEAL_GROUND_CAMBER_LF =  0.0;  // ° — inside front (LF). Flat patch.
+const IDEAL_GROUND_CAMBER_REAR = 0.0; // ° — both rears (solid axle, no adjustment possible).
+
+function camberGripFactor(groundCamber, isOutside, isFront) {
+  // All inputs and ideals are now in ground frame.
   let ideal;
-  if (isOutside) {
-    ideal = -(2.5 + lateralG * 2.0);  // -4.5° at 1G (calibrated to pyrometer data)
+  if (isFront) {
+    ideal = isOutside ? IDEAL_GROUND_CAMBER_RF : IDEAL_GROUND_CAMBER_LF;
   } else {
-    ideal = cornerRoll;                // chassis-relative ideal: +cornerRoll → 0° ground camber
+    ideal = IDEAL_GROUND_CAMBER_REAR; // solid axle — 0° ground target for both sides
   }
-  const dev = Math.abs(actualCamber - ideal);
+  const dev = Math.abs(groundCamber - ideal);
+  // 0.012/° matches prior calibration: 0.25° dev = ~0.3% loss, 2° dev = ~2.4% loss, floor 88%
   return Math.max(0.88, 1 - 0.012 * dev);
 }
 
@@ -230,8 +313,9 @@ function shockStiffness(setup) {
 }
 
 // Body roll angle (degrees) at given lateral G
+// baseRoll = 3.1°/G at baseline stiffness — measured: 3.1° at actual corner G (42 mph on oval)
 function bodyRoll(lateralG, totalStiffness) {
-  const baseRoll = 3.5;     // deg/G at baseline stiffness
+  const baseRoll = 3.1;     // deg/G at baseline stiffness (measured: 3.1° at corner G)
   const baseStiff = 28;     // baseline total (user's current: 12+16)
   return lateralG * baseRoll * baseStiff / Math.max(totalStiffness, 4);
 }
@@ -250,13 +334,16 @@ function rollStiffness(setup) {
   const springScale = (springF / BASE_SPRING_FRONT + springR / BASE_SPRING_REAR) / 2;
   // Normalize damper total to baseline (28 at 4/4/2/2)
   const damperNorm  = ss.total / 28;
-  // At baseline: (0.7×1.0 + 0.3×1.0) × 28 = 28 ✓
-  return Math.max(4, (0.7 * springScale + 0.3 * damperNorm) * 28);
+  // At baseline: (0.85×1.0 + 0.15×1.0) × 28 = 28 ✓
+  // 85/15 split: springs dominate steady-state roll; dampers are transient, not roll-resisting.
+  return Math.max(4, (0.85 * springScale + 0.15 * damperNorm) * 28);
 }
 
 // ============ WEIGHT TRANSFER ============
+// Roll moment arm = (cgHeight - rollCenterHeight): the portion of CG height above
+// the front roll center drives lateral load transfer. RCH=3" reduces the arm from 22" to 19".
 function tireLoads(lateralG, frontLLTD) {
-  const latTransfer = VEH.weight * lateralG * VEH.cgHeight / VEH.trackWidth;
+  const latTransfer = VEH.weight * lateralG * (VEH.cgHeight - VEH.rollCenterHeight) / VEH.trackWidth;
   const fStatic = VEH.weight * VEH.frontBias / 2;
   const rStatic = VEH.weight * (1 - VEH.frontBias) / 2;
   return {
@@ -283,6 +370,10 @@ function calcPerformance(setup, tires, inflationTemp = COLD_PSI_TEMP) {
   // Toe and caster from setup (with defaults for backward compat)
   const toe = setup.toe !== undefined ? setup.toe : -0.25;
   const caster = setup.caster || { LF: 3.5, RF: 5.0 };
+
+  // Actual body roll in racing corners — used for both front ground-camber conversion
+  // and rear solid-axle ground camber. Computed once here, shared across all corners.
+  const cornerRoll = roll * OVAL_CORNER_G;
 
   let totalForce = 0;
   let frontForce = 0;
@@ -317,21 +408,32 @@ function calcPerformance(setup, tires, inflationTemp = COLD_PSI_TEMP) {
       // throws off optStaticCamber recommendations significantly.
       // RF (outside, jounce): SLA gains NEGATIVE camber — key advantage over MacPherson.
       // LF (inside, droop): gains POSITIVE camber — same direction as MacPherson droop.
-      // Crown Vic P71 comfort SLA coefficients: ~0.35°/° roll in jounce, ~0.15°/° in droop.
-      const cornerRoll = roll * OVAL_CORNER_G; // actual roll in racing corners
+      // SLA jounce coefficient: 1.7" wheel displacement at 3.1° roll → 1.1° camber gain.
+      //   1.1° / 3.1° = 0.355°/° roll. Droop coefficient 0.15 unchanged.
       const bodyRollCamber = outside
-        ? -(cornerRoll * 0.35)  // RF in jounce: SLA gains negative camber
+        ? -(cornerRoll * 0.355) // RF in jounce: SLA gains negative camber (1.1°/3.1°=0.355)
         :  (cornerRoll * 0.15); // LF in droop: gains positive camber (low inside load)
-      const effectiveCamber = setup.camber[c] + casterCamberGain + bodyRollCamber;
-      mu *= camberGripFactor(effectiveCamber, outside, refG, cornerRoll);
+      // KPI camber: steering adds +positive on outside (RF), -negative on inside (LF).
+      // sin(9.5°)×sin(10° steer) ≈ +0.029° — small but included for completeness.
+      const kpiCamber = outside ? GEOM.kpiCamberGain : -GEOM.kpiCamberGain;
+      const effectiveCamber = setup.camber[c] + casterCamberGain + bodyRollCamber + kpiCamber;
+      // Convert chassis-frame effective camber → ground-frame (tire-to-road) angle.
+      // RF (outside): chassis rolls away from corner → ground = effective + cornerRoll
+      // LF (inside):  chassis rolls toward corner  → ground = effective − cornerRoll
+      const geomGroundCamber = outside
+        ? effectiveCamber + cornerRoll
+        : effectiveCamber - cornerRoll;
+      // Add sidewall compliance camber: loaded sidewall deflects outward, adding positive camber
+      // at the contact patch regardless of which corner. Uses actual corner load (not refG load).
+      const groundCamber = geomGroundCamber + sidewallCamberDeg(cornerLoads[c]);
+      mu *= camberGripFactor(groundCamber, outside, true);
       // Caster direct effect (trail, stability)
       mu *= casterGripFactor(caster[c], outside, true);
     } else {
-      // Solid rear axle: camber = body roll angle
-      const dynCamber = outside ? roll : -roll;
-      const idealRear = outside ? -1.0 : 0;
-      const dev = Math.abs(dynCamber - idealRear);
-      mu *= Math.max(0.88, 1 - 0.012 * dev);
+      // Solid rear axle: no static camber. Body roll IS the ground-frame camber.
+      // Outside rear leans away (positive ground camber), inside leans in (negative).
+      const groundCamber = (outside ? cornerRoll : -cornerRoll) + sidewallCamberDeg(cornerLoads[c]);
+      mu *= camberGripFactor(groundCamber, outside, false);
     }
 
     // Toe effect (front tires only)
@@ -360,13 +462,14 @@ function calcPerformance(setup, tires, inflationTemp = COLD_PSI_TEMP) {
   const imbalance = Math.abs(frontPct - VEH.frontBias);
   totalForce *= Math.max(0.94, 1 - imbalance * 0.2);
 
-  // LLTD driveability: gentle quadratic drag for setups far from balanced.
-  // Optimal oval LLTD ≈ 0.46 (recommended setup). Penalty is mild —
-  // ±0.10 dev: <1%, ±0.20: ~3%, ±0.35: ~9%. Floor 90% so even extreme
-  // setups are still driveable (sub-18s laps).
+  // LLTD driveability: quadratic drag for setups far from optimal LLTD.
+  // Optimal oval LLTD ≈ 0.46 (recommended asymmetric setup).
+  // ±0.05 dev: ~0.75%, ±0.10: ~3%, ±0.20: ~11%, ±0.35: ~27%. Floor 85%.
+  // Stronger penalty needed to disfavor balanced-front (LF=9/RF=9) setups
+  // that push LLTD to 0.33 — those are genuinely hard to drive on an oval.
   const OPTIMAL_LLTD = 0.46;
   const lltdDev = Math.abs(ss.frontLLTD - OPTIMAL_LLTD);
-  totalForce *= Math.max(0.90, 1 - 0.7 * lltdDev * lltdDev);
+  totalForce *= Math.max(0.85, 1 - 3.0 * lltdDev * lltdDev);
 
   // Toe drag penalty on straights (reduces overall performance slightly)
   const dragPenalty = toeDragFactor(toe);
@@ -784,30 +887,63 @@ export function analyzeSetup(setup, ambientTemp = 65, inflationTemp = COLD_PSI_T
     const recHotPsi = Math.min(Math.max(18, optHotPsi), 51);
     const recColdPsi = recHotPsi * (inflationTemp + RANKINE) / (tEq + RANKINE);
 
-    // Camber
-    let effectiveCamber, idealCamber, camberDev, camberFactor;
+    // Camber — all calculations in GROUND FRAME (tire-to-road angle)
+    // Ground camber > 0 = top of tire leans outward (bad for cornering load)
+    // Ground camber < 0 = top leans inward (negative camber, loads outside tread)
+    const cornerRoll = roll * OVAL_CORNER_G; // actual body roll at racing corners
+    let groundCamber, idealGroundCamber, camberDev, camberFactor;
     let casterGain = 0, casterFactor = 1, optStaticCamber = null, bodyRollCamber = 0;
+    let effectiveCamber = null; // chassis-relative, exposed for display only
+    let alignmentOutOfRange = false;
+
     if (front) {
       // Caster gain: RF (outside) gains negative, LF (inside) gains positive — geometric.
       casterGain = outside ? -(caster[c] * 0.18) : (caster[c] * 0.10);
-      // SLA body roll at actual racing G (not 1G) — see calcPerformance comment for rationale.
-      const cornerRoll = roll * OVAL_CORNER_G;
-      bodyRollCamber = outside ? -(cornerRoll * 0.35) : (cornerRoll * 0.15);
-      effectiveCamber = setup.camber[c] + casterGain + bodyRollCamber;
-      idealCamber = outside ? -4.5 : cornerRoll; // LF: chassis-relative ideal for 0° ground camber
-      camberDev = Math.abs(effectiveCamber - idealCamber);
-      camberFactor = camberGripFactor(effectiveCamber, outside, 1.0, cornerRoll);
+      // SLA body roll camber at actual racing G (not 1G).
+      bodyRollCamber = outside ? -(cornerRoll * 0.355) : (cornerRoll * 0.15);
+      // KPI camber: +positive on outside (RF), -negative on inside (LF). ≈ ±0.029°.
+      const kpiCamber = outside ? GEOM.kpiCamberGain : -GEOM.kpiCamberGain;
+      effectiveCamber = setup.camber[c] + casterGain + bodyRollCamber + kpiCamber;
+      // Convert chassis-relative → ground frame
+      // RF (outside): chassis rolls away → groundCamber = effective + cornerRoll
+      // LF (inside):  chassis rolls toward → groundCamber = effective - cornerRoll
+      const geomGroundCamber = outside
+        ? effectiveCamber + cornerRoll
+        : effectiveCamber - cornerRoll;
+      // Sidewall compliance camber: loaded sidewall deflects outward (+positive) at contact patch.
+      const swCamber = sidewallCamberDeg(cornerLoads[c]);
+      groundCamber = geomGroundCamber + swCamber;
+      idealGroundCamber = outside ? IDEAL_GROUND_CAMBER_RF : IDEAL_GROUND_CAMBER_LF;
+      camberDev = Math.abs(groundCamber - idealGroundCamber);
+      camberFactor = camberGripFactor(groundCamber, outside, true);
       casterFactor = casterGripFactor(caster[c], outside, true);
-      optStaticCamber = Math.round((idealCamber - casterGain - bodyRollCamber) * 4) / 4;
+      // Optimal static camber: back-calculate from ideal ground camber including sidewall offset.
+      // idealGround = geomGround + swCamber
+      //             = (static + casterGain + bodyRollCamber + kpiCamber ± cornerRoll) + swCamber
+      // → static = idealGround - swCamber - casterGain - bodyRollCamber - kpiCamber ∓ cornerRoll
+      const effectiveIdeal = outside
+        ? idealGroundCamber - swCamber - cornerRoll
+        : idealGroundCamber - swCamber + cornerRoll;
+      optStaticCamber = Math.round((effectiveIdeal - casterGain - bodyRollCamber - kpiCamber) * 4) / 4;
+      // Check against P71 hardware alignment range
+      // Front camber adjustable range: approx -0.5° to -3.0° via eccentric alignment bolts.
+      // Exceeding this requires aftermarket alignment hardware (camber bolts, shims).
+      const CAMBER_MIN = -3.0; // ° — max negative achievable with stock hardware
+      const CAMBER_MAX = -0.5; // ° — least negative achievable
+      alignmentOutOfRange = optStaticCamber < CAMBER_MIN || optStaticCamber > CAMBER_MAX;
     } else {
-      effectiveCamber = outside ? roll : -roll;
-      idealCamber = outside ? -1.0 : 0;
-      camberDev = Math.abs(effectiveCamber - idealCamber);
-      camberFactor = Math.max(0.88, 1 - 0.012 * camberDev);
+      // Solid rear axle: no static camber. Body roll angle IS the ground-frame camber.
+      // Outside rear (RR): rolls outward → positive ground camber
+      // Inside rear (LR): rolls inward  → negative ground camber
+      groundCamber = (outside ? cornerRoll : -cornerRoll) + sidewallCamberDeg(cornerLoads[c]);
+      idealGroundCamber = IDEAL_GROUND_CAMBER_REAR; // 0° — flat patch, no adjustment possible
+      camberDev = Math.abs(groundCamber - idealGroundCamber);
+      camberFactor = camberGripFactor(groundCamber, outside, false);
+      // No optStaticCamber for solid axle — can't adjust
     }
 
     const tempFactor = tempGripFactor(tEq);
-    const toeFactor = front ? toeGripFactor(toe) : 1.0; // matches calcPerformance
+    const toeFactor = front ? toeGripFactor(toe) : 1.0;
     const loadSens = Math.pow(avgLoad / Math.max(load, 50), 0.08);
     const mu = tempFactor * psiGripFactor * camberFactor * casterFactor * toeFactor * loadSens;
     const adjustableScore = tempFactor * psiGripFactor * camberFactor * casterFactor * toeFactor;
@@ -815,9 +951,12 @@ export function analyzeSetup(setup, ambientTemp = 65, inflationTemp = COLD_PSI_T
     corners[c] = {
       load, wf, estimatedTemp: tEq,
       hp, optHotPsi, psiDev, psiGripFactor, isPresLimited, recHotPsi, recColdPsi,
-      effectiveCamber, idealCamber, camberDev, camberFactor,
-      casterGain, bodyRollCamber, dynamicGain: casterGain + bodyRollCamber,
-      casterFactor, optStaticCamber, front, outside, tempFactor, loadSens, mu, adjustableScore,
+      effectiveCamber, groundCamber, idealGroundCamber, camberDev, camberFactor,
+      casterGain, bodyRollCamber, kpiCamber: front ? kpiCamber : 0,
+      dynamicGain: front ? casterGain + bodyRollCamber + kpiCamber : 0,
+      casterFactor, optStaticCamber, alignmentOutOfRange,
+      sidewallCamber: front ? swCamber : sidewallCamberDeg(cornerLoads[c]),
+      front, outside, tempFactor, loadSens, mu, adjustableScore,
     };
   }
 
@@ -863,7 +1002,7 @@ export function analyzeSetup(setup, ambientTemp = 65, inflationTemp = COLD_PSI_T
       current: `${cur}°`, currentVal: cur,
       optimal: `${opt}°`, optimalVal: opt,
       gain,
-      detail: `Mid-corner effective: ${corners[c].effectiveCamber.toFixed(2)}° → ideal ${corners[c].idealCamber.toFixed(1)}°`,
+      detail: `Ground camber: ${corners[c].groundCamber !== null ? (corners[c].groundCamber >= 0 ? '+' : '') + corners[c].groundCamber.toFixed(2) : '—'}° → target ${corners[c].idealGroundCamber.toFixed(1)}°${corners[c].alignmentOutOfRange ? ' ⚠ outside stock hardware range' : ''}`,
       note: `Dynamic gains: ${Math.abs(corners[c].casterGain).toFixed(2)}° caster + ${Math.abs(corners[c].bodyRollCamber).toFixed(2)}° body roll = ${Math.abs(corners[c].dynamicGain).toFixed(2)}° total — verify with tire temps`,
     });
   }
