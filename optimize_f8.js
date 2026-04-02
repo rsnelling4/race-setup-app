@@ -60,9 +60,24 @@ function pressureGripFactor(hotPsi, tireLoad) {
   return Math.max(0.82, 1 - 0.010 * Math.abs(hotPsi - optPsi));
 }
 
-function camberGripFactor(effectiveCamber, isOutside, lateralG) {
-  const ideal = isOutside ? -(2.5 + lateralG * 2.0) : 0;
-  return Math.max(0.88, 1 - 0.012 * Math.abs(effectiveCamber - ideal));
+// Sidewall compliance: Ironman 235/55R17, section height 5.09", width 9.25", rated load 1929 lbs
+// K=1.2 for 55-series radial all-season
+const TIRE_SIDEWALL_COEFF = 1.2 * (5.09 / 9.25) / 1929; // ≈ 0.000342 °/lb
+function sidewallCamberDeg(load) { return load * TIRE_SIDEWALL_COEFF; }
+
+// KPI geometry: 9.5° inclination, ~10° steer at apex
+const KPI_CAMBER_GAIN = Math.sin(9.5 * Math.PI / 180) * Math.sin(10 * Math.PI / 180); // ≈ 0.029°
+
+// Ground-frame camber ideals
+const IDEAL_GROUND_RF   = -2.0;  // ° — outside front
+const IDEAL_GROUND_LF   =  0.0;  // ° — inside front
+const IDEAL_GROUND_REAR =  0.0;  // ° — both rears (solid axle)
+
+function camberGripFactor(groundCamber, isOutside, isFront) {
+  let ideal;
+  if (isFront) { ideal = isOutside ? IDEAL_GROUND_RF : IDEAL_GROUND_LF; }
+  else         { ideal = IDEAL_GROUND_REAR; }
+  return Math.max(0.88, 1 - 0.012 * Math.abs(groundCamber - ideal));
 }
 
 function casterGripFactor(casterDeg, isOutside) {
@@ -117,7 +132,8 @@ function calcPerformanceF8(ss, camber, caster, toe, coldPsi, tireTemps) {
   const loadsR  = { LF: loadsL.RF, RF: loadsL.LF, LR: loadsL.RR, RR: loadsL.LR };
   const cLoadsL = tireLoads(F8_CORNER_G, frontLLTD);
   const cLoadsR = { LF: cLoadsL.RF, RF: cLoadsL.LF, LR: cLoadsL.RR, RR: cLoadsL.LR };
-  const roll    = bodyRoll(refG, totStiff);
+  const roll       = bodyRoll(refG, totStiff);
+  const cornerRoll = roll * F8_CORNER_G;
   const avgLoad = VEH.weight / 4;
 
   let totalForce = 0, frontForce = 0, rearForce = 0;
@@ -141,13 +157,16 @@ function calcPerformanceF8(ss, camber, caster, toe, coldPsi, tireTemps) {
         const casterGain = outside
           ? -(caster[c] * 0.18 * refG)
           :  (caster[c] * 0.10 * refG);
-        mu *= camberGripFactor(camber[c] + casterGain, outside, refG);
+        const kpiCamber = outside ? KPI_CAMBER_GAIN : -KPI_CAMBER_GAIN;
+        const effectiveCamber = camber[c] + casterGain + kpiCamber;
+        const geomGround = outside ? effectiveCamber + cornerRoll : effectiveCamber - cornerRoll;
+        const groundCamber = geomGround + sidewallCamberDeg(cLoad);
+        mu *= camberGripFactor(groundCamber, outside, true);
         mu *= casterGripFactor(caster[c], outside);
         mu *= toeGripFactor(toe);
       } else {
-        const dynCamber = outside ? roll : -roll;
-        const idealRear = outside ? -1.0 : 0;
-        mu *= Math.max(0.88, 1 - 0.012 * Math.abs(dynCamber - idealRear));
+        const groundCamber = (outside ? cornerRoll : -cornerRoll) + sidewallCamberDeg(cLoad);
+        mu *= camberGripFactor(groundCamber, outside, false);
       }
 
       mu *= Math.pow(avgLoad / Math.max(load, 50), 0.08);

@@ -692,19 +692,16 @@ export const DEFAULT_SETUP = {
 // Shocks: LF Monroe 171346 (rating 8), RF KYB SR4140/551600 (rating 6),
 //         LR/RR Monroe 550018 Magnum Severe Service (rating 1 — stiffest available)
 // Camber analytically derived: ideal effective LF=0°, RF=-4.5° minus caster+body-roll gains.
-// PSI analytically derived: optimal hot PSI from corner loads at OVAL_CORNER_G.
-// RF cold PSI: load-physics analysis (suggested.md §6) gives optimal hot RF = 39.1 PSI →
-// cold at 130°F eq = 35.0 PSI. Updated from grid-search value of 32.5 to 34 PSI.
-// LF cold PSI: optimal hot LF = 26.9 PSI → cold at 100°F eq = 25.4 PSI. Rounds to 26.
-// RR cold PSI: optimal hot RR = 36.6 PSI → cold at 130°F eq = 32.8 PSI. ~33.5 is close.
-// LR cold PSI: optimal hot LR = 17.4 PSI → cold at 95°F eq = 16.6 PSI. Rounds to 16.5.
+// Grid-search optimized (180,880 combos @ 90°F, best lap 17.200s, LLTD=0.468).
+// Updated 2026-04-01 with full physics model: 4100 lbs, RCH 3", SLA jounce 0.355°/°,
+// KPI 9.5°, sidewall compliance, ground-frame camber.
 export const RECOMMENDED_SETUP = {
-  shocks: { LF: 8, RF: 6, LR: 1, RR: 1 },
-  springs: { LF: 440, RF: 440, LR: 160, RR: 160 },
-  camber: { LF: -0.5, RF: -3.0 },
+  shocks: { LF: 3, RF: 1, LR: 1, RR: 1 },
+  springs: { LF: 475, RF: 475, LR: 160, RR: 160 },
+  camber: { LF: -0.25, RF: -2.25 },
   caster: { LF: 3.0, RF: 5.0 },
   toe: -0.25,
-  coldPsi: { LF: 26, RF: 34, LR: 16.5, RR: 33.5 },
+  coldPsi: { LF: 24, RF: 34.5, LR: 18, RR: 30 },
 };
 
 // ============ PETE SETUP ============

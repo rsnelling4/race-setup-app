@@ -5,13 +5,16 @@ import NumericInput from './NumericInput';
 
 const CORNERS = ['LF', 'RF', 'LR', 'RR'];
 
-// Recommended F8 setup — grid-search optimized (34,884 combos @ 75°F, best lap 23.152s)
+// Recommended F8 setup — grid-search optimized (34,884 combos @ 75°F, best lap 23.145s).
+// Updated 2026-04-01 with full physics model: 4100 lbs, RCH 3", SLA jounce 0.355°/°,
+// KPI 9.5°, sidewall compliance, ground-frame camber. Symmetric caster mandatory for F8.
 const RECOMMENDED_F8_SETUP = {
-  shocks: { LF: 1, RF: 1, LR: 1, RR: 1 },
-  camber: { LF: -3.5, RF: -3.5 },
+  shocks: { LF: 1, RF: 1, LR: 2, RR: 1 },
+  springs: { LF: 475, RF: 475, LR: 160, RR: 160 },
+  camber: { LF: -2.25, RF: -2.25 },
   caster: { LF: 5.0, RF: 5.0 },
   toe: -0.25,
-  coldPsi: { LF: 35, RF: 35, LR: 30, RR: 30 },
+  coldPsi: { LF: 34.5, RF: 34.5, LR: 29, RR: 29 },
 };
 
 function deepClone(obj) {

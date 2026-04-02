@@ -60,9 +60,24 @@ function pressureGripFactor(hotPsi, tireLoad) {
   return Math.max(0.82, 1 - 0.010 * Math.abs(hotPsi - optPsi));
 }
 
-function camberGripFactor(effectiveCamber, isOutside, lateralG) {
-  const ideal = isOutside ? -(2.5 + lateralG * 2.0) : 0;
-  return Math.max(0.88, 1 - 0.012 * Math.abs(effectiveCamber - ideal));
+// Sidewall compliance: Ironman 235/55R17, section height 5.09", width 9.25", rated load 1929 lbs
+// K=1.2 for 55-series radial all-season
+const TIRE_SIDEWALL_COEFF = 1.2 * (5.09 / 9.25) / 1929; // ≈ 0.000342 °/lb
+function sidewallCamberDeg(load) { return load * TIRE_SIDEWALL_COEFF; }
+
+// KPI geometry: 9.5° inclination, ~10° steer at apex
+const KPI_CAMBER_GAIN = Math.sin(9.5 * Math.PI / 180) * Math.sin(10 * Math.PI / 180); // ≈ 0.029°
+
+// Ground-frame camber ideals
+const IDEAL_GROUND_RF   = -2.0;  // ° — outside front
+const IDEAL_GROUND_LF   =  0.0;  // ° — inside front
+const IDEAL_GROUND_REAR =  0.0;  // ° — both rears (solid axle)
+
+function camberGripFactor(groundCamber, isOutside, isFront) {
+  let ideal;
+  if (isFront) { ideal = isOutside ? IDEAL_GROUND_RF : IDEAL_GROUND_LF; }
+  else         { ideal = IDEAL_GROUND_REAR; }
+  return Math.max(0.88, 1 - 0.012 * Math.abs(groundCamber - ideal));
 }
 
 function casterGripFactor(casterDeg, isOutside) {
@@ -134,13 +149,15 @@ function calcPerformance(ss, camber, caster, toe, coldPsi, tireTemps, ambient) {
     if (front) {
       const casterGain   = outside ? -(caster[c] * 0.18 * refG) : (caster[c] * 0.10 * refG);
       const brCamber     = outside ? -(cornerRoll * 0.355) : (cornerRoll * 0.15); // 0.355=1.1°/3.1°
-      const effCamber    = camber[c] + casterGain + brCamber;
-      mu *= camberGripFactor(effCamber, outside, refG);
+      const kpiCamber    = outside ? KPI_CAMBER_GAIN : -KPI_CAMBER_GAIN;
+      const effCamber    = camber[c] + casterGain + brCamber + kpiCamber;
+      const geomGround   = outside ? effCamber + cornerRoll : effCamber - cornerRoll;
+      const groundCamber = geomGround + sidewallCamberDeg(cornerLoads[c]);
+      mu *= camberGripFactor(groundCamber, outside, true);
       mu *= casterGripFactor(caster[c], outside);
     } else {
-      const dynCamber = outside ? roll : -roll;
-      const idealRear = outside ? -1.0 : 0;
-      mu *= Math.max(0.88, 1 - 0.012 * Math.abs(dynCamber - idealRear));
+      const groundCamber = (outside ? cornerRoll : -cornerRoll) + sidewallCamberDeg(cornerLoads[c]);
+      mu *= camberGripFactor(groundCamber, outside, false);
     }
 
     if (front) mu *= toeGripFactor(toe);
@@ -344,15 +361,20 @@ for (const { lfR, rfR, lrR, rrR, ss } of shockConfigs) {
   for (const cLF of CASTER_LF_RANGE) {
     for (const cRF of CASTER_RF_RANGE) {
       // Analytically optimal static camber
+      // Back-calculate optimal static camber from ground ideal including sidewall and KPI
       const lfCasterGain = cLF * 0.10;
       const lfBodyRoll   = cornerRoll * 0.15;
-      let staticLF = -(lfCasterGain + lfBodyRoll); // ideal effective LF = 0°
+      const lfSwCamber   = sidewallCamberDeg(cornerLoads.LF);
+      const lfEffIdeal   = IDEAL_GROUND_LF - lfSwCamber + cornerRoll; // inside: effectiveIdeal = idealGround - sw + roll
+      let staticLF = lfEffIdeal - lfCasterGain - lfBodyRoll - (-KPI_CAMBER_GAIN); // LF kpiCamber = -KPI_CAMBER_GAIN
       staticLF = Math.max(CAMBER_LF_MIN, Math.min(CAMBER_LF_MAX, staticLF));
       staticLF = Math.round(staticLF * 4) / 4; // round to 0.25°
 
       const rfCasterGain = -(cRF * 0.18);
       const rfBodyRoll   = -(cornerRoll * 0.355); // 0.355=1.1°/3.1°
-      let staticRF = -4.5 - rfCasterGain - rfBodyRoll; // ideal effective RF = -4.5°
+      const rfSwCamber   = sidewallCamberDeg(cornerLoads.RF);
+      const rfEffIdeal   = IDEAL_GROUND_RF - rfSwCamber - cornerRoll; // outside: effectiveIdeal = idealGround - sw - roll
+      let staticRF = rfEffIdeal - rfCasterGain - rfBodyRoll - KPI_CAMBER_GAIN; // RF kpiCamber = +KPI_CAMBER_GAIN
       staticRF = Math.max(CAMBER_RF_MIN, Math.min(CAMBER_RF_MAX, staticRF));
       staticRF = Math.round(staticRF * 4) / 4;
 
