@@ -892,7 +892,7 @@ export function analyzeSetup(setup, ambientTemp = 65, inflationTemp = COLD_PSI_T
     // Ground camber < 0 = top leans inward (negative camber, loads outside tread)
     const cornerRoll = roll * OVAL_CORNER_G; // actual body roll at racing corners
     let groundCamber, idealGroundCamber, camberDev, camberFactor;
-    let casterGain = 0, casterFactor = 1, optStaticCamber = null, bodyRollCamber = 0;
+    let casterGain = 0, casterFactor = 1, optStaticCamber = null, bodyRollCamber = 0, kpiCamber = 0, swCamber = 0;
     let effectiveCamber = null; // chassis-relative, exposed for display only
     let alignmentOutOfRange = false;
 
@@ -902,7 +902,7 @@ export function analyzeSetup(setup, ambientTemp = 65, inflationTemp = COLD_PSI_T
       // SLA body roll camber at actual racing G (not 1G).
       bodyRollCamber = outside ? -(cornerRoll * 0.355) : (cornerRoll * 0.15);
       // KPI camber: +positive on outside (RF), -negative on inside (LF). ≈ ±0.029°.
-      const kpiCamber = outside ? GEOM.kpiCamberGain : -GEOM.kpiCamberGain;
+      kpiCamber = outside ? GEOM.kpiCamberGain : -GEOM.kpiCamberGain;
       effectiveCamber = setup.camber[c] + casterGain + bodyRollCamber + kpiCamber;
       // Convert chassis-relative → ground frame
       // RF (outside): chassis rolls away → groundCamber = effective + cornerRoll
@@ -911,7 +911,7 @@ export function analyzeSetup(setup, ambientTemp = 65, inflationTemp = COLD_PSI_T
         ? effectiveCamber + cornerRoll
         : effectiveCamber - cornerRoll;
       // Sidewall compliance camber: loaded sidewall deflects outward (+positive) at contact patch.
-      const swCamber = sidewallCamberDeg(cornerLoads[c]);
+      swCamber = sidewallCamberDeg(cornerLoads[c]);
       groundCamber = geomGroundCamber + swCamber;
       idealGroundCamber = outside ? IDEAL_GROUND_CAMBER_RF : IDEAL_GROUND_CAMBER_LF;
       camberDev = Math.abs(groundCamber - idealGroundCamber);
