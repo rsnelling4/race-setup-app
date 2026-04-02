@@ -1,5 +1,5 @@
 import { useMemo, useState, useRef } from 'react';
-import { analyzeSetup, DEFAULT_SETUP, RECOMMENDED_SETUP, PETE_SETUP, DYLAN_SETUP, JOSH_SETUP } from '../utils/raceSimulation';
+import { analyzeSetup, DEFAULT_SETUP, RECOMMENDED_SETUP, PETE_SETUP, DYLAN_SETUP, JOSH_SETUP, JOEY_SETUP } from '../utils/raceSimulation';
 import { REAR_SHOCKS, FRONT_STRUTS, shockLabel } from '../data/shockOptions';
 import NumericInput from './NumericInput';
 
@@ -812,6 +812,9 @@ export default function SetupOptimizer({ setup, setSetup, ambient, setAmbient, i
           </button>
           <button className="sim-preset-btn" onClick={() => setSetup(deepClone(JOSH_SETUP))}>
             Load Josh
+          </button>
+          <button className="sim-preset-btn" onClick={() => setSetup(deepClone(JOEY_SETUP))}>
+            Load Joey
           </button>
           <button className="sim-preset-btn accent" onClick={() => setSetup(deepClone(RECOMMENDED_SETUP))}>
             Load Recommended Setup

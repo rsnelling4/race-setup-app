@@ -737,6 +737,17 @@ export const JOSH_SETUP = {
   coldPsi: { LF: 24, RF: 35, LR: 17.5, RR: 32 },
 };
 
+// ============ JOEY SETUP ============
+// Joey's race setup — LF/RF KYB SR4140 (rating 6, 440 lbs/in spring), LR/RR KYB 554355 (rating 4)
+export const JOEY_SETUP = {
+  shocks: { LF: 6, RF: 6, LR: 4, RR: 4 },
+  springs: { LF: 440, RF: 440, LR: 160, RR: 160 },
+  camber: { LF: 1.0, RF: -3.5 },
+  caster: { LF: 6.0, RF: 5.0 },
+  toe: -0.25,
+  coldPsi: { LF: 26, RF: 35.5, LR: 18.5, RR: 31.5 },
+};
+
 // ============ FIGURE 8 DEFAULT SETUP ============
 // Retained as a symmetric reference setup for the F8 optimizer.
 export const DEFAULT_SETUP_F8 = {

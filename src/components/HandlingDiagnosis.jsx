@@ -1,6 +1,6 @@
 import { useState, useMemo } from 'react';
 import { handlingConditions, cornerPhases } from '../utils/tireAnalysis';
-import { analyzeSetup, DEFAULT_SETUP, RECOMMENDED_SETUP, PETE_SETUP, DYLAN_SETUP, JOSH_SETUP } from '../utils/raceSimulation';
+import { analyzeSetup, DEFAULT_SETUP, RECOMMENDED_SETUP, PETE_SETUP, DYLAN_SETUP, JOSH_SETUP, JOEY_SETUP } from '../utils/raceSimulation';
 import { REAR_SHOCKS, FRONT_STRUTS, shockLabel } from '../data/shockOptions';
 import NumericInput from './NumericInput';
 
@@ -414,7 +414,7 @@ export default function HandlingDiagnosis({ setup, setSetup, ambient, setAmbient
   }, [condition, phase, setupConfirmed, isDefaultSetup, analysis, setup]);
 
   const handlePreset = (preset) => {
-    const map = { recommended: RECOMMENDED_SETUP, pete: PETE_SETUP, dylan: DYLAN_SETUP, josh: JOSH_SETUP };
+    const map = { recommended: RECOMMENDED_SETUP, pete: PETE_SETUP, dylan: DYLAN_SETUP, josh: JOSH_SETUP, joey: JOEY_SETUP };
     if (map[preset]) { setSetup(deepClone(map[preset])); setSetupConfirmed(true); }
   };
 
@@ -439,6 +439,7 @@ export default function HandlingDiagnosis({ setup, setSetup, ambient, setAmbient
           <button className="sim-preset-btn" onClick={() => handlePreset('pete')}>Pete</button>
           <button className="sim-preset-btn" onClick={() => handlePreset('dylan')}>Dylan</button>
           <button className="sim-preset-btn" onClick={() => handlePreset('josh')}>Josh</button>
+          <button className="sim-preset-btn" onClick={() => handlePreset('joey')}>Joey</button>
         </div>
 
         <div className="opt-form-row" style={{ marginBottom: 10 }}>
