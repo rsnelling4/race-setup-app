@@ -181,7 +181,9 @@ function App() {
           </div>
         )}
 
-        {activeTab === 'handling' && <HandlingDiagnosis />}
+        {activeTab === 'handling' && (
+          <HandlingDiagnosis setup={setup} setSetup={setSetup} ambient={ambient} setAmbient={setAmbient} inflationTemp={inflationTemp} setInflationTemp={setInflationTemp} />
+        )}
         {activeTab === 'shocks' && <CrownVicShocks />}
         {activeTab === 'simulation' && (
           <RaceSimulation setup={setup} setSetup={setSetup} ambient={ambient} setAmbient={setAmbient} inflationTemp={inflationTemp} setInflationTemp={setInflationTemp} />
