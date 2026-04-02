@@ -113,7 +113,7 @@ export default function SuggestedSetup() {
               <span className="sep">·</span>
               <span>14 Sections</span>
               <span className="sep">·</span>
-              <span>Updated 2026-03-24</span>
+              <span>Updated 2026-04-02</span>
             </div>
           </div>
 
@@ -122,7 +122,7 @@ export default function SuggestedSetup() {
             <div className="suggested-highlight-card green">
               <div className="sh-label">Biggest Free Gain</div>
               <div className="sh-value">+0.08–0.10s</div>
-              <div className="sh-desc">Raise LF cold PSI: 20 → 25–26</div>
+              <div className="sh-desc">Raise LF cold PSI: 20 → 24–25</div>
             </div>
             <div className="suggested-highlight-card blue">
               <div className="sh-label">Model Ceiling</div>
@@ -131,8 +131,8 @@ export default function SuggestedSetup() {
             </div>
             <div className="suggested-highlight-card purple">
               <div className="sh-label">Actual Corner Speed</div>
-              <div className="sh-value">~47.6 mph</div>
-              <div className="sh-desc">Back-calculated from 17.4s (not 24 mph)</div>
+              <div className="sh-value">~42 mph</div>
+              <div className="sh-desc">Measured at 42 mph / 61.6 ft/s, R=145 ft → 0.813G</div>
             </div>
           </div>
 

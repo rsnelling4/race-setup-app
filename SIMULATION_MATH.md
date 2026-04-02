@@ -50,7 +50,7 @@ These are raw inputs — things measured directly, not derived. All track measur
 
 | Item | Value | Source / Notes |
 |---|---|---|
-| Weight | 3,800 lbs | Stripped interior, roll cage, stock 4.6L engine + X-pipe exhaust |
+| Weight | 4,100 lbs | Race weight (measured) — stripped interior, roll cage, stock 4.6L + X-pipe |
 | CG height | 22 in | Estimated — Crown Vic stock rides at ~22–23 in CG; roll cage adds mass high but interior removal lowers it; net ≈ stock [¹] |
 | Track width | 63 in | Crown Vic P71 factory spec [²] |
 | Wheelbase | 114.7 in | Crown Vic factory spec [²] |
@@ -68,7 +68,7 @@ These are fixed physics values used throughout all calculations.
 G       = 32.174 ft/s²       Standard gravitational acceleration
 RANKINE = 459.67             Offset to convert °F → absolute temperature (Rankine scale)
                              Used in ideal gas law: T(°R) = T(°F) + 459.67
-Mass    = 3800 / 32.174 = 118.1 slugs
+Mass    = 4100 / 32.174 = 127.4 slugs
 ```
 
 > **Why Rankine?** The ideal gas law requires absolute temperature (P₁/T₁ = P₂/T₂). Rankine is the imperial equivalent of Kelvin. Adding 459.67 to °F gives the absolute temperature needed for correct hot-pressure calculations.
@@ -211,39 +211,40 @@ When the car corners, inertia wants to keep the car going straight while the tir
 
 ### Static Loads (no cornering)
 ```
-Front axle total = 3800 lbs × 0.55 front bias = 2,090 lbs  →  1,045 lbs each
-Rear axle total  = 3800 lbs × 0.45 rear bias  = 1,710 lbs  →    855 lbs each
+Front axle total = 4100 lbs × 0.55 front bias = 2,255 lbs  →  1,127.5 lbs each
+Rear axle total  = 4100 lbs × 0.45 rear bias  = 1,845 lbs  →    922.5 lbs each
 ```
 
 ### Lateral Weight Transfer Formula
 
-The weight transfer ΔW depends on how high the center of gravity is relative to the track width. A tall, narrow car transfers more weight per G than a low, wide car.
+The weight transfer ΔW depends on the CG height **above the roll center** relative to the track width. The front roll center height (RCH = 3") reduces the effective moment arm from the full CG height.
 
 ```
-ΔW = Weight × G_lateral × CG_height / Track_width
-   = 3800 × G × (22 in / 12) / (63 in / 12)
-   = 3800 × G × 1.833 ft / 5.25 ft
-   = 3800 × G × 0.349
+ΔW = Weight × G_lateral × (CG_height − RCH) / Track_width
+   = 4100 × G × (22 in − 3 in) / 63 in
+   = 4100 × G × (19 in / 12) / (63 in / 12)
+   = 4100 × G × 1.583 ft / 5.25 ft
+   = 4100 × G × 0.302
 
 At OVAL_CORNER_G (0.375G):
-  ΔW = 3800 × 0.375 × 0.349 = 497 lbs total lateral transfer
+  ΔW = 4100 × 0.375 × 0.302 = 464 lbs total lateral transfer
 ```
 
-> The 497 lb transfer at corner G is split between front and rear axles based on the front/rear roll stiffness ratio (LLTD — explained in Section 8).
+> The 464 lb transfer at corner G is split between front and rear axles based on the front/rear roll stiffness ratio (LLTD — explained in Section 8).
 
 ### Per-Corner Loads
 
 ```
-LF (inside front)  = 1,045 − 497 × LLTD
-RF (outside front) = 1,045 + 497 × LLTD
-LR (inside rear)   =   855 − 497 × (1 − LLTD)
-RR (outside rear)  =   855 + 497 × (1 − LLTD)
+LF (inside front)  = 1,127.5 − 464 × LLTD
+RF (outside front) = 1,127.5 + 464 × LLTD
+LR (inside rear)   =   922.5 − 464 × (1 − LLTD)
+RR (outside rear)  =   922.5 + 464 × (1 − LLTD)
 ```
 
 **Example with LLTD = 0.472 (default setup with spring blending):**
 ```
-LF ≈  811 lbs    RF ≈ 1,279 lbs
-LR ≈  620 lbs    RR ≈ 1,090 lbs
+LF ≈  909 lbs    RF ≈ 1,346 lbs
+LR ≈  ≈698 lbs   RR ≈ 1,147 lbs
 ```
 
 > The RF carries 1,279 lbs in the corner — 57% more than its static load of 1,045 lbs. This is why RF tire pressure, camber, and temperature are the most important parameters to get right on a left-turn oval.
@@ -436,16 +437,17 @@ After enough laps, tire temperature stabilizes where heat in = heat out:
 ```
 T_equilibrium = ambient + (heatBase + heatLoad × workFactor × refSpeed) / coolRate
 
-WorkFactor = corner_load / avg_load   where avg_load = 950 lbs (3800 lbs / 4 tires)
+WorkFactor = corner_load / avg_load   where avg_load = 1025 lbs (4100 lbs / 4 tires)
 ```
 
 **Example — RF at OVAL_CORNER_G, 90°F ambient:**
 ```
-RF corner load ≈ 1,279 lbs
-WorkFactor_RF  = 1,279 / 950 = 1.346
-T_eq = 90 + (0.53 + 0.00453 × 1.346 × 75) / 0.02
-     = 90 + (0.53 + 0.458) / 0.02
-     = 90 + 49.4 = 139.4°F
+RF corner load ≈ 1,347 lbs  (4100 lbs, RCH 3", LLTD 0.472)
+avg_load       = 1,025 lbs
+WorkFactor_RF  = 1,347 / 1025 = 1.314
+T_eq = 90 + (0.53 + 0.00453 × 1.314 × 75) / 0.02
+     = 90 + (0.53 + 0.447) / 0.02
+     = 90 + 48.9 = 138.9°F
 ```
 
 > This 139°F equilibrium at 90°F ambient is in the optimal grip window (100–165°F) — good. If ambient rises to 95°F, equilibrium rises to ~144°F, still in window. At very high ambient, equilibrium approaches the top of the window.
@@ -571,7 +573,7 @@ Below 100°F:   µ = max(0.75,  1 − ((100 − temp) / 60)² × 0.25)
 Every tire has an optimal inflation pressure for the load it is carrying. Over-inflation concentrates contact in the middle of the tread; under-inflation spreads too much to the edges and causes excessive flex. Both reduce grip.
 
 ```
-optPSI = 30 × (cornerLoad / avgLoad)   where avgLoad = 950 lbs (3800/4)
+optPSI = 30 × (cornerLoad / avgLoad)   where avgLoad = 1025 lbs (4100/4)
 
 pressureGrip = max(0.82,  1 − 0.010 × |hotPSI − optPSI|)
 ```
@@ -579,7 +581,7 @@ pressureGrip = max(0.82,  1 − 0.010 × |hotPSI − optPSI|)
 - **1% grip loss per PSI** of deviation from optimal
 - **Floor 0.82** (18% max loss) — reached at 18 PSI off target, which represents catastrophically wrong pressure
 
-> **Why `30 × (load / avgLoad)`?** This formula assumes 30 PSI is the ideal pressure at the average static load (950 lbs). Tires that carry more load in cornering need more pressure to maintain the same contact patch shape. The factor `cornerLoad / avgLoad` scales from the average. This approach was calibrated so that at oval corner G, the RF optimal comes out to ~40 PSI hot and LF to ~26 PSI hot — matching real-world observed pressures.
+> **Why `30 × (load / avgLoad)`?** This formula assumes 30 PSI is the ideal pressure at the average static load (1025 lbs). Tires that carry more load in cornering need more pressure to maintain the same contact patch shape. The factor `cornerLoad / avgLoad` scales from the average. This approach was calibrated so that at oval corner G, the RF optimal comes out to ~40 PSI hot and LF to ~26 PSI hot — matching real-world observed pressures.
 
 **Sources:** Standard tire pressure vs load theory [³][⁶]. Calibrated against real-world pressure data from our sessions.
 
@@ -619,21 +621,21 @@ Caster gain (LF, inside tire):
 
 Body roll contribution (at actual oval corner G, not 1G):
   cornerRoll = bodyRoll_deg × OVAL_CORNER_G
-  RF (jounce):  bodyRollCamber = −(cornerRoll × 0.35)   [SLA jounce coefficient]
-  LF (droop):   bodyRollCamber = +(cornerRoll × 0.15)   [SLA droop coefficient]
+  RF (jounce):  bodyRollCamber = −(cornerRoll × 0.355)   [SLA jounce coefficient]
+  LF (droop):   bodyRollCamber = +(cornerRoll × 0.15)    [SLA droop coefficient]
 ```
 
 **Worked example — RF, caster 5°, total stiffness 28 (3.5°/G body roll):**
 ```
 cornerRoll     = 3.5° × 0.375 = 1.3125°
 casterGain     = −(5 × 0.18)  = −0.90°
-bodyRollCamber = −(1.3125 × 0.35) = −0.459°
+bodyRollCamber = −(1.3125 × 0.355) = −0.466°
 staticCamber   = −3.0°
 
-effectiveCamber = −3.0 + (−0.90) + (−0.459) = −4.36° ≈ ideal −4.5° ✓
+effectiveCamber = −3.0 + (−0.90) + (−0.466) = −4.37° ≈ ideal −4.5° ✓
 ```
 
-> **SLA vs MacPherson:** Crown Vic P71 uses SLA (short-long arm / double wishbone) front suspension. The shorter upper arm forces the wheel to gain negative camber when compressed (jounce). MacPherson struts (most budget cars) do the opposite — they gain positive camber in jounce, which fights grip in corners. The 0.35 SLA jounce coefficient is estimated from standard Crown Vic geometry [¹³].
+> **SLA vs MacPherson:** Crown Vic P71 uses SLA (short-long arm / double wishbone) front suspension. The shorter upper arm forces the wheel to gain negative camber when compressed (jounce). MacPherson struts (most budget cars) do the opposite — they gain positive camber in jounce, which fights grip in corners. The 0.355 SLA jounce coefficient is measured from wheel displacement data: 1.7" compression at 3.1° body roll → 1.1° camber gain → 1.1/3.1 = 0.355°/°.
 
 **Sources:** SLA geometry principles [³][⁶][¹³]. Caster gain coefficient (0.18/degree) from standard front suspension geometry analysis.
 
@@ -698,17 +700,17 @@ toeDrag = 1 + 0.001 × toe²    (applied as divisor to total grip force)
 
 ### Load Sensitivity
 
-Tires exhibit diminishing returns at high load — a tire carrying 1,400 lbs doesn't produce 1.47× the grip of a tire at 950 lbs because rubber only deforms so much. This is captured by:
+Tires exhibit diminishing returns at high load — a tire carrying 1,400 lbs doesn't produce 1.37× the grip of a tire at 1,025 lbs because rubber only deforms so much. This is captured by:
 
 ```
-loadSens = (avgLoad / cornerLoad)^0.08
+loadSens = (avgLoad / cornerLoad)^0.08   where avgLoad = 1025 lbs (4100/4)
 ```
 
-The 0.08 exponent is a mild sensitivity — load effects are small but real. At RF corner load of 1,279 lbs vs avg 950 lbs:
+The 0.08 exponent is a mild sensitivity — load effects are small but real. At RF corner load of ~1,347 lbs vs avg 1,025 lbs:
 ```
-loadSens = (950 / 1279)^0.08 = 0.742^0.08 = 0.976
+loadSens = (1025 / 1347)^0.08 = 0.761^0.08 = 0.977
 ```
-Only a 2.4% reduction. The effect is more significant at extreme loads.
+Only a 2.3% reduction. The effect is more significant at extreme loads.
 
 **Source:** Tire load sensitivity behavior [³][⁶].
 
@@ -779,16 +781,16 @@ RR: I:120 M:121 O:120 → avg 120.3°F
 The model works backward from the desired hot pressure at race conditions to the cold inflation number:
 
 ```
-Step 1:  optHotPSI  = 30 × (cornerLoad / 950)
+Step 1:  optHotPSI  = 30 × (cornerLoad / 1025)   where 1025 = 4100/4 avg_load
 Step 2:  optColdPSI = optHotPSI × 527.67 / (T_equilibrium + 459.67)
 ```
 
 **Example — RF at LLTD 0.472:**
 ```
-RF corner load ≈ 1,279 lbs
-optHotPSI  = 30 × (1279 / 950) = 40.4 PSI
+RF corner load ≈ 1,347 lbs  (4100 lbs, RCH 3", LLTD 0.472)
+optHotPSI  = 30 × (1347 / 1025) = 39.4 PSI
 T_eq_RF    = ~139°F (see thermal model)
-optColdPSI = 40.4 × 527.67 / (139 + 459.67) = 40.4 × 527.67 / 598.67 = 35.6 PSI cold
+optColdPSI = 39.4 × 527.67 / (139 + 459.67) = 39.4 × 527.67 / 598.67 = 34.7 PSI cold
 ```
 
 ### Safety Limits
@@ -835,10 +837,10 @@ rollStiffness  ≈ 29.3  (soft front dampers reduce total stiffness from 28)
 bodyRoll       = 3.5 × (28/29.3) = 3.34°/G
 cornerRoll     = 3.34 × 0.375 = 1.25°
 casterGain     = −(5 × 0.18)       = −0.90°
-bodyRollCamber = −(1.25 × 0.35)    = −0.438°
+bodyRollCamber = −(1.25 × 0.355)   = −0.444°
 idealEffective = −4.5°
 
-optStaticCamber = −4.5 − (−0.90) − (−0.438) = −3.16° → rounds to −3.0°
+optStaticCamber = −4.5 − (−0.90) − (−0.444) = −3.156° → rounds to −3.0°
 ```
 
 **Oval LF (caster 3°):**
@@ -1075,16 +1077,17 @@ All oval setups use FCS 1336349 front struts (taxi/police package, ~475 lbs/in) 
 | Cold PSI | 24 | 35 | 17.5 | 32 |
 
 ### Recommended Setup (Oval Optimizer Result)
-*Grid-searched over 180,880 combinations. LF uses Monroe 171346 (civilian spring ~440 lbs/in — softer than stock). All others use FCS/police-package spring rates.*
+*Grid-searched over 180,880 combinations @ 90°F. Updated 2026-04-01 with full physics model: 4100 lbs race weight, RCH 3", SLA jounce 0.355°/°, KPI 9.5°, sidewall compliance, ground-frame camber.*
 
 | Parameter | LF | RF | LR | RR |
 |---|---|---|---|---|
-| Shocks | 8 (Monroe 171346) | 6 (KYB SR4140) | 1 (Monroe 550018 Severe) | 1 |
-| Springs | ~440 lbs/in (civilian) | ~475 lbs/in | 160 lbs/in rear | |
-| Camber | −0.5° | −3.0° | — | — |
+| Shocks | 3 (FCS 1336349) | 1 (stiffest) | 1 | 1 |
+| Springs | 475 lbs/in | 475 lbs/in | 160 lbs/in | 160 lbs/in |
+| Camber | −0.25° | −2.25° | — | — |
 | Caster | 3.0° | 5.0° | — | — |
 | Toe | −0.25" | | | |
-| Cold PSI | 26 | 32.5 | 16.5 | 33.5 |
+| Cold PSI | 24 | 34.5 | 18 | 30 |
+| **Best lap** | **17.200s @ 90°F** | | | |
 
 ### F8 Baseline Setup
 *Real-world calibration run. NOT optimal — asymmetric caster causes right-turn difficulty. Used to verify the F8 model predicts ~23.3s.*
@@ -1099,16 +1102,17 @@ All oval setups use FCS 1336349 front struts (taxi/police package, ~475 lbs/in) 
 | Cold PSI | 35 | 35 | 30 | 30 |
 
 ### F8 Recommended Setup (F8 Optimizer Result)
-*Grid-searched over 34,884 combinations. Symmetric setup required for equal L/R performance.*
+*Grid-searched over 34,884 combinations @ 75°F. Updated 2026-04-01 with full physics model. Symmetric caster mandatory for equal L/R performance.*
 
 | Parameter | LF | RF | LR | RR |
 |---|---|---|---|---|
-| Shocks | 1 (stiffest available) | 1 | 1 | 1 |
-| Springs | 475 lbs/in front | | 160 lbs/in rear | |
-| Camber | −3.5° | −3.5° | — | — |
+| Shocks | 1 | 1 | 2 (KYB 555603) | 1 |
+| Springs | 475 lbs/in | 475 lbs/in | 160 lbs/in | 160 lbs/in |
+| Camber | −2.25° | −2.25° | — | — |
 | Caster | 5.0° | 5.0° | — | — |
 | Toe | −0.25" | | | |
-| Cold PSI | 35 | 35 | 30 | 30 |
+| Cold PSI | 34.5 | 34.5 | 29 | 29 |
+| **Best lap** | **23.145s @ 75°F** | | | |
 
 ---
 
@@ -1123,22 +1127,22 @@ The optimizer tested every possible combination of:
 - PSI: derived analytically from corner loads at OVAL_CORNER_G
 - Toe: fixed at −0.25"
 
-**Total combinations: 180,880 | Best lap: 17.196s @ 90°F | vs. baseline 17.4s: −0.204s improvement**
+**Total combinations: 180,880 | Best lap: 17.200s @ 90°F | vs. baseline 17.4s: −0.200s improvement**
 
-The top result was verified by running a full 25-lap simulation with the thermal model.
+The top result was verified by running a full 25-lap simulation with the thermal model. Model updated 2026-04-01 with measured race weight (4100 lbs), RCH 3", SLA jounce 0.355°/°, KPI 9.5°, sidewall compliance, ground-frame camber.
 
 | Parameter | LF | RF | LR | RR |
 |---|---|---|---|---|
-| Shocks | 8 (Monroe 171346) | 6 (KYB SR4140) | 1 (Monroe 550018 Severe) | 1 |
-| Camber | −0.5° | −3.0° | — | — |
+| Shocks | 3 (FCS 1336349) | 1 (stiffest) | 1 | 1 |
+| Springs | 475 lbs/in | 475 lbs/in | 160 lbs/in | 160 lbs/in |
+| Camber | −0.25° | −2.25° | — | — |
 | Caster | 3.0° | 5.0° | — | — |
-| Cold PSI | 26 | 32.5 | 16.5 | 33.5 |
+| Cold PSI | 24 | 34.5 | 18 | 30 |
 
 **Why this setup wins:**
-- Soft LF (rating 8) + stiffer RF (rating 6) front → low front LLTD → reduces natural understeer
-- Very stiff rear (rating 1 both) → rear carries more transfer → plants rear tires → more balanced
-- LLTD ≈ 0.39 (close to optimal 0.46 when spring contribution is included)
-- Analytically optimal camber: LF −0.5° leaves room for caster + body roll to reach near 0° effective (good for inside tire); RF −3.0° reaches −4.4° effective (near ideal −4.5°)
+- Moderate LF + stiff RF/rear → front LLTD target ≈ 0.468 (near optimal 0.46)
+- Very stiff rear (rating 1) → rear carries proportionally more transfer → keeps rear planted
+- Analytically optimal camber (ground-frame): LF −0.25° accounts for SLA droop camber gain and sidewall compliance, achieving near-0° ground-frame at the contact patch; RF −2.25° reaches approximately −2.0° ground-frame (ideal for outside tire on this compound)
 
 ### Figure 8 Grid Search
 
@@ -1149,22 +1153,22 @@ The optimizer tested every combination of:
 - PSI: derived analytically toward outside-corner load optimum
 - Toe: fixed at −0.25"
 
-**Total combinations: 34,884 | Best lap: 23.152s @ 75°F | vs. baseline 23.283s: −0.131s improvement**
+**Total combinations: 34,884 | Best lap: 23.145s @ 75°F | vs. baseline 23.283s: −0.138s improvement**
 
-Top 50 candidates were verified with full 20-lap simulations.
+Top 50 candidates were verified with full 20-lap simulations. Model updated 2026-04-01 with measured race weight (4100 lbs), RCH 3", SLA jounce 0.355°/°, KPI 9.5°, sidewall compliance, ground-frame camber.
 
 | Parameter | LF | RF | LR | RR |
 |---|---|---|---|---|
-| Shocks | 1 (stiffest) | 1 | 1 | 1 |
-| Camber | −3.5° | −3.5° | — | — |
+| Shocks | 1 | 1 | 2 (KYB 555603) | 1 |
+| Springs | 475 lbs/in | 475 lbs/in | 160 lbs/in | 160 lbs/in |
+| Camber | −2.25° | −2.25° | — | — |
 | Caster | 5.0° | 5.0° | — | — |
-| Cold PSI | 35 | 35 | 30 | 30 |
+| Cold PSI | 34.5 | 34.5 | 29 | 29 |
 
 **Why this setup wins:**
-- All-stiff shocks on F8 maximize lateral resistance and keep tires firmly planted through the crossover
-- Since F8 equilibrium temps are shock-independent (see Section 15), the shock choice only affects LLTD — stiff all-around stays near 0.50 LLTD (optimal for balanced L/R turns)
-- Symmetric −3.5° camber: at 5° caster and minimal body roll (F8 averages near 0 roll), this gives approximately −4.4° effective as outside tire and −3.0° effective as inside tire, averaging to −3.7° vs ideal −2.25° — a compromise where the outside-tire session dominates
-- Symmetric 5.0° caster: equal steering effort left and right, equal caster camber gain both directions
+- Stiff fronts + slightly softer LR rear achieves near 0.50 LLTD (optimal for balanced L/R turns in F8)
+- Symmetric −2.25° static camber: ground-frame model (with KPI, sidewall compliance, body roll) shows this achieves close to the ideal contact patch angle on both outside and inside tire roles
+- Symmetric 5.0° caster: equal steering effort and caster camber gain in both turn directions — mandatory for balanced F8 handling; asymmetric caster (see F8 Baseline) causes measurable L/R speed asymmetry
 
 ---
 
@@ -1184,4 +1188,4 @@ Top 50 candidates were verified with full 20-lap simulations.
 | [¹⁰] | ShockWarehouse / Monroe product pages — Monroe 171346 & 271346 | Civilian vs Police/Taxi application split, confirming different spring rates |
 | [¹¹] | JEGS / KYB product listing — KYB SR4140 | OE-spec application, Crown Victoria fitment |
 | [¹²] | RockAuto / KYB product listing — KYB 555603 | Rear shock only (no spring), OE gas-charged spec |
-| [¹³] | *Dixon, Tires, Suspension and Handling* (SAE International, 1996) | SLA jounce/droop camber coefficients (0.35 jounce, 0.15 droop) |
+| [¹³] | *Dixon, Tires, Suspension and Handling* (SAE International, 1996) | SLA jounce/droop camber coefficients (basis). Jounce value refined to 0.355 from measured wheel displacement data (1.1°/3.1°). Droop 0.15 unchanged. |

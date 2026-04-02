@@ -2,7 +2,7 @@
 ## 1/4-Mile Oval — Predictive Physics, Scenario Analysis & Recommendations
 
 **Prepared:** 2026-03-24
-**Car:** 2008 Crown Victoria P71 — 3,800 lbs, 4.6L SOHC V8, ~255 hp, Ironman iMove Gen3 AS 235/55R17
+**Car:** 2008 Crown Victoria P71 — 4,100 lbs (race weight, measured), 4.6L SOHC V8, ~255 hp, Ironman iMove Gen3 AS 235/55R17
 
 ---
 
@@ -27,7 +27,7 @@ The simulation has two distinct layers:
 
 **Layer 1 — Physics-based grip model (predictive):**
 `calcPerformance()` computes a dimensionless grip metric from first-principles physics:
-- Lateral weight transfer: `ΔW = (m × G_corner × h_cg) / trackWidth = 3800 × 0.375 × 1.833 / 5.25 = 498 lbs`
+- Lateral weight transfer: `ΔW = (weight × G_corner × (h_cg − RCH)) / trackWidth = 4100 × 0.375 × (19/12) / (63/12) = 464 lbs`
 - Load-dependent optimal pressure: `optHotPSI = 30 × (cornerLoad / avgLoad)`, derived from contact patch deformation physics
 - Camber: deviation from ideal effective angle with caster gain and SLA body-roll camber calculated geometrically
 - Thermal equilibrium: solved from heat generation rate (load × speed × friction work) vs. convective cooling
@@ -124,11 +124,12 @@ The multi-session pyrometer data has consistent, measurable patterns:
 
 Physics check — what PSI does the RF actually need?
 ```
-RF corner load at 0.375G × LLTD: 1,239 lbs
-Optimal hot PSI = 30 × (1239 / 950) = 39.1 PSI
-At 130°F tire temp: cold PSI = 39.1 × 528 / 590 = 35.0 PSI cold
+RF corner load at 0.375G × LLTD: ~1,347 lbs  (4100 lbs, RCH 3", LLTD 0.472)
+avg_load = 4100 / 4 = 1025 lbs
+Optimal hot PSI = 30 × (1347 / 1025) = 39.4 PSI
+At 130°F tire temp: cold PSI = 39.4 × 528 / 590 = 35.2 PSI cold
 ```
-Current RF cold PSI is 31–34. The higher end of that range (34 in Setup A) is closer to correct. Setup B reduced it to 31, which improved temp uniformity but moved RF slightly under-pressure.
+Current RF cold PSI is 31–34. The higher end of that range (34 in Setup A) is close to correct. Setup B reduced it to 31, which improved temp uniformity but moved RF under-pressure.
 
 **Recommended RF cold PSI: 34–35.**
 
@@ -141,14 +142,15 @@ Current RF cold PSI is 31–34. The higher end of that range (34 in Setup A) is 
 
 **Finding:** LF inside edge is consistently 10–20°F hotter than outside. This directly indicates **too much negative camber** on the LF (inside tire in left turns). The inside-front ideally wants **0° effective camber** for maximum flat contact patch. It's also severely under-pressured:
 ```
-LF corner load: 851 lbs
-Optimal hot PSI = 30 × (851 / 950) = 26.9 PSI
-At 100°F: cold PSI = 26.9 × 528 / 560 = 25.4 PSI cold
-Current cold PSI: 19.5–20 PSI → hot = 21.7 PSI → 5.2 PSI under optimal
-pressureGripFactor penalty = 1 - (0.010 × 5.2) = 0.948 → 5.2% grip lost on LF
+LF corner load: ~909 lbs  (4100 lbs, RCH 3", LLTD 0.472)
+avg_load = 4100 / 4 = 1025 lbs
+Optimal hot PSI = 30 × (909 / 1025) = 26.6 PSI
+At 100°F: cold PSI = 26.6 × 528 / 560 = 25.1 PSI cold
+Current cold PSI: 19.5–20 PSI → hot ≈ 21.7 PSI → ~5 PSI under optimal
+pressureGripFactor penalty = 1 - (0.010 × 5) = 0.950 → 5% grip lost on LF
 ```
 
-**Recommended LF cold PSI: 25–26.**
+**Recommended LF cold PSI: 25.**
 
 #### RR — Outside Rear
 
@@ -157,10 +159,12 @@ pressureGripFactor penalty = 1 - (0.010 × 5.2) = 0.948 → 5.2% grip lost on LF
 | Setup A, 65°F | 36 | 100 | 130 | Outside +30°F |
 | Setup B, 87°F | 33 | 118 | 131 | Outside +13°F |
 
-**Finding:** RR outside consistently 13–30°F hotter than inside. Same physics as RF — solid rear axle in left turns pushes car onto RR. The RR at 33 PSI cold appears well-calibrated:
+**Finding:** RR outside consistently 13–30°F hotter than inside. Same physics as RF — solid rear axle in left turns pushes car onto RR. Updated with 4100 lbs race weight and RCH correction:
 ```
-RR corner load: 1,159 lbs, optimal hot = 36.6 PSI
-At 130°F: cold = 32.8 PSI → current 33 PSI is nearly optimal ✓
+RR corner load: ~1,168 lbs  (4100 lbs, RCH 3", LLTD 0.472)
+avg_load = 1025 lbs
+Optimal hot PSI = 30 × (1168 / 1025) = 34.2 PSI
+At 130°F: cold = 34.2 × 528 / 590 = 30.6 PSI → target ~31 PSI cold ✓
 ```
 
 #### LR — Inside Rear
@@ -186,27 +190,27 @@ All scenarios evaluated at 90°F ambient (warm race conditions — tires reach 1
 | **PETE Setup B (actual race)** | **17.300s** | +0.106s | 0.471 | High RF caster works in real world |
 | DYLAN | 17.300s | +0.106s | 0.471 | Low RF caster hurts vs. Pete in model |
 | JOSH | 17.294s | +0.112s | 0.471 | Best camber among team but RF under-cambered |
-| **RECOMMENDED (optimizer result)** | **17.324s** | +0.076s | 0.389 | LLTD sub-optimal; full sim gives better result |
+| **RECOMMENDED (optimizer result, 2026-04-01)** | **17.200s** | **+0.200s** | 0.468 | Full 180,880-combo grid search @ 90°F |
 | Theoretical ceiling (130°F all tires) | 17.336s | +0.070s | — | Model ceiling at perfect thermal conditions |
 
-> **Note on the RECOMMENDED setup discrepancy:** The RECOMMENDED setup's LLTD of 0.389 looks sub-optimal in the quick calculation, but the full 180,880-combination grid search found it is actually best because the Monroe 171346 soft front spring (440 lbs/in) + very stiff rear dampers (rating 1) combination produces lower equilibrium tire temps at the front, keeping both front tires in the optimal thermal window. The full simulation's thermal-mechanical coupling catches this; the quick approximation doesn't. Trust the grid search result.
+> **Note:** The RECOMMENDED setup (shocks LF=3/RF=1/LR=1/RR=1, camber LF−0.25°/RF−2.25°, caster LF=3°/RF=5°, PSI LF=24/RF=34.5/LR=18/RR=30) was found by the full 180,880-combination grid search using the updated physics model (4100 lbs, RCH 3", SLA jounce 0.355°/°, KPI 9.5°, sidewall compliance, ground-frame camber). The scenario matrix lap times above were computed with the older model and are kept for reference; the grid search result should be trusted for the overall best setup.
 
 ---
 
 ## SECTION 5: CAMBER ANALYSIS — EVERY SETUP
 
 Using the SLA geometry formula: `effectiveCamber = static + casterGain + bodyRollCamber`
-Where: `casterGain_RF = −(caster × 0.18°)`, `casterGain_LF = +(caster × 0.10°)`, `bodyRoll_RF = −(cornerRoll × 0.35)`, `bodyRoll_LF = +(cornerRoll × 0.15)`
+Where: `casterGain_RF = −(caster × 0.18°)`, `casterGain_LF = +(caster × 0.10°)`, `bodyRoll_RF = −(cornerRoll × 0.355)`, `bodyRoll_LF = +(cornerRoll × 0.15)`
 Corner roll at 0.375G baseline = `3.5° × 0.375 = 1.31°`
-Ideal: LF effective = 0°, RF effective = −4.5°
+Ideal: LF effective = 0°, RF effective = −4.5° (chassis-relative; ground-frame model adds KPI and sidewall compliance on top)
 
 | Setup | LF Static | LF Caster | LF Effective | LF Deviation | RF Static | RF Caster | RF Effective | RF Deviation |
 |---|---|---|---|---|---|---|---|---|
-| DEFAULT | −1.5° | 3.5° | **−0.95°** | 0.95° over | −3.0° | 5.0° | **−4.36°** | 0.14° ✓ |
-| Pete (Setup B) | −2.25° | 3.5° | **−1.70°** | 1.70° over | −2.75° | 8.0° | **−4.65°** | 0.15° ✓ |
+| DEFAULT | −1.5° | 3.5° | **−0.95°** | 0.95° over | −3.0° | 5.0° | **−4.37°** | 0.13° ✓ |
+| Pete (Setup B) | −2.25° | 3.5° | **−1.70°** | 1.70° over | −2.75° | 8.0° | **−4.66°** | 0.16° ✓ |
 | Dylan | −2.0° | 4.0° | **−1.40°** | 1.40° over | −2.75° | 3.25° | **−3.79°** | 0.71° short |
 | Josh | −0.75° | 5.0° | **−0.05°** | 0.05° ✓ | −1.75° | 7.0° | **−3.47°** | 1.03° short |
-| **RECOMMENDED** | **−0.5°** | **3.0°** | **0.00°** | **0.00° ✓** | −3.0° | 5.0° | **−4.36°** | 0.14° ✓ |
+| **RECOMMENDED** | **−0.25°** | **3.0°** | **+0.12°** | **0.12° ✓** | **−2.25°** | **5.0°** | **−3.97°** | 0.53° short |
 
 **Key observations:**
 
@@ -218,7 +222,7 @@ Ideal: LF effective = 0°, RF effective = −4.5°
 
 4. **To dial in RF with 8.0° caster:** The optimal static RF camber that hits −4.5° effective is:
    ```
-   static = −4.5 + (8.0 × 0.18) + (1.31 × 0.35) = −4.5 + 1.44 + 0.459 = −2.60°
+   static = −4.5 + (8.0 × 0.18) + (1.31 × 0.355) = −4.5 + 1.44 + 0.465 = −2.60°
    ```
    Running RF at −2.60° static with 8.0° caster would be theoretically optimal. Current −3.0° with 8.0° caster goes 0.40° past ideal.
 
@@ -231,18 +235,20 @@ Cold PSI targets derived from first principles:
 2. Compute optimal hot PSI: `optHot = 30 × (cornerLoad / avgLoad)`
 3. Convert to cold: `coldPSI = optHot × (68°F + 460) / (eqTemp + 460)`
 
+Corner loads computed from 4100 lbs race weight, RCH 3", LLTD 0.472 at 0.375G. avg_load = 1025 lbs.
+
 | Corner | Corner Load | Eq. Temp | Opt. Hot PSI | Optimal Cold PSI | Setup A Cold | Setup B Cold | Gap |
 |---|---|---|---|---|---|---|---|
-| RF | 1,239 lbs | 130°F | 39.1 | **35.0** | 34 ✓ | 31 (−4 under) | 4 PSI low |
-| LF | 851 lbs | 100°F | 26.9 | **25.4** | 19.5 (−6 under) | 20 (−5 under) | 5 PSI low |
-| RR | 1,159 lbs | 130°F | 36.6 | **32.8** | 36 (+3 over) | 33 ≈ ✓ | Near optimal |
-| LR | 551 lbs | 95°F | 17.4 | **16.6** | 18.5 (+2 over) | 15 (−2 under) | Inconsistent |
+| RF | 1,347 lbs | 130°F | 39.4 | **35.2** | 34 (−1.2) | 31 (−4 under) | 4 PSI low |
+| LF | 908 lbs | 100°F | 26.6 | **25.1** | 19.5 (−6 under) | 20 (−5 under) | 5 PSI low |
+| RR | 1,168 lbs | 130°F | 34.2 | **30.6** | 36 (+5 over) | 33 (+2.4 over) | Slightly over |
+| LR | 677 lbs | 95°F | 19.8 | **18.8** | 18.5 (−0.3) ✓ | 15 (−4 under) | Inconsistent |
 
 **Pressure conclusions:**
 - **LF is under-pressured in every session** by 5–6 PSI cold. This is the most significant correctable error. It costs ~5% grip on the LF corner.
-- **RF under Setup B (31 PSI) is 4 PSI below optimal.** Setup A's 34 PSI was more correct. Bring RF back to 34–35 cold.
-- **RR at 33 PSI (Setup B) is near-perfect.** Setup A's 36 was slightly over-inflated.
-- **LR is inconsistent.** Both 15 and 18.5 PSI have been run. Optimal is 16–17 PSI cold.
+- **RF under Setup B (31 PSI) is 4 PSI below optimal.** Setup A's 34 PSI was close. Bring RF back to 34–35 cold.
+- **RR was over-inflated in both setups.** Setup A's 36 was 5 PSI high; Setup B's 33 is 2 PSI high. Target ~31 PSI.
+- **LR at 18.5 PSI (Setup A) was nearly optimal.** Setup B's 15 PSI was 4 PSI under. Target ~18–19 PSI cold.
 
 > **The LF pressure fix alone is estimated to be worth 0.05–0.10s/lap.** This costs nothing and can be done at the next event.
 
@@ -321,18 +327,18 @@ Sensitivity of each variable to lap time (grip improvement per unit change):
 
 ### Tier 1 — Do today, no new parts required
 
-**1. Raise LF cold pressure to 25–26 PSI**
+**1. Raise LF cold pressure to 24–25 PSI**
 Estimated gain: **+0.08–0.10s/lap**
-Evidence: LF inside edge consistently 10–20°F hotter than outside = severe under-inflation. Physics: hot LF PSI is 21.7 at race temp vs 26.9 optimal — 5.2 PSI gap costs 5.2% grip on this tire.
+Evidence: LF inside edge consistently 10–20°F hotter than outside = severe under-inflation. Physics (4100 lbs, RCH 3"): hot LF PSI is ~21.7 at race temp vs 26.6 optimal — ~5 PSI gap costs ~5% grip on this tire.
 Risk: None. This is the single clearest correction from all available data.
 
 **2. Set RF cold pressure to 34–35 PSI (not 31)**
 Estimated gain: **+0.03s/lap**
-Evidence: Setup A with 34 PSI had RF outside-to-inside differential of +25°F. Setup B with 31 PSI reduced it to +12°F, but now RF is slightly under-pressured for its corner load (1,239 lbs needs 39.1 PSI hot = 35 PSI cold).
+Evidence: Setup A with 34 PSI had RF outside-to-inside differential of +25°F. Setup B with 31 PSI reduced it to +12°F, but RF is still under-pressured for its corner load (~1,347 lbs needs 39.4 PSI hot = 35 PSI cold).
 
-**3. Raise LF cold pressure to 25 PSI and set LR to 16–17 PSI**
-(Combined with #1 above for complete pressure pass)
-Estimated gain: +0.02s/lap additional (LR and RR)
+**3. Set LR to 18–19 PSI and RR to 30–31 PSI**
+(Complete pressure pass with #1 and #2 above)
+Estimated gain: +0.02s/lap additional. LR optimal is ~19 PSI cold; RR optimal is ~31 PSI cold.
 
 ### Tier 2 — Next alignment session (requires alignment shop or adjustment)
 
@@ -387,7 +393,7 @@ From 17.4s baseline → **~17.2s with all Tier 1+2 changes (no new parts except 
 | Factor | Current | Theoretical Best | Gap |
 |---|---|---|---|
 | Tire compound | UTQG 420 AA A | Higher-performance compound? | Rules dependent |
-| Vehicle weight | 3,800 lbs | 3,600 lbs (200 lb reduction) | +0.2–0.3s if allowed |
+| Vehicle weight | 4,100 lbs (measured race weight) | 3,900 lbs (200 lb reduction) | +0.2–0.3s if allowed |
 | Engine output | ~255 hp | N/A (engine-limited on straights) | Negligible below 70 mph |
 | Suspension arms | Stock SLA geometry | Adjustable upper arm geometry | Would allow more negative camber range |
 
@@ -420,43 +426,26 @@ Being explicit about model limitations:
 
 ## SECTION 13: OPTIMAL SETUP SPECIFICATION
 
-### Recommended race setup — immediate implementation (no new parts)
+*Updated 2026-04-01 from full-physics grid search (4100 lbs, RCH 3", SLA jounce 0.355°/°, KPI 9.5°, sidewall compliance, ground-frame camber).*
+
+### Recommended race setup — grid-search optimized (180,880 combinations @ 90°F)
 
 ```
-Shocks:  LF FCS 1336349 (rating 4)    RF FCS 1336349 (rating 4)
-         LR KYB 555603 (rating 2)      RR KYB 555603 (rating 2)
+Shocks:  LF FCS 1336349 (rating 3)    RF stiffest available (rating 1)
+         LR stiffest available (rating 1)  RR stiffest available (rating 1)
 Springs: Front 475 lbs/in              Rear 160 lbs/in (stock)
 
-Camber:  LF −0.5°    RF −3.0°
-Caster:  LF 3.0°     RF 5.0°   (or 7.0° RF per real-world data)
+Camber:  LF −0.25°   RF −2.25°
+Caster:  LF 3.0°     RF 5.0°
 Toe:     −0.25" (1/4" toe out)
 
 Cold PSI (set at 68°F garage temp):
-  LF: 25 PSI    RF: 34 PSI
-  LR: 17 PSI    RR: 33 PSI
+  LF: 24 PSI    RF: 34.5 PSI
+  LR: 18 PSI    RR: 30 PSI
 
-Predicted lap time: ~17.2–17.3s
-vs current: +0.1–0.2s improvement
-```
-
-### Recommended race setup — with component upgrades
-
-```
-Shocks:  LF Monroe 171346 (rating 8)   RF KYB SR4140 (rating 6)
-         LR Monroe 550018 (rating 1)    RR Monroe 550018 (rating 1)
-Springs: Front 440 lbs/in (Monroe 171346 is civilian spring ~440)
-         Rear 160 lbs/in (stock)
-
-Camber:  LF −0.5°    RF −3.0°
-Caster:  LF 3.0°     RF 5.0°
-Toe:     −0.25"
-
-Cold PSI (set at 68°F):
-  LF: 26 PSI    RF: 32.5 PSI
-  LR: 16.5 PSI  RR: 33.5 PSI
-
-Predicted lap time: ~17.1–17.2s (matches or improves on best-ever 17.1s)
-LLTD: 0.389 → full grid search found this is optimal due to thermal coupling
+Predicted lap time: 17.200s @ 90°F
+vs Setup A (calibration): −0.2s improvement
+LLTD: 0.468 (near optimal 0.46)
 ```
 
 ### Note on RF caster (empirical vs model)
