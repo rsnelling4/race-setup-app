@@ -3007,6 +3007,87 @@
 }
 .opt-stat-ideal { font-size: 0.65rem; color: var(--text-muted); margin-left: 4px; }
 
+/* ── Top action badge ── */
+.opt-top-action {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 5px 8px;
+  background: rgba(234, 179, 8, 0.08);
+  border: 1px solid rgba(234, 179, 8, 0.25);
+  border-radius: 6px;
+  margin-bottom: 6px;
+  font-size: 0.72rem;
+}
+.opt-top-action-label {
+  color: var(--yellow);
+  font-weight: 600;
+  white-space: nowrap;
+}
+.opt-top-action-value {
+  color: var(--text-primary);
+  font-weight: 700;
+}
+
+/* ── Status row ── */
+.opt-status-row {
+  display: flex;
+  align-items: baseline;
+  gap: 5px;
+  font-size: 0.74rem;
+  flex-wrap: wrap;
+}
+.opt-status-icon {
+  font-size: 0.78rem;
+  font-weight: 700;
+  flex-shrink: 0;
+  line-height: 1;
+}
+.opt-status-label {
+  color: var(--text-muted);
+  flex-shrink: 0;
+}
+.opt-status-value {
+  font-weight: 600;
+}
+.opt-status-action {
+  color: var(--yellow);
+  font-size: 0.68rem;
+  margin-left: 2px;
+}
+.opt-status-action::before { content: '→ '; }
+
+/* ── Compact factor block ── */
+.opt-factor-block--compact {
+  gap: 3px;
+}
+
+/* ── Expanded detail ── */
+.opt-expanded-detail {
+  padding-top: 4px;
+  border-top: 1px solid var(--border);
+  margin-top: 4px;
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+}
+
+/* ── Expand toggle ── */
+.opt-expand-toggle {
+  width: 100%;
+  margin-top: 8px;
+  padding: 4px 0;
+  background: none;
+  border: none;
+  border-top: 1px solid var(--border);
+  font-size: 0.65rem;
+  color: var(--text-muted);
+  cursor: pointer;
+  text-align: center;
+  letter-spacing: 0.3px;
+}
+.opt-expand-toggle:hover { color: var(--accent); }
+
 /* Score bar */
 .opt-score-row {
   display: flex;

@@ -441,24 +441,49 @@ function CamberCalc({ roll, setupCaster }) {
   );
 }
 
+function StatusRow({ ok, label, value, action, tip, warn }) {
+  const icon = ok ? '✓' : warn ? '⚠' : '→';
+  const iconColor = ok ? 'var(--green)' : warn ? 'var(--yellow)' : 'var(--yellow)';
+  const content = (
+    <div className="opt-status-row">
+      <span className="opt-status-icon" style={{ color: iconColor }}>{icon}</span>
+      <span className="opt-status-label">{label}</span>
+      <span className="opt-status-value" style={{ color: ok ? 'var(--green)' : 'var(--text-primary)' }}>{value}</span>
+      {!ok && action && <span className="opt-status-action">{action}</span>}
+    </div>
+  );
+  return tip ? <Tooltip text={tip}>{content}</Tooltip> : content;
+}
+
 function CornerCard({ c, data, setup }) {
+  const [expanded, setExpanded] = useState(false);
   const {
-    load, estimatedTemp, hp, optHotPsi, recColdPsi, recHotPsi,
+    load, estimatedTemp, hp, recColdPsi, recHotPsi,
     psiGripFactor, isPresLimited, psiDev,
     effectiveCamber, groundCamber, idealGroundCamber, camberDev, camberFactor, dynamicGain,
     optStaticCamber, alignmentOutOfRange, sidewallCamber, front, outside, tempFactor, adjustableScore,
   } = data;
 
-  const camberOk = camberDev < 0.5;
-  const presOk = Math.abs(psiDev) < 3;
-  const recCold = Math.round(recColdPsi * 2) / 2;
+  const camberOk   = camberDev < 0.5;
+  const presOk     = Math.abs(psiDev) < 2;
+  const recCold    = Math.round(recColdPsi * 2) / 2;
+  const psiDir     = psiDev < 0 ? 'Raise' : 'Lower';
 
   const idealTip = front
     ? (outside ? TIPS.idealCamber.outside : TIPS.idealCamber.inside)
     : (outside ? TIPS.idealCamber.rearOutside : TIPS.idealCamber.rearInside);
 
+  // Single highest-priority action for the card badge
+  let topAction = null;
+  if (!camberOk && front && optStaticCamber !== null) {
+    topAction = { label: 'Set camber', value: `${optStaticCamber}° static` };
+  } else if (!presOk && !isPresLimited) {
+    topAction = { label: `${psiDir} cold PSI`, value: `${recCold} PSI` };
+  }
+
   return (
     <div className="opt-corner-card">
+      {/* ── Header ── */}
       <div className="opt-corner-header">
         <div>
           <span className="opt-corner-pos">{c}</span>
@@ -471,6 +496,7 @@ function CornerCard({ c, data, setup }) {
         </Tooltip>
       </div>
 
+      {/* ── Meta ── */}
       <div className="opt-corner-meta">
         <Tooltip text={TIPS.load}><span>{Math.round(load)} lbs</span></Tooltip>
         <Tooltip text={TIPS.estTemp}><span>{Math.round(estimatedTemp)}°F est.</span></Tooltip>
@@ -479,90 +505,86 @@ function CornerCard({ c, data, setup }) {
         </Tooltip>
       </div>
 
-      <div className="opt-factor-block">
+      {/* ── Top action badge ── */}
+      {topAction && (
+        <div className="opt-top-action">
+          <span className="opt-top-action-label">{topAction.label}:</span>
+          <span className="opt-top-action-value">{topAction.value}</span>
+        </div>
+      )}
+
+      {/* ── Camber status row ── */}
+      <div className="opt-factor-block opt-factor-block--compact">
         <Tooltip text={TIPS.camberSection}>
           <div className="opt-factor-title">Camber</div>
         </Tooltip>
+
         {front ? (
           <>
-            <div className="opt-camber-math">
-              <Tooltip text={TIPS.staticCamber}><span>{setup.camber[c]}° static</span></Tooltip>
-              <Tooltip text={TIPS.casterGain}>
-                <span className="opt-math-op"> {dynamicGain >= 0 ? '+' : ''}{dynamicGain.toFixed(2)}° dynamic</span>
-              </Tooltip>
-              <Tooltip text={TIPS.effectiveCamber}>
-                <span className="opt-math-eq"> = {effectiveCamber !== null ? effectiveCamber.toFixed(2) : '—'}° eff.</span>
-              </Tooltip>
-            </div>
-            <div className="opt-stat-pair">
-              <Tooltip text={TIPS.groundCamber}><span>Ground camber</span></Tooltip>
-              <span style={{ color: camberOk ? 'var(--green)' : 'var(--yellow)' }}>
-                {groundCamber !== null ? (groundCamber >= 0 ? '+' : '') + groundCamber.toFixed(2) : '—'}°
-              </span>
-            </div>
-            <div className="opt-stat-pair" style={{ color: 'var(--text-muted)', fontSize: '0.85em' }}>
-              <Tooltip text={TIPS.sidewallCamber}><span>  ↳ sidewall compliance</span></Tooltip>
-              <span>+{sidewallCamber !== undefined ? sidewallCamber.toFixed(2) : '—'}°</span>
-            </div>
-            <div className="opt-stat-pair">
-              <Tooltip text={idealTip}><span>Target ground</span></Tooltip>
-              <span style={{ color: camberOk ? 'var(--green)' : 'var(--yellow)' }}>
-                {idealGroundCamber !== undefined ? (idealGroundCamber >= 0 ? '+' : '') + idealGroundCamber.toFixed(1) : '—'}°
-                {!camberOk && optStaticCamber !== null && (
-                  <span className="opt-rec-arrow"> → set {optStaticCamber}° static</span>
-                )}
-              </span>
-            </div>
-            {alignmentOutOfRange && optStaticCamber !== null && (
-              <Tooltip text={TIPS.alignmentRange}>
-                <div className="opt-limited-note" style={{ color: 'var(--yellow)' }}>
-                  ⚠ {optStaticCamber}° outside stock hardware range (−0.5° to −3.0°)
+            <StatusRow
+              ok={camberOk}
+              warn={alignmentOutOfRange}
+              label="Ground camber"
+              value={`${groundCamber !== null ? (groundCamber >= 0 ? '+' : '') + groundCamber.toFixed(2) : '—'}° (target ${idealGroundCamber !== undefined ? (idealGroundCamber >= 0 ? '+' : '') + idealGroundCamber.toFixed(1) : '—'}°)`}
+              action={optStaticCamber !== null ? `Set static to ${optStaticCamber}°${alignmentOutOfRange ? ' ⚠ outside stock range' : ''}` : null}
+              tip={idealTip}
+            />
+            {expanded && (
+              <div className="opt-expanded-detail">
+                <div className="opt-camber-math">
+                  <Tooltip text={TIPS.staticCamber}><span>{setup.camber[c]}° static</span></Tooltip>
+                  <Tooltip text={TIPS.casterGain}>
+                    <span className="opt-math-op"> {dynamicGain >= 0 ? '+' : ''}{dynamicGain.toFixed(2)}° dynamic</span>
+                  </Tooltip>
+                  <Tooltip text={TIPS.effectiveCamber}>
+                    <span className="opt-math-eq"> = {effectiveCamber !== null ? effectiveCamber.toFixed(2) : '—'}° eff.</span>
+                  </Tooltip>
                 </div>
-              </Tooltip>
+                <div className="opt-stat-pair" style={{ color: 'var(--text-muted)', fontSize: '0.85em' }}>
+                  <Tooltip text={TIPS.sidewallCamber}><span>↳ sidewall compliance</span></Tooltip>
+                  <span>+{sidewallCamber !== undefined ? sidewallCamber.toFixed(2) : '—'}°</span>
+                </div>
+              </div>
             )}
           </>
         ) : (
           <>
-            <div className="opt-stat-pair">
-              <Tooltip text={TIPS.groundCamber}><span>Ground camber</span></Tooltip>
-              <span>{groundCamber !== null ? (groundCamber >= 0 ? '+' : '') + groundCamber.toFixed(2) : '—'}°</span>
-            </div>
-            <div className="opt-stat-pair">
-              <Tooltip text={idealTip}><span>Target ground</span></Tooltip>
-              <span>{idealGroundCamber !== undefined ? (idealGroundCamber >= 0 ? '+' : '') + idealGroundCamber.toFixed(1) : '—'}°</span>
-            </div>
-            <Tooltip text={TIPS.solidAxle}>
-              <div className="opt-limited-note">Solid axle — adjust via shock balance</div>
-            </Tooltip>
+            <StatusRow
+              ok={camberOk}
+              label="Ground camber"
+              value={`${groundCamber !== null ? (groundCamber >= 0 ? '+' : '') + groundCamber.toFixed(2) : '—'}° (target ${idealGroundCamber !== undefined ? (idealGroundCamber >= 0 ? '+' : '') + idealGroundCamber.toFixed(1) : '—'}°)`}
+              tip={idealTip}
+            />
+            {expanded && (
+              <Tooltip text={TIPS.solidAxle}>
+                <div className="opt-limited-note">Solid axle — adjust via shock balance</div>
+              </Tooltip>
+            )}
           </>
         )}
-        <ScoreBar value={camberFactor} label="Camber score" tip={TIPS.camberScore} />
+        <ScoreBar value={camberFactor} tip={TIPS.camberScore} />
       </div>
 
-      <div className="opt-factor-block">
+      {/* ── Pressure status row ── */}
+      <div className="opt-factor-block opt-factor-block--compact">
         <Tooltip text={TIPS.pressureSection}>
           <div className="opt-factor-title">Pressure</div>
         </Tooltip>
-        <div className="opt-stat-pair">
-          <Tooltip text={TIPS.coldHot}><span>Cold → Hot</span></Tooltip>
-          <span>{setup.coldPsi[c]} → {hp.toFixed(1)} PSI</span>
-        </div>
-        <div className="opt-stat-pair">
-          <Tooltip text={isPresLimited ? TIPS.loadMismatch : TIPS.optimalHot}>
-            <span>Optimal hot{isPresLimited ? ' *' : ''}</span>
-          </Tooltip>
-          <span style={{ color: isPresLimited ? 'var(--text-muted)' : presOk ? 'var(--green)' : 'var(--yellow)' }}>
-            {recHotPsi.toFixed(1)} PSI
-            {!presOk && !isPresLimited && (
-              <span className="opt-rec-arrow"> → cold: {recCold} PSI</span>
-            )}
-          </span>
-        </div>
-        {isPresLimited && (
-          <div className="opt-limited-note">* Load mismatch — optimal {optHotPsi.toFixed(0)} PSI unreachable</div>
-        )}
-        <ScoreBar value={psiGripFactor} label="Pressure score" tip={TIPS.presScore} />
+        <StatusRow
+          ok={presOk || isPresLimited}
+          label={`${setup.coldPsi[c]} cold → ${hp.toFixed(1)} hot`}
+          value={isPresLimited ? 'load mismatch' : `opt ${recHotPsi.toFixed(1)} PSI hot`}
+          action={!isPresLimited && !presOk ? `${psiDir} cold to ${recCold} PSI` : null}
+          tip={isPresLimited ? TIPS.loadMismatch : TIPS.optimalHot}
+          warn={isPresLimited}
+        />
+        <ScoreBar value={psiGripFactor} tip={TIPS.presScore} />
       </div>
+
+      {/* ── Expand toggle ── */}
+      <button className="opt-expand-toggle" onClick={() => setExpanded(e => !e)}>
+        {expanded ? 'Less detail ▲' : 'More detail ▼'}
+      </button>
     </div>
   );
 }
