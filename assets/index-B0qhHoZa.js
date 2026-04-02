@@ -86,7 +86,7 @@ These are raw inputs — things measured directly, not derived. All track measur
 
 | Item | Value | Source / Notes |
 |---|---|---|
-| Weight | 3,800 lbs | Stripped interior, roll cage, stock 4.6L engine + X-pipe exhaust |
+| Weight | 4,100 lbs | Race weight (measured) — stripped interior, roll cage, stock 4.6L + X-pipe |
 | CG height | 22 in | Estimated — Crown Vic stock rides at ~22–23 in CG; roll cage adds mass high but interior removal lowers it; net ≈ stock [¹] |
 | Track width | 63 in | Crown Vic P71 factory spec [²] |
 | Wheelbase | 114.7 in | Crown Vic factory spec [²] |
@@ -104,7 +104,7 @@ These are fixed physics values used throughout all calculations.
 G       = 32.174 ft/s²       Standard gravitational acceleration
 RANKINE = 459.67             Offset to convert °F → absolute temperature (Rankine scale)
                              Used in ideal gas law: T(°R) = T(°F) + 459.67
-Mass    = 3800 / 32.174 = 118.1 slugs
+Mass    = 4100 / 32.174 = 127.4 slugs
 \`\`\`
 
 > **Why Rankine?** The ideal gas law requires absolute temperature (P₁/T₁ = P₂/T₂). Rankine is the imperial equivalent of Kelvin. Adding 459.67 to °F gives the absolute temperature needed for correct hot-pressure calculations.
@@ -247,39 +247,40 @@ When the car corners, inertia wants to keep the car going straight while the tir
 
 ### Static Loads (no cornering)
 \`\`\`
-Front axle total = 3800 lbs × 0.55 front bias = 2,090 lbs  →  1,045 lbs each
-Rear axle total  = 3800 lbs × 0.45 rear bias  = 1,710 lbs  →    855 lbs each
+Front axle total = 4100 lbs × 0.55 front bias = 2,255 lbs  →  1,127.5 lbs each
+Rear axle total  = 4100 lbs × 0.45 rear bias  = 1,845 lbs  →    922.5 lbs each
 \`\`\`
 
 ### Lateral Weight Transfer Formula
 
-The weight transfer ΔW depends on how high the center of gravity is relative to the track width. A tall, narrow car transfers more weight per G than a low, wide car.
+The weight transfer ΔW depends on the CG height **above the roll center** relative to the track width. The front roll center height (RCH = 3") reduces the effective moment arm from the full CG height.
 
 \`\`\`
-ΔW = Weight × G_lateral × CG_height / Track_width
-   = 3800 × G × (22 in / 12) / (63 in / 12)
-   = 3800 × G × 1.833 ft / 5.25 ft
-   = 3800 × G × 0.349
+ΔW = Weight × G_lateral × (CG_height − RCH) / Track_width
+   = 4100 × G × (22 in − 3 in) / 63 in
+   = 4100 × G × (19 in / 12) / (63 in / 12)
+   = 4100 × G × 1.583 ft / 5.25 ft
+   = 4100 × G × 0.302
 
 At OVAL_CORNER_G (0.375G):
-  ΔW = 3800 × 0.375 × 0.349 = 497 lbs total lateral transfer
+  ΔW = 4100 × 0.375 × 0.302 = 464 lbs total lateral transfer
 \`\`\`
 
-> The 497 lb transfer at corner G is split between front and rear axles based on the front/rear roll stiffness ratio (LLTD — explained in Section 8).
+> The 464 lb transfer at corner G is split between front and rear axles based on the front/rear roll stiffness ratio (LLTD — explained in Section 8).
 
 ### Per-Corner Loads
 
 \`\`\`
-LF (inside front)  = 1,045 − 497 × LLTD
-RF (outside front) = 1,045 + 497 × LLTD
-LR (inside rear)   =   855 − 497 × (1 − LLTD)
-RR (outside rear)  =   855 + 497 × (1 − LLTD)
+LF (inside front)  = 1,127.5 − 464 × LLTD
+RF (outside front) = 1,127.5 + 464 × LLTD
+LR (inside rear)   =   922.5 − 464 × (1 − LLTD)
+RR (outside rear)  =   922.5 + 464 × (1 − LLTD)
 \`\`\`
 
 **Example with LLTD = 0.472 (default setup with spring blending):**
 \`\`\`
-LF ≈  811 lbs    RF ≈ 1,279 lbs
-LR ≈  620 lbs    RR ≈ 1,090 lbs
+LF ≈  909 lbs    RF ≈ 1,346 lbs
+LR ≈  ≈698 lbs   RR ≈ 1,147 lbs
 \`\`\`
 
 > The RF carries 1,279 lbs in the corner — 57% more than its static load of 1,045 lbs. This is why RF tire pressure, camber, and temperature are the most important parameters to get right on a left-turn oval.
@@ -472,16 +473,17 @@ After enough laps, tire temperature stabilizes where heat in = heat out:
 \`\`\`
 T_equilibrium = ambient + (heatBase + heatLoad × workFactor × refSpeed) / coolRate
 
-WorkFactor = corner_load / avg_load   where avg_load = 950 lbs (3800 lbs / 4 tires)
+WorkFactor = corner_load / avg_load   where avg_load = 1025 lbs (4100 lbs / 4 tires)
 \`\`\`
 
 **Example — RF at OVAL_CORNER_G, 90°F ambient:**
 \`\`\`
-RF corner load ≈ 1,279 lbs
-WorkFactor_RF  = 1,279 / 950 = 1.346
-T_eq = 90 + (0.53 + 0.00453 × 1.346 × 75) / 0.02
-     = 90 + (0.53 + 0.458) / 0.02
-     = 90 + 49.4 = 139.4°F
+RF corner load ≈ 1,347 lbs  (4100 lbs, RCH 3", LLTD 0.472)
+avg_load       = 1,025 lbs
+WorkFactor_RF  = 1,347 / 1025 = 1.314
+T_eq = 90 + (0.53 + 0.00453 × 1.314 × 75) / 0.02
+     = 90 + (0.53 + 0.447) / 0.02
+     = 90 + 48.9 = 138.9°F
 \`\`\`
 
 > This 139°F equilibrium at 90°F ambient is in the optimal grip window (100–165°F) — good. If ambient rises to 95°F, equilibrium rises to ~144°F, still in window. At very high ambient, equilibrium approaches the top of the window.
@@ -607,7 +609,7 @@ Below 100°F:   µ = max(0.75,  1 − ((100 − temp) / 60)² × 0.25)
 Every tire has an optimal inflation pressure for the load it is carrying. Over-inflation concentrates contact in the middle of the tread; under-inflation spreads too much to the edges and causes excessive flex. Both reduce grip.
 
 \`\`\`
-optPSI = 30 × (cornerLoad / avgLoad)   where avgLoad = 950 lbs (3800/4)
+optPSI = 30 × (cornerLoad / avgLoad)   where avgLoad = 1025 lbs (4100/4)
 
 pressureGrip = max(0.82,  1 − 0.010 × |hotPSI − optPSI|)
 \`\`\`
@@ -615,7 +617,7 @@ pressureGrip = max(0.82,  1 − 0.010 × |hotPSI − optPSI|)
 - **1% grip loss per PSI** of deviation from optimal
 - **Floor 0.82** (18% max loss) — reached at 18 PSI off target, which represents catastrophically wrong pressure
 
-> **Why \`30 × (load / avgLoad)\`?** This formula assumes 30 PSI is the ideal pressure at the average static load (950 lbs). Tires that carry more load in cornering need more pressure to maintain the same contact patch shape. The factor \`cornerLoad / avgLoad\` scales from the average. This approach was calibrated so that at oval corner G, the RF optimal comes out to ~40 PSI hot and LF to ~26 PSI hot — matching real-world observed pressures.
+> **Why \`30 × (load / avgLoad)\`?** This formula assumes 30 PSI is the ideal pressure at the average static load (1025 lbs). Tires that carry more load in cornering need more pressure to maintain the same contact patch shape. The factor \`cornerLoad / avgLoad\` scales from the average. This approach was calibrated so that at oval corner G, the RF optimal comes out to ~40 PSI hot and LF to ~26 PSI hot — matching real-world observed pressures.
 
 **Sources:** Standard tire pressure vs load theory [³][⁶]. Calibrated against real-world pressure data from our sessions.
 
@@ -655,21 +657,21 @@ Caster gain (LF, inside tire):
 
 Body roll contribution (at actual oval corner G, not 1G):
   cornerRoll = bodyRoll_deg × OVAL_CORNER_G
-  RF (jounce):  bodyRollCamber = −(cornerRoll × 0.35)   [SLA jounce coefficient]
-  LF (droop):   bodyRollCamber = +(cornerRoll × 0.15)   [SLA droop coefficient]
+  RF (jounce):  bodyRollCamber = −(cornerRoll × 0.355)   [SLA jounce coefficient]
+  LF (droop):   bodyRollCamber = +(cornerRoll × 0.15)    [SLA droop coefficient]
 \`\`\`
 
 **Worked example — RF, caster 5°, total stiffness 28 (3.5°/G body roll):**
 \`\`\`
 cornerRoll     = 3.5° × 0.375 = 1.3125°
 casterGain     = −(5 × 0.18)  = −0.90°
-bodyRollCamber = −(1.3125 × 0.35) = −0.459°
+bodyRollCamber = −(1.3125 × 0.355) = −0.466°
 staticCamber   = −3.0°
 
-effectiveCamber = −3.0 + (−0.90) + (−0.459) = −4.36° ≈ ideal −4.5° ✓
+effectiveCamber = −3.0 + (−0.90) + (−0.466) = −4.37° ≈ ideal −4.5° ✓
 \`\`\`
 
-> **SLA vs MacPherson:** Crown Vic P71 uses SLA (short-long arm / double wishbone) front suspension. The shorter upper arm forces the wheel to gain negative camber when compressed (jounce). MacPherson struts (most budget cars) do the opposite — they gain positive camber in jounce, which fights grip in corners. The 0.35 SLA jounce coefficient is estimated from standard Crown Vic geometry [¹³].
+> **SLA vs MacPherson:** Crown Vic P71 uses SLA (short-long arm / double wishbone) front suspension. The shorter upper arm forces the wheel to gain negative camber when compressed (jounce). MacPherson struts (most budget cars) do the opposite — they gain positive camber in jounce, which fights grip in corners. The 0.355 SLA jounce coefficient is measured from wheel displacement data: 1.7" compression at 3.1° body roll → 1.1° camber gain → 1.1/3.1 = 0.355°/°.
 
 **Sources:** SLA geometry principles [³][⁶][¹³]. Caster gain coefficient (0.18/degree) from standard front suspension geometry analysis.
 
@@ -734,17 +736,17 @@ toeDrag = 1 + 0.001 × toe²    (applied as divisor to total grip force)
 
 ### Load Sensitivity
 
-Tires exhibit diminishing returns at high load — a tire carrying 1,400 lbs doesn't produce 1.47× the grip of a tire at 950 lbs because rubber only deforms so much. This is captured by:
+Tires exhibit diminishing returns at high load — a tire carrying 1,400 lbs doesn't produce 1.37× the grip of a tire at 1,025 lbs because rubber only deforms so much. This is captured by:
 
 \`\`\`
-loadSens = (avgLoad / cornerLoad)^0.08
+loadSens = (avgLoad / cornerLoad)^0.08   where avgLoad = 1025 lbs (4100/4)
 \`\`\`
 
-The 0.08 exponent is a mild sensitivity — load effects are small but real. At RF corner load of 1,279 lbs vs avg 950 lbs:
+The 0.08 exponent is a mild sensitivity — load effects are small but real. At RF corner load of ~1,347 lbs vs avg 1,025 lbs:
 \`\`\`
-loadSens = (950 / 1279)^0.08 = 0.742^0.08 = 0.976
+loadSens = (1025 / 1347)^0.08 = 0.761^0.08 = 0.977
 \`\`\`
-Only a 2.4% reduction. The effect is more significant at extreme loads.
+Only a 2.3% reduction. The effect is more significant at extreme loads.
 
 **Source:** Tire load sensitivity behavior [³][⁶].
 
@@ -815,16 +817,16 @@ RR: I:120 M:121 O:120 → avg 120.3°F
 The model works backward from the desired hot pressure at race conditions to the cold inflation number:
 
 \`\`\`
-Step 1:  optHotPSI  = 30 × (cornerLoad / 950)
+Step 1:  optHotPSI  = 30 × (cornerLoad / 1025)   where 1025 = 4100/4 avg_load
 Step 2:  optColdPSI = optHotPSI × 527.67 / (T_equilibrium + 459.67)
 \`\`\`
 
 **Example — RF at LLTD 0.472:**
 \`\`\`
-RF corner load ≈ 1,279 lbs
-optHotPSI  = 30 × (1279 / 950) = 40.4 PSI
+RF corner load ≈ 1,347 lbs  (4100 lbs, RCH 3", LLTD 0.472)
+optHotPSI  = 30 × (1347 / 1025) = 39.4 PSI
 T_eq_RF    = ~139°F (see thermal model)
-optColdPSI = 40.4 × 527.67 / (139 + 459.67) = 40.4 × 527.67 / 598.67 = 35.6 PSI cold
+optColdPSI = 39.4 × 527.67 / (139 + 459.67) = 39.4 × 527.67 / 598.67 = 34.7 PSI cold
 \`\`\`
 
 ### Safety Limits
@@ -871,10 +873,10 @@ rollStiffness  ≈ 29.3  (soft front dampers reduce total stiffness from 28)
 bodyRoll       = 3.5 × (28/29.3) = 3.34°/G
 cornerRoll     = 3.34 × 0.375 = 1.25°
 casterGain     = −(5 × 0.18)       = −0.90°
-bodyRollCamber = −(1.25 × 0.35)    = −0.438°
+bodyRollCamber = −(1.25 × 0.355)   = −0.444°
 idealEffective = −4.5°
 
-optStaticCamber = −4.5 − (−0.90) − (−0.438) = −3.16° → rounds to −3.0°
+optStaticCamber = −4.5 − (−0.90) − (−0.444) = −3.156° → rounds to −3.0°
 \`\`\`
 
 **Oval LF (caster 3°):**
@@ -1111,16 +1113,17 @@ All oval setups use FCS 1336349 front struts (taxi/police package, ~475 lbs/in) 
 | Cold PSI | 24 | 35 | 17.5 | 32 |
 
 ### Recommended Setup (Oval Optimizer Result)
-*Grid-searched over 180,880 combinations. LF uses Monroe 171346 (civilian spring ~440 lbs/in — softer than stock). All others use FCS/police-package spring rates.*
+*Grid-searched over 180,880 combinations @ 90°F. Updated 2026-04-01 with full physics model: 4100 lbs race weight, RCH 3", SLA jounce 0.355°/°, KPI 9.5°, sidewall compliance, ground-frame camber.*
 
 | Parameter | LF | RF | LR | RR |
 |---|---|---|---|---|
-| Shocks | 8 (Monroe 171346) | 6 (KYB SR4140) | 1 (Monroe 550018 Severe) | 1 |
-| Springs | ~440 lbs/in (civilian) | ~475 lbs/in | 160 lbs/in rear | |
-| Camber | −0.5° | −3.0° | — | — |
+| Shocks | 3 (FCS 1336349) | 1 (stiffest) | 1 | 1 |
+| Springs | 475 lbs/in | 475 lbs/in | 160 lbs/in | 160 lbs/in |
+| Camber | −0.25° | −2.25° | — | — |
 | Caster | 3.0° | 5.0° | — | — |
 | Toe | −0.25" | | | |
-| Cold PSI | 26 | 32.5 | 16.5 | 33.5 |
+| Cold PSI | 24 | 34.5 | 18 | 30 |
+| **Best lap** | **17.200s @ 90°F** | | | |
 
 ### F8 Baseline Setup
 *Real-world calibration run. NOT optimal — asymmetric caster causes right-turn difficulty. Used to verify the F8 model predicts ~23.3s.*
@@ -1135,16 +1138,17 @@ All oval setups use FCS 1336349 front struts (taxi/police package, ~475 lbs/in) 
 | Cold PSI | 35 | 35 | 30 | 30 |
 
 ### F8 Recommended Setup (F8 Optimizer Result)
-*Grid-searched over 34,884 combinations. Symmetric setup required for equal L/R performance.*
+*Grid-searched over 34,884 combinations @ 75°F. Updated 2026-04-01 with full physics model. Symmetric caster mandatory for equal L/R performance.*
 
 | Parameter | LF | RF | LR | RR |
 |---|---|---|---|---|
-| Shocks | 1 (stiffest available) | 1 | 1 | 1 |
-| Springs | 475 lbs/in front | | 160 lbs/in rear | |
-| Camber | −3.5° | −3.5° | — | — |
+| Shocks | 1 | 1 | 2 (KYB 555603) | 1 |
+| Springs | 475 lbs/in | 475 lbs/in | 160 lbs/in | 160 lbs/in |
+| Camber | −2.25° | −2.25° | — | — |
 | Caster | 5.0° | 5.0° | — | — |
 | Toe | −0.25" | | | |
-| Cold PSI | 35 | 35 | 30 | 30 |
+| Cold PSI | 34.5 | 34.5 | 29 | 29 |
+| **Best lap** | **23.145s @ 75°F** | | | |
 
 ---
 
@@ -1159,22 +1163,22 @@ The optimizer tested every possible combination of:
 - PSI: derived analytically from corner loads at OVAL_CORNER_G
 - Toe: fixed at −0.25"
 
-**Total combinations: 180,880 | Best lap: 17.196s @ 90°F | vs. baseline 17.4s: −0.204s improvement**
+**Total combinations: 180,880 | Best lap: 17.200s @ 90°F | vs. baseline 17.4s: −0.200s improvement**
 
-The top result was verified by running a full 25-lap simulation with the thermal model.
+The top result was verified by running a full 25-lap simulation with the thermal model. Model updated 2026-04-01 with measured race weight (4100 lbs), RCH 3", SLA jounce 0.355°/°, KPI 9.5°, sidewall compliance, ground-frame camber.
 
 | Parameter | LF | RF | LR | RR |
 |---|---|---|---|---|
-| Shocks | 8 (Monroe 171346) | 6 (KYB SR4140) | 1 (Monroe 550018 Severe) | 1 |
-| Camber | −0.5° | −3.0° | — | — |
+| Shocks | 3 (FCS 1336349) | 1 (stiffest) | 1 | 1 |
+| Springs | 475 lbs/in | 475 lbs/in | 160 lbs/in | 160 lbs/in |
+| Camber | −0.25° | −2.25° | — | — |
 | Caster | 3.0° | 5.0° | — | — |
-| Cold PSI | 26 | 32.5 | 16.5 | 33.5 |
+| Cold PSI | 24 | 34.5 | 18 | 30 |
 
 **Why this setup wins:**
-- Soft LF (rating 8) + stiffer RF (rating 6) front → low front LLTD → reduces natural understeer
-- Very stiff rear (rating 1 both) → rear carries more transfer → plants rear tires → more balanced
-- LLTD ≈ 0.39 (close to optimal 0.46 when spring contribution is included)
-- Analytically optimal camber: LF −0.5° leaves room for caster + body roll to reach near 0° effective (good for inside tire); RF −3.0° reaches −4.4° effective (near ideal −4.5°)
+- Moderate LF + stiff RF/rear → front LLTD target ≈ 0.468 (near optimal 0.46)
+- Very stiff rear (rating 1) → rear carries proportionally more transfer → keeps rear planted
+- Analytically optimal camber (ground-frame): LF −0.25° accounts for SLA droop camber gain and sidewall compliance, achieving near-0° ground-frame at the contact patch; RF −2.25° reaches approximately −2.0° ground-frame (ideal for outside tire on this compound)
 
 ### Figure 8 Grid Search
 
@@ -1185,22 +1189,22 @@ The optimizer tested every combination of:
 - PSI: derived analytically toward outside-corner load optimum
 - Toe: fixed at −0.25"
 
-**Total combinations: 34,884 | Best lap: 23.152s @ 75°F | vs. baseline 23.283s: −0.131s improvement**
+**Total combinations: 34,884 | Best lap: 23.145s @ 75°F | vs. baseline 23.283s: −0.138s improvement**
 
-Top 50 candidates were verified with full 20-lap simulations.
+Top 50 candidates were verified with full 20-lap simulations. Model updated 2026-04-01 with measured race weight (4100 lbs), RCH 3", SLA jounce 0.355°/°, KPI 9.5°, sidewall compliance, ground-frame camber.
 
 | Parameter | LF | RF | LR | RR |
 |---|---|---|---|---|
-| Shocks | 1 (stiffest) | 1 | 1 | 1 |
-| Camber | −3.5° | −3.5° | — | — |
+| Shocks | 1 | 1 | 2 (KYB 555603) | 1 |
+| Springs | 475 lbs/in | 475 lbs/in | 160 lbs/in | 160 lbs/in |
+| Camber | −2.25° | −2.25° | — | — |
 | Caster | 5.0° | 5.0° | — | — |
-| Cold PSI | 35 | 35 | 30 | 30 |
+| Cold PSI | 34.5 | 34.5 | 29 | 29 |
 
 **Why this setup wins:**
-- All-stiff shocks on F8 maximize lateral resistance and keep tires firmly planted through the crossover
-- Since F8 equilibrium temps are shock-independent (see Section 15), the shock choice only affects LLTD — stiff all-around stays near 0.50 LLTD (optimal for balanced L/R turns)
-- Symmetric −3.5° camber: at 5° caster and minimal body roll (F8 averages near 0 roll), this gives approximately −4.4° effective as outside tire and −3.0° effective as inside tire, averaging to −3.7° vs ideal −2.25° — a compromise where the outside-tire session dominates
-- Symmetric 5.0° caster: equal steering effort left and right, equal caster camber gain both directions
+- Stiff fronts + slightly softer LR rear achieves near 0.50 LLTD (optimal for balanced L/R turns in F8)
+- Symmetric −2.25° static camber: ground-frame model (with KPI, sidewall compliance, body roll) shows this achieves close to the ideal contact patch angle on both outside and inside tire roles
+- Symmetric 5.0° caster: equal steering effort and caster camber gain in both turn directions — mandatory for balanced F8 handling; asymmetric caster (see F8 Baseline) causes measurable L/R speed asymmetry
 
 ---
 
@@ -1220,7 +1224,7 @@ Top 50 candidates were verified with full 20-lap simulations.
 | [¹⁰] | ShockWarehouse / Monroe product pages — Monroe 171346 & 271346 | Civilian vs Police/Taxi application split, confirming different spring rates |
 | [¹¹] | JEGS / KYB product listing — KYB SR4140 | OE-spec application, Crown Victoria fitment |
 | [¹²] | RockAuto / KYB product listing — KYB 555603 | Rear shock only (no spring), OE gas-charged spec |
-| [¹³] | *Dixon, Tires, Suspension and Handling* (SAE International, 1996) | SLA jounce/droop camber coefficients (0.35 jounce, 0.15 droop) |
+| [¹³] | *Dixon, Tires, Suspension and Handling* (SAE International, 1996) | SLA jounce/droop camber coefficients (basis). Jounce value refined to 0.355 from measured wheel displacement data (1.1°/3.1°). Droop 0.15 unchanged. |
 `,tf=[{id:1,label:`Physical Measurements`},{id:2,label:`Vehicle Constants`},{id:3,label:`Tire Specifications`},{id:4,label:`Track Geometry Derivations`},{id:5,label:`Lateral G & Corner Speeds`},{id:6,label:`Weight Transfer & Tire Loads`},{id:7,label:`Spring Rates`},{id:8,label:`Shock → LLTD & Roll Stiffness`},{id:9,label:`Tire Thermal Model`},{id:10,label:`Grip Model — All Factors`},{id:11,label:`Performance Metric → Lap Time`},{id:12,label:`Pressure Optimization`},{id:13,label:`Camber Optimization`},{id:14,label:`Calibration Data`},{id:15,label:`Figure 8 Differences`},{id:16,label:`All Setup Presets`},{id:17,label:`Optimizer Results`},{id:18,label:`Sources`}];function nf(e){let t=e.split(`
 `),n=[],r=null;for(let e of t){let t=e.match(/^## (\d+)\. /);t?(r&&n.push(r),r={id:parseInt(t[1],10),lines:[e]}):r&&r.lines.push(e)}r&&n.push(r);let i={};for(let e of n)i[e.id]=e.lines.join(`
 `);return i}var rf=nf(ef);(()=>{let e=ef.split(`
@@ -1229,7 +1233,7 @@ Top 50 candidates were verified with full 20-lap simulations.
 ## 1/4-Mile Oval — Predictive Physics, Scenario Analysis & Recommendations
 
 **Prepared:** 2026-03-24
-**Car:** 2008 Crown Victoria P71 — 3,800 lbs, 4.6L SOHC V8, ~255 hp, Ironman iMove Gen3 AS 235/55R17
+**Car:** 2008 Crown Victoria P71 — 4,100 lbs (race weight, measured), 4.6L SOHC V8, ~255 hp, Ironman iMove Gen3 AS 235/55R17
 
 ---
 
@@ -1254,7 +1258,7 @@ The simulation has two distinct layers:
 
 **Layer 1 — Physics-based grip model (predictive):**
 \`calcPerformance()\` computes a dimensionless grip metric from first-principles physics:
-- Lateral weight transfer: \`ΔW = (m × G_corner × h_cg) / trackWidth = 3800 × 0.375 × 1.833 / 5.25 = 498 lbs\`
+- Lateral weight transfer: \`ΔW = (weight × G_corner × (h_cg − RCH)) / trackWidth = 4100 × 0.375 × (19/12) / (63/12) = 464 lbs\`
 - Load-dependent optimal pressure: \`optHotPSI = 30 × (cornerLoad / avgLoad)\`, derived from contact patch deformation physics
 - Camber: deviation from ideal effective angle with caster gain and SLA body-roll camber calculated geometrically
 - Thermal equilibrium: solved from heat generation rate (load × speed × friction work) vs. convective cooling
@@ -1351,11 +1355,12 @@ The multi-session pyrometer data has consistent, measurable patterns:
 
 Physics check — what PSI does the RF actually need?
 \`\`\`
-RF corner load at 0.375G × LLTD: 1,239 lbs
-Optimal hot PSI = 30 × (1239 / 950) = 39.1 PSI
-At 130°F tire temp: cold PSI = 39.1 × 528 / 590 = 35.0 PSI cold
+RF corner load at 0.375G × LLTD: ~1,347 lbs  (4100 lbs, RCH 3", LLTD 0.472)
+avg_load = 4100 / 4 = 1025 lbs
+Optimal hot PSI = 30 × (1347 / 1025) = 39.4 PSI
+At 130°F tire temp: cold PSI = 39.4 × 528 / 590 = 35.2 PSI cold
 \`\`\`
-Current RF cold PSI is 31–34. The higher end of that range (34 in Setup A) is closer to correct. Setup B reduced it to 31, which improved temp uniformity but moved RF slightly under-pressure.
+Current RF cold PSI is 31–34. The higher end of that range (34 in Setup A) is close to correct. Setup B reduced it to 31, which improved temp uniformity but moved RF under-pressure.
 
 **Recommended RF cold PSI: 34–35.**
 
@@ -1368,14 +1373,15 @@ Current RF cold PSI is 31–34. The higher end of that range (34 in Setup A) is 
 
 **Finding:** LF inside edge is consistently 10–20°F hotter than outside. This directly indicates **too much negative camber** on the LF (inside tire in left turns). The inside-front ideally wants **0° effective camber** for maximum flat contact patch. It's also severely under-pressured:
 \`\`\`
-LF corner load: 851 lbs
-Optimal hot PSI = 30 × (851 / 950) = 26.9 PSI
-At 100°F: cold PSI = 26.9 × 528 / 560 = 25.4 PSI cold
-Current cold PSI: 19.5–20 PSI → hot = 21.7 PSI → 5.2 PSI under optimal
-pressureGripFactor penalty = 1 - (0.010 × 5.2) = 0.948 → 5.2% grip lost on LF
+LF corner load: ~909 lbs  (4100 lbs, RCH 3", LLTD 0.472)
+avg_load = 4100 / 4 = 1025 lbs
+Optimal hot PSI = 30 × (909 / 1025) = 26.6 PSI
+At 100°F: cold PSI = 26.6 × 528 / 560 = 25.1 PSI cold
+Current cold PSI: 19.5–20 PSI → hot ≈ 21.7 PSI → ~5 PSI under optimal
+pressureGripFactor penalty = 1 - (0.010 × 5) = 0.950 → 5% grip lost on LF
 \`\`\`
 
-**Recommended LF cold PSI: 25–26.**
+**Recommended LF cold PSI: 25.**
 
 #### RR — Outside Rear
 
@@ -1384,10 +1390,12 @@ pressureGripFactor penalty = 1 - (0.010 × 5.2) = 0.948 → 5.2% grip lost on LF
 | Setup A, 65°F | 36 | 100 | 130 | Outside +30°F |
 | Setup B, 87°F | 33 | 118 | 131 | Outside +13°F |
 
-**Finding:** RR outside consistently 13–30°F hotter than inside. Same physics as RF — solid rear axle in left turns pushes car onto RR. The RR at 33 PSI cold appears well-calibrated:
+**Finding:** RR outside consistently 13–30°F hotter than inside. Same physics as RF — solid rear axle in left turns pushes car onto RR. Updated with 4100 lbs race weight and RCH correction:
 \`\`\`
-RR corner load: 1,159 lbs, optimal hot = 36.6 PSI
-At 130°F: cold = 32.8 PSI → current 33 PSI is nearly optimal ✓
+RR corner load: ~1,168 lbs  (4100 lbs, RCH 3", LLTD 0.472)
+avg_load = 1025 lbs
+Optimal hot PSI = 30 × (1168 / 1025) = 34.2 PSI
+At 130°F: cold = 34.2 × 528 / 590 = 30.6 PSI → target ~31 PSI cold ✓
 \`\`\`
 
 #### LR — Inside Rear
@@ -1413,27 +1421,27 @@ All scenarios evaluated at 90°F ambient (warm race conditions — tires reach 1
 | **PETE Setup B (actual race)** | **17.300s** | +0.106s | 0.471 | High RF caster works in real world |
 | DYLAN | 17.300s | +0.106s | 0.471 | Low RF caster hurts vs. Pete in model |
 | JOSH | 17.294s | +0.112s | 0.471 | Best camber among team but RF under-cambered |
-| **RECOMMENDED (optimizer result)** | **17.324s** | +0.076s | 0.389 | LLTD sub-optimal; full sim gives better result |
+| **RECOMMENDED (optimizer result, 2026-04-01)** | **17.200s** | **+0.200s** | 0.468 | Full 180,880-combo grid search @ 90°F |
 | Theoretical ceiling (130°F all tires) | 17.336s | +0.070s | — | Model ceiling at perfect thermal conditions |
 
-> **Note on the RECOMMENDED setup discrepancy:** The RECOMMENDED setup's LLTD of 0.389 looks sub-optimal in the quick calculation, but the full 180,880-combination grid search found it is actually best because the Monroe 171346 soft front spring (440 lbs/in) + very stiff rear dampers (rating 1) combination produces lower equilibrium tire temps at the front, keeping both front tires in the optimal thermal window. The full simulation's thermal-mechanical coupling catches this; the quick approximation doesn't. Trust the grid search result.
+> **Note:** The RECOMMENDED setup (shocks LF=3/RF=1/LR=1/RR=1, camber LF−0.25°/RF−2.25°, caster LF=3°/RF=5°, PSI LF=24/RF=34.5/LR=18/RR=30) was found by the full 180,880-combination grid search using the updated physics model (4100 lbs, RCH 3", SLA jounce 0.355°/°, KPI 9.5°, sidewall compliance, ground-frame camber). The scenario matrix lap times above were computed with the older model and are kept for reference; the grid search result should be trusted for the overall best setup.
 
 ---
 
 ## SECTION 5: CAMBER ANALYSIS — EVERY SETUP
 
 Using the SLA geometry formula: \`effectiveCamber = static + casterGain + bodyRollCamber\`
-Where: \`casterGain_RF = −(caster × 0.18°)\`, \`casterGain_LF = +(caster × 0.10°)\`, \`bodyRoll_RF = −(cornerRoll × 0.35)\`, \`bodyRoll_LF = +(cornerRoll × 0.15)\`
+Where: \`casterGain_RF = −(caster × 0.18°)\`, \`casterGain_LF = +(caster × 0.10°)\`, \`bodyRoll_RF = −(cornerRoll × 0.355)\`, \`bodyRoll_LF = +(cornerRoll × 0.15)\`
 Corner roll at 0.375G baseline = \`3.5° × 0.375 = 1.31°\`
-Ideal: LF effective = 0°, RF effective = −4.5°
+Ideal: LF effective = 0°, RF effective = −4.5° (chassis-relative; ground-frame model adds KPI and sidewall compliance on top)
 
 | Setup | LF Static | LF Caster | LF Effective | LF Deviation | RF Static | RF Caster | RF Effective | RF Deviation |
 |---|---|---|---|---|---|---|---|---|
-| DEFAULT | −1.5° | 3.5° | **−0.95°** | 0.95° over | −3.0° | 5.0° | **−4.36°** | 0.14° ✓ |
-| Pete (Setup B) | −2.25° | 3.5° | **−1.70°** | 1.70° over | −2.75° | 8.0° | **−4.65°** | 0.15° ✓ |
+| DEFAULT | −1.5° | 3.5° | **−0.95°** | 0.95° over | −3.0° | 5.0° | **−4.37°** | 0.13° ✓ |
+| Pete (Setup B) | −2.25° | 3.5° | **−1.70°** | 1.70° over | −2.75° | 8.0° | **−4.66°** | 0.16° ✓ |
 | Dylan | −2.0° | 4.0° | **−1.40°** | 1.40° over | −2.75° | 3.25° | **−3.79°** | 0.71° short |
 | Josh | −0.75° | 5.0° | **−0.05°** | 0.05° ✓ | −1.75° | 7.0° | **−3.47°** | 1.03° short |
-| **RECOMMENDED** | **−0.5°** | **3.0°** | **0.00°** | **0.00° ✓** | −3.0° | 5.0° | **−4.36°** | 0.14° ✓ |
+| **RECOMMENDED** | **−0.25°** | **3.0°** | **+0.12°** | **0.12° ✓** | **−2.25°** | **5.0°** | **−3.97°** | 0.53° short |
 
 **Key observations:**
 
@@ -1445,7 +1453,7 @@ Ideal: LF effective = 0°, RF effective = −4.5°
 
 4. **To dial in RF with 8.0° caster:** The optimal static RF camber that hits −4.5° effective is:
    \`\`\`
-   static = −4.5 + (8.0 × 0.18) + (1.31 × 0.35) = −4.5 + 1.44 + 0.459 = −2.60°
+   static = −4.5 + (8.0 × 0.18) + (1.31 × 0.355) = −4.5 + 1.44 + 0.465 = −2.60°
    \`\`\`
    Running RF at −2.60° static with 8.0° caster would be theoretically optimal. Current −3.0° with 8.0° caster goes 0.40° past ideal.
 
@@ -1458,18 +1466,20 @@ Cold PSI targets derived from first principles:
 2. Compute optimal hot PSI: \`optHot = 30 × (cornerLoad / avgLoad)\`
 3. Convert to cold: \`coldPSI = optHot × (68°F + 460) / (eqTemp + 460)\`
 
+Corner loads computed from 4100 lbs race weight, RCH 3", LLTD 0.472 at 0.375G. avg_load = 1025 lbs.
+
 | Corner | Corner Load | Eq. Temp | Opt. Hot PSI | Optimal Cold PSI | Setup A Cold | Setup B Cold | Gap |
 |---|---|---|---|---|---|---|---|
-| RF | 1,239 lbs | 130°F | 39.1 | **35.0** | 34 ✓ | 31 (−4 under) | 4 PSI low |
-| LF | 851 lbs | 100°F | 26.9 | **25.4** | 19.5 (−6 under) | 20 (−5 under) | 5 PSI low |
-| RR | 1,159 lbs | 130°F | 36.6 | **32.8** | 36 (+3 over) | 33 ≈ ✓ | Near optimal |
-| LR | 551 lbs | 95°F | 17.4 | **16.6** | 18.5 (+2 over) | 15 (−2 under) | Inconsistent |
+| RF | 1,347 lbs | 130°F | 39.4 | **35.2** | 34 (−1.2) | 31 (−4 under) | 4 PSI low |
+| LF | 908 lbs | 100°F | 26.6 | **25.1** | 19.5 (−6 under) | 20 (−5 under) | 5 PSI low |
+| RR | 1,168 lbs | 130°F | 34.2 | **30.6** | 36 (+5 over) | 33 (+2.4 over) | Slightly over |
+| LR | 677 lbs | 95°F | 19.8 | **18.8** | 18.5 (−0.3) ✓ | 15 (−4 under) | Inconsistent |
 
 **Pressure conclusions:**
 - **LF is under-pressured in every session** by 5–6 PSI cold. This is the most significant correctable error. It costs ~5% grip on the LF corner.
-- **RF under Setup B (31 PSI) is 4 PSI below optimal.** Setup A's 34 PSI was more correct. Bring RF back to 34–35 cold.
-- **RR at 33 PSI (Setup B) is near-perfect.** Setup A's 36 was slightly over-inflated.
-- **LR is inconsistent.** Both 15 and 18.5 PSI have been run. Optimal is 16–17 PSI cold.
+- **RF under Setup B (31 PSI) is 4 PSI below optimal.** Setup A's 34 PSI was close. Bring RF back to 34–35 cold.
+- **RR was over-inflated in both setups.** Setup A's 36 was 5 PSI high; Setup B's 33 is 2 PSI high. Target ~31 PSI.
+- **LR at 18.5 PSI (Setup A) was nearly optimal.** Setup B's 15 PSI was 4 PSI under. Target ~18–19 PSI cold.
 
 > **The LF pressure fix alone is estimated to be worth 0.05–0.10s/lap.** This costs nothing and can be done at the next event.
 
@@ -1548,18 +1558,18 @@ Sensitivity of each variable to lap time (grip improvement per unit change):
 
 ### Tier 1 — Do today, no new parts required
 
-**1. Raise LF cold pressure to 25–26 PSI**
+**1. Raise LF cold pressure to 24–25 PSI**
 Estimated gain: **+0.08–0.10s/lap**
-Evidence: LF inside edge consistently 10–20°F hotter than outside = severe under-inflation. Physics: hot LF PSI is 21.7 at race temp vs 26.9 optimal — 5.2 PSI gap costs 5.2% grip on this tire.
+Evidence: LF inside edge consistently 10–20°F hotter than outside = severe under-inflation. Physics (4100 lbs, RCH 3"): hot LF PSI is ~21.7 at race temp vs 26.6 optimal — ~5 PSI gap costs ~5% grip on this tire.
 Risk: None. This is the single clearest correction from all available data.
 
 **2. Set RF cold pressure to 34–35 PSI (not 31)**
 Estimated gain: **+0.03s/lap**
-Evidence: Setup A with 34 PSI had RF outside-to-inside differential of +25°F. Setup B with 31 PSI reduced it to +12°F, but now RF is slightly under-pressured for its corner load (1,239 lbs needs 39.1 PSI hot = 35 PSI cold).
+Evidence: Setup A with 34 PSI had RF outside-to-inside differential of +25°F. Setup B with 31 PSI reduced it to +12°F, but RF is still under-pressured for its corner load (~1,347 lbs needs 39.4 PSI hot = 35 PSI cold).
 
-**3. Raise LF cold pressure to 25 PSI and set LR to 16–17 PSI**
-(Combined with #1 above for complete pressure pass)
-Estimated gain: +0.02s/lap additional (LR and RR)
+**3. Set LR to 18–19 PSI and RR to 30–31 PSI**
+(Complete pressure pass with #1 and #2 above)
+Estimated gain: +0.02s/lap additional. LR optimal is ~19 PSI cold; RR optimal is ~31 PSI cold.
 
 ### Tier 2 — Next alignment session (requires alignment shop or adjustment)
 
@@ -1614,7 +1624,7 @@ From 17.4s baseline → **~17.2s with all Tier 1+2 changes (no new parts except 
 | Factor | Current | Theoretical Best | Gap |
 |---|---|---|---|
 | Tire compound | UTQG 420 AA A | Higher-performance compound? | Rules dependent |
-| Vehicle weight | 3,800 lbs | 3,600 lbs (200 lb reduction) | +0.2–0.3s if allowed |
+| Vehicle weight | 4,100 lbs (measured race weight) | 3,900 lbs (200 lb reduction) | +0.2–0.3s if allowed |
 | Engine output | ~255 hp | N/A (engine-limited on straights) | Negligible below 70 mph |
 | Suspension arms | Stock SLA geometry | Adjustable upper arm geometry | Would allow more negative camber range |
 
@@ -1647,43 +1657,26 @@ Being explicit about model limitations:
 
 ## SECTION 13: OPTIMAL SETUP SPECIFICATION
 
-### Recommended race setup — immediate implementation (no new parts)
+*Updated 2026-04-01 from full-physics grid search (4100 lbs, RCH 3", SLA jounce 0.355°/°, KPI 9.5°, sidewall compliance, ground-frame camber).*
+
+### Recommended race setup — grid-search optimized (180,880 combinations @ 90°F)
 
 \`\`\`
-Shocks:  LF FCS 1336349 (rating 4)    RF FCS 1336349 (rating 4)
-         LR KYB 555603 (rating 2)      RR KYB 555603 (rating 2)
+Shocks:  LF FCS 1336349 (rating 3)    RF stiffest available (rating 1)
+         LR stiffest available (rating 1)  RR stiffest available (rating 1)
 Springs: Front 475 lbs/in              Rear 160 lbs/in (stock)
 
-Camber:  LF −0.5°    RF −3.0°
-Caster:  LF 3.0°     RF 5.0°   (or 7.0° RF per real-world data)
+Camber:  LF −0.25°   RF −2.25°
+Caster:  LF 3.0°     RF 5.0°
 Toe:     −0.25" (1/4" toe out)
 
 Cold PSI (set at 68°F garage temp):
-  LF: 25 PSI    RF: 34 PSI
-  LR: 17 PSI    RR: 33 PSI
+  LF: 24 PSI    RF: 34.5 PSI
+  LR: 18 PSI    RR: 30 PSI
 
-Predicted lap time: ~17.2–17.3s
-vs current: +0.1–0.2s improvement
-\`\`\`
-
-### Recommended race setup — with component upgrades
-
-\`\`\`
-Shocks:  LF Monroe 171346 (rating 8)   RF KYB SR4140 (rating 6)
-         LR Monroe 550018 (rating 1)    RR Monroe 550018 (rating 1)
-Springs: Front 440 lbs/in (Monroe 171346 is civilian spring ~440)
-         Rear 160 lbs/in (stock)
-
-Camber:  LF −0.5°    RF −3.0°
-Caster:  LF 3.0°     RF 5.0°
-Toe:     −0.25"
-
-Cold PSI (set at 68°F):
-  LF: 26 PSI    RF: 32.5 PSI
-  LR: 16.5 PSI  RR: 33.5 PSI
-
-Predicted lap time: ~17.1–17.2s (matches or improves on best-ever 17.1s)
-LLTD: 0.389 → full grid search found this is optimal due to thermal coupling
+Predicted lap time: 17.200s @ 90°F
+vs Setup A (calibration): −0.2s improvement
+LLTD: 0.468 (near optimal 0.46)
 \`\`\`
 
 ### Note on RF caster (empirical vs model)
@@ -1721,4 +1714,4 @@ The multi-session pyrometer dataset provides real-world ground truth. Every reco
 `)),r={key:e.replace(/^## /,``).trim().toUpperCase(),lines:[e]}):r&&r.lines.push(e);return r&&(n[r.key]=r.lines.join(`
 `)),n}var lf=cf(of);function uf(e){let t=Object.keys(lf).find(t=>t.startsWith(e));return t?lf[t]:null}(()=>{let e=of.split(`
 `),t=[];for(let n of e){if(/^## /.test(n))break;t.push(n)}return t.join(`
-`)})();var df={table:({children:e})=>(0,b.jsx)(`div`,{className:`sim-math-table-wrap`,children:(0,b.jsx)(`table`,{className:`sim-math-table`,children:e})}),code:({inline:e,children:t,...n})=>e?(0,b.jsx)(`code`,{className:`sim-math-inline-code`,...n,children:t}):(0,b.jsx)(`pre`,{className:`sim-math-code-block`,children:(0,b.jsx)(`code`,{...n,children:t})}),blockquote:({children:e})=>(0,b.jsx)(`div`,{className:`sim-math-callout`,children:e})};function ff(){let[e,t]=(0,v.useState)(null),n=e?uf(e.heading):null;return(0,b.jsxs)(`div`,{className:`sim-math-page`,children:[e&&(0,b.jsx)(`button`,{className:`sim-math-back`,onClick:()=>t(null),children:`← Table of Contents`}),!e&&(0,b.jsxs)(`div`,{className:`sim-math-toc`,children:[(0,b.jsxs)(`div`,{className:`sim-math-header`,children:[(0,b.jsx)(`h2`,{children:`Suggested Setup & Analysis`}),(0,b.jsx)(`p`,{className:`sim-math-subtitle`,children:`Physics-based scenario analysis, pyrometer cross-validation, and ranked recommendations for the 2008 Crown Victoria P71 on the 1/4-mile oval.`}),(0,b.jsxs)(`div`,{className:`sim-math-meta`,children:[(0,b.jsx)(`span`,{children:`2008 Crown Victoria P71`}),(0,b.jsx)(`span`,{className:`sep`,children:`·`}),(0,b.jsx)(`span`,{children:`1/4-mile Oval`}),(0,b.jsx)(`span`,{className:`sep`,children:`·`}),(0,b.jsx)(`span`,{children:`14 Sections`}),(0,b.jsx)(`span`,{className:`sep`,children:`·`}),(0,b.jsx)(`span`,{children:`Updated 2026-03-24`})]})]}),(0,b.jsxs)(`div`,{className:`suggested-highlights`,children:[(0,b.jsxs)(`div`,{className:`suggested-highlight-card green`,children:[(0,b.jsx)(`div`,{className:`sh-label`,children:`Biggest Free Gain`}),(0,b.jsx)(`div`,{className:`sh-value`,children:`+0.08–0.10s`}),(0,b.jsx)(`div`,{className:`sh-desc`,children:`Raise LF cold PSI: 20 → 25–26`})]}),(0,b.jsxs)(`div`,{className:`suggested-highlight-card blue`,children:[(0,b.jsx)(`div`,{className:`sh-label`,children:`Model Ceiling`}),(0,b.jsx)(`div`,{className:`sh-value`,children:`~17.1s`}),(0,b.jsx)(`div`,{className:`sh-desc`,children:`Current components, warm conditions`})]}),(0,b.jsxs)(`div`,{className:`suggested-highlight-card purple`,children:[(0,b.jsx)(`div`,{className:`sh-label`,children:`Actual Corner Speed`}),(0,b.jsx)(`div`,{className:`sh-value`,children:`~47.6 mph`}),(0,b.jsx)(`div`,{className:`sh-desc`,children:`Back-calculated from 17.4s (not 24 mph)`})]})]}),(0,b.jsx)(`div`,{className:`sim-math-toc-grid`,children:sf.map((e,n)=>(0,b.jsxs)(`button`,{className:`sim-math-toc-card`,onClick:()=>t(e),children:[(0,b.jsx)(`span`,{className:`toc-num`,children:n+1}),(0,b.jsx)(`span`,{className:`toc-label`,children:e.label}),(0,b.jsx)(`span`,{className:`toc-arrow`,children:`›`})]},e.id))})]}),e&&n&&(0,b.jsx)(`div`,{className:`sim-math-content`,children:(0,b.jsx)(tl,{remarkPlugins:[$d],components:df,children:n})})]})}function pf(e){return JSON.parse(JSON.stringify(e))}var mf=[{id:`tires`,label:`Tire Temperatures`},{id:`handling`,label:`Handling Diagnosis`},{id:`shocks`,label:`Shocks & Struts`},{id:`simulation`,label:`Race Simulation`},{id:`optimize`,label:`Optimizer`},{id:`figure8`,label:`Figure 8`},{id:`f8optimize`,label:`F8 Optimizer`},{id:`mathref`,label:`Simulation Math`},{id:`suggested`,label:`Suggested Setup`}];function hf(){let[e,t]=(0,v.useState)(`tires`),[n,r]=(0,v.useState)(!1),i=e=>{t(e),r(!1)},[a,o]=(0,v.useState)(pf(Ke)),[s,c]=(0,v.useState)(65),[l,u]=(0,v.useState)(85),[d,f]=(0,v.useState)({LF:{inside:``,middle:``,outside:``,pressure:``},RF:{inside:``,middle:``,outside:``,pressure:``},LR:{inside:``,middle:``,outside:``,pressure:``},RR:{inside:``,middle:``,outside:``,pressure:``}}),[p,m]=(0,v.useState)(null),h=(e,t,n)=>{f(r=>({...r,[e]:{...r[e],[t]:n}})),m(null)},g=()=>{if(!Object.values(d).every(e=>e.inside&&e.middle&&e.outside)){alert(`Please enter inside, middle, and outside temperatures for all four tires.`);return}m(E(d))},_=()=>{f({LF:{inside:``,middle:``,outside:``,pressure:``},RF:{inside:``,middle:``,outside:``,pressure:``},LR:{inside:``,middle:``,outside:``,pressure:``},RR:{inside:``,middle:``,outside:``,pressure:``}}),m(null)};return(0,b.jsxs)(`div`,{className:`app`,children:[(0,b.jsx)(`header`,{className:`app-header`,children:(0,b.jsxs)(`div`,{className:`header-content`,children:[(0,b.jsx)(`h1`,{children:`Race Setup`}),(0,b.jsx)(`p`,{className:`tagline`,children:`Tire Temperature Analyzer & Chassis Setup Guide`})]})}),(0,b.jsxs)(`nav`,{className:`tab-nav`,children:[(0,b.jsx)(`div`,{className:`tab-list`,children:mf.map(t=>(0,b.jsx)(`button`,{className:`tab${e===t.id?` active`:``}`,onClick:()=>i(t.id),children:t.label},t.id))}),(0,b.jsxs)(`button`,{className:`hamburger-btn${n?` open`:``}`,onClick:()=>r(e=>!e),"aria-label":`Navigation menu`,children:[(0,b.jsx)(`span`,{}),(0,b.jsx)(`span`,{}),(0,b.jsx)(`span`,{})]}),(0,b.jsx)(`span`,{className:`nav-active-label`,children:mf.find(t=>t.id===e)?.label}),n&&(0,b.jsxs)(b.Fragment,{children:[(0,b.jsx)(`div`,{className:`mobile-menu-backdrop`,onClick:()=>r(!1)}),(0,b.jsx)(`div`,{className:`mobile-menu`,children:mf.map(t=>(0,b.jsx)(`button`,{className:`mobile-tab${e===t.id?` active`:``}`,onClick:()=>i(t.id),children:t.label},t.id))})]})]}),(0,b.jsxs)(`main`,{className:`app-main`,children:[e===`tires`&&(0,b.jsxs)(`div`,{className:`tire-section`,children:[(0,b.jsxs)(`div`,{className:`section-header`,children:[(0,b.jsx)(`h2`,{children:`Enter Tire Temperatures`}),(0,b.jsx)(`p`,{className:`section-description`,children:`Use your pyrometer to measure inside, middle, and outside temperatures for each tire. Inside will be the edge of tire closest to the motor. Outside will be the edge of tire furthest from the motor.`})]}),(0,b.jsxs)(`div`,{className:`tire-grid`,children:[(0,b.jsx)(`div`,{className:`grid-label front-label`,children:`FRONT`}),(0,b.jsx)(x,{position:`LF`,label:`Left Front`,data:d.LF,onChange:h}),(0,b.jsx)(x,{position:`RF`,label:`Right Front`,data:d.RF,onChange:h}),(0,b.jsx)(x,{position:`LR`,label:`Left Rear`,data:d.LR,onChange:h}),(0,b.jsx)(x,{position:`RR`,label:`Right Rear`,data:d.RR,onChange:h}),(0,b.jsx)(`div`,{className:`grid-label rear-label`,children:`REAR`})]}),(0,b.jsxs)(`div`,{className:`action-buttons`,children:[(0,b.jsx)(`button`,{className:`analyze-button`,onClick:g,children:`Analyze Tires`}),(0,b.jsx)(`button`,{className:`clear-button`,onClick:_,children:`Clear All`})]}),p&&(0,b.jsx)(ae,{analysis:p}),(0,b.jsxs)(`div`,{className:`reference-guide`,children:[(0,b.jsx)(`h3`,{children:`Quick Reference`}),(0,b.jsxs)(`div`,{className:`reference-grid`,children:[(0,b.jsxs)(`div`,{className:`reference-card`,children:[(0,b.jsx)(`h4`,{children:`General Tire Wear`}),(0,b.jsx)(`p`,{children:`The hotter the tire, the quicker it will wear.`}),(0,b.jsx)(`p`,{children:`The hottest tire on the car is the one being worked the most; the coolest is the least worked.`}),(0,b.jsx)(`p`,{children:`Focus adjustments on the most overworked or least worked corner first.`})]}),(0,b.jsxs)(`div`,{className:`reference-card`,children:[(0,b.jsx)(`h4`,{children:`Camber Issues`}),(0,b.jsx)(`p`,{children:`Too much NEGATIVE camber: excessively higher temperature at the INSIDE edges.`}),(0,b.jsx)(`p`,{children:`Too much POSITIVE camber: excessively higher temperature at the OUTSIDE edges.`})]}),(0,b.jsxs)(`div`,{className:`reference-card`,children:[(0,b.jsx)(`h4`,{children:`Inflation Issues`}),(0,b.jsx)(`p`,{children:`OVER inflated: higher middle temperature than inside & outside edges.`}),(0,b.jsx)(`p`,{children:`UNDER inflated: lower middle temperature than inside & outside edges.`})]}),(0,b.jsxs)(`div`,{className:`reference-card`,children:[(0,b.jsx)(`h4`,{children:`Toe Issues (Front Tires)`}),(0,b.jsx)(`p`,{children:`Too much toe OUT: higher temperatures on both INSIDE edges.`}),(0,b.jsx)(`p`,{children:`Too much toe IN: higher temperatures on both OUTSIDE edges.`})]}),(0,b.jsxs)(`div`,{className:`reference-card`,children:[(0,b.jsx)(`h4`,{children:`Handling & Temperature Split`}),(0,b.jsx)(`p`,{children:`RF tire HOTTER by >10°F over RR: indicates a tight condition.`}),(0,b.jsx)(`p`,{children:`RF tire COLDER by >10°F over RR: indicates a loose condition.`})]}),(0,b.jsxs)(`div`,{className:`reference-card`,children:[(0,b.jsx)(`h4`,{children:`Overall Workload`}),(0,b.jsx)(`p`,{children:`HIGHEST average temperature: corner of the car being most worked.`}),(0,b.jsx)(`p`,{children:`LOWEST average temperature: corner of the car being least worked.`})]}),(0,b.jsxs)(`div`,{className:`reference-card`,children:[(0,b.jsx)(`h4`,{children:`Ideal Inside-Outside Spread`}),(0,b.jsx)(`p`,{children:`5-20°F with inside slightly hotter`})]})]})]})]}),e===`handling`&&(0,b.jsx)(j,{}),e===`shocks`&&(0,b.jsx)(oe,{}),e===`simulation`&&(0,b.jsx)(jt,{setup:a,setSetup:o,ambient:s,setAmbient:c,inflationTemp:l,setInflationTemp:u}),e===`optimize`&&(0,b.jsx)(Xt,{setup:a,setSetup:o,ambient:s,setAmbient:c,inflationTemp:l,setInflationTemp:u}),e===`figure8`&&(0,b.jsx)(dn,{setup:a,setSetup:o,ambient:s,setAmbient:c,inflationTemp:l,setInflationTemp:u}),e===`f8optimize`&&(0,b.jsx)(Tn,{setup:a,setSetup:o,ambient:s,setAmbient:c,inflationTemp:l,setInflationTemp:u}),e===`mathref`&&(0,b.jsx)(af,{}),e===`suggested`&&(0,b.jsx)(ff,{})]}),(0,b.jsx)(`footer`,{className:`app-footer`,children:(0,b.jsx)(`p`,{children:`Data sourced from Team NASA, Billy Hines, and Bobby.`})})]})}(0,_.createRoot)(document.getElementById(`root`)).render((0,b.jsx)(v.StrictMode,{children:(0,b.jsx)(hf,{})}));
+`)})();var df={table:({children:e})=>(0,b.jsx)(`div`,{className:`sim-math-table-wrap`,children:(0,b.jsx)(`table`,{className:`sim-math-table`,children:e})}),code:({inline:e,children:t,...n})=>e?(0,b.jsx)(`code`,{className:`sim-math-inline-code`,...n,children:t}):(0,b.jsx)(`pre`,{className:`sim-math-code-block`,children:(0,b.jsx)(`code`,{...n,children:t})}),blockquote:({children:e})=>(0,b.jsx)(`div`,{className:`sim-math-callout`,children:e})};function ff(){let[e,t]=(0,v.useState)(null),n=e?uf(e.heading):null;return(0,b.jsxs)(`div`,{className:`sim-math-page`,children:[e&&(0,b.jsx)(`button`,{className:`sim-math-back`,onClick:()=>t(null),children:`← Table of Contents`}),!e&&(0,b.jsxs)(`div`,{className:`sim-math-toc`,children:[(0,b.jsxs)(`div`,{className:`sim-math-header`,children:[(0,b.jsx)(`h2`,{children:`Suggested Setup & Analysis`}),(0,b.jsx)(`p`,{className:`sim-math-subtitle`,children:`Physics-based scenario analysis, pyrometer cross-validation, and ranked recommendations for the 2008 Crown Victoria P71 on the 1/4-mile oval.`}),(0,b.jsxs)(`div`,{className:`sim-math-meta`,children:[(0,b.jsx)(`span`,{children:`2008 Crown Victoria P71`}),(0,b.jsx)(`span`,{className:`sep`,children:`·`}),(0,b.jsx)(`span`,{children:`1/4-mile Oval`}),(0,b.jsx)(`span`,{className:`sep`,children:`·`}),(0,b.jsx)(`span`,{children:`14 Sections`}),(0,b.jsx)(`span`,{className:`sep`,children:`·`}),(0,b.jsx)(`span`,{children:`Updated 2026-04-02`})]})]}),(0,b.jsxs)(`div`,{className:`suggested-highlights`,children:[(0,b.jsxs)(`div`,{className:`suggested-highlight-card green`,children:[(0,b.jsx)(`div`,{className:`sh-label`,children:`Biggest Free Gain`}),(0,b.jsx)(`div`,{className:`sh-value`,children:`+0.08–0.10s`}),(0,b.jsx)(`div`,{className:`sh-desc`,children:`Raise LF cold PSI: 20 → 24–25`})]}),(0,b.jsxs)(`div`,{className:`suggested-highlight-card blue`,children:[(0,b.jsx)(`div`,{className:`sh-label`,children:`Model Ceiling`}),(0,b.jsx)(`div`,{className:`sh-value`,children:`~17.1s`}),(0,b.jsx)(`div`,{className:`sh-desc`,children:`Current components, warm conditions`})]}),(0,b.jsxs)(`div`,{className:`suggested-highlight-card purple`,children:[(0,b.jsx)(`div`,{className:`sh-label`,children:`Actual Corner Speed`}),(0,b.jsx)(`div`,{className:`sh-value`,children:`~42 mph`}),(0,b.jsx)(`div`,{className:`sh-desc`,children:`Measured at 42 mph / 61.6 ft/s, R=145 ft → 0.813G`})]})]}),(0,b.jsx)(`div`,{className:`sim-math-toc-grid`,children:sf.map((e,n)=>(0,b.jsxs)(`button`,{className:`sim-math-toc-card`,onClick:()=>t(e),children:[(0,b.jsx)(`span`,{className:`toc-num`,children:n+1}),(0,b.jsx)(`span`,{className:`toc-label`,children:e.label}),(0,b.jsx)(`span`,{className:`toc-arrow`,children:`›`})]},e.id))})]}),e&&n&&(0,b.jsx)(`div`,{className:`sim-math-content`,children:(0,b.jsx)(tl,{remarkPlugins:[$d],components:df,children:n})})]})}function pf(e){return JSON.parse(JSON.stringify(e))}var mf=[{id:`tires`,label:`Tire Temperatures`},{id:`handling`,label:`Handling Diagnosis`},{id:`shocks`,label:`Shocks & Struts`},{id:`simulation`,label:`Race Simulation`},{id:`optimize`,label:`Optimizer`},{id:`figure8`,label:`Figure 8`},{id:`f8optimize`,label:`F8 Optimizer`},{id:`mathref`,label:`Simulation Math`},{id:`suggested`,label:`Suggested Setup`}];function hf(){let[e,t]=(0,v.useState)(`tires`),[n,r]=(0,v.useState)(!1),i=e=>{t(e),r(!1)},[a,o]=(0,v.useState)(pf(Ke)),[s,c]=(0,v.useState)(65),[l,u]=(0,v.useState)(85),[d,f]=(0,v.useState)({LF:{inside:``,middle:``,outside:``,pressure:``},RF:{inside:``,middle:``,outside:``,pressure:``},LR:{inside:``,middle:``,outside:``,pressure:``},RR:{inside:``,middle:``,outside:``,pressure:``}}),[p,m]=(0,v.useState)(null),h=(e,t,n)=>{f(r=>({...r,[e]:{...r[e],[t]:n}})),m(null)},g=()=>{if(!Object.values(d).every(e=>e.inside&&e.middle&&e.outside)){alert(`Please enter inside, middle, and outside temperatures for all four tires.`);return}m(E(d))},_=()=>{f({LF:{inside:``,middle:``,outside:``,pressure:``},RF:{inside:``,middle:``,outside:``,pressure:``},LR:{inside:``,middle:``,outside:``,pressure:``},RR:{inside:``,middle:``,outside:``,pressure:``}}),m(null)};return(0,b.jsxs)(`div`,{className:`app`,children:[(0,b.jsx)(`header`,{className:`app-header`,children:(0,b.jsxs)(`div`,{className:`header-content`,children:[(0,b.jsx)(`h1`,{children:`Race Setup`}),(0,b.jsx)(`p`,{className:`tagline`,children:`Tire Temperature Analyzer & Chassis Setup Guide`})]})}),(0,b.jsxs)(`nav`,{className:`tab-nav`,children:[(0,b.jsx)(`div`,{className:`tab-list`,children:mf.map(t=>(0,b.jsx)(`button`,{className:`tab${e===t.id?` active`:``}`,onClick:()=>i(t.id),children:t.label},t.id))}),(0,b.jsxs)(`button`,{className:`hamburger-btn${n?` open`:``}`,onClick:()=>r(e=>!e),"aria-label":`Navigation menu`,children:[(0,b.jsx)(`span`,{}),(0,b.jsx)(`span`,{}),(0,b.jsx)(`span`,{})]}),(0,b.jsx)(`span`,{className:`nav-active-label`,children:mf.find(t=>t.id===e)?.label}),n&&(0,b.jsxs)(b.Fragment,{children:[(0,b.jsx)(`div`,{className:`mobile-menu-backdrop`,onClick:()=>r(!1)}),(0,b.jsx)(`div`,{className:`mobile-menu`,children:mf.map(t=>(0,b.jsx)(`button`,{className:`mobile-tab${e===t.id?` active`:``}`,onClick:()=>i(t.id),children:t.label},t.id))})]})]}),(0,b.jsxs)(`main`,{className:`app-main`,children:[e===`tires`&&(0,b.jsxs)(`div`,{className:`tire-section`,children:[(0,b.jsxs)(`div`,{className:`section-header`,children:[(0,b.jsx)(`h2`,{children:`Enter Tire Temperatures`}),(0,b.jsx)(`p`,{className:`section-description`,children:`Use your pyrometer to measure inside, middle, and outside temperatures for each tire. Inside will be the edge of tire closest to the motor. Outside will be the edge of tire furthest from the motor.`})]}),(0,b.jsxs)(`div`,{className:`tire-grid`,children:[(0,b.jsx)(`div`,{className:`grid-label front-label`,children:`FRONT`}),(0,b.jsx)(x,{position:`LF`,label:`Left Front`,data:d.LF,onChange:h}),(0,b.jsx)(x,{position:`RF`,label:`Right Front`,data:d.RF,onChange:h}),(0,b.jsx)(x,{position:`LR`,label:`Left Rear`,data:d.LR,onChange:h}),(0,b.jsx)(x,{position:`RR`,label:`Right Rear`,data:d.RR,onChange:h}),(0,b.jsx)(`div`,{className:`grid-label rear-label`,children:`REAR`})]}),(0,b.jsxs)(`div`,{className:`action-buttons`,children:[(0,b.jsx)(`button`,{className:`analyze-button`,onClick:g,children:`Analyze Tires`}),(0,b.jsx)(`button`,{className:`clear-button`,onClick:_,children:`Clear All`})]}),p&&(0,b.jsx)(ae,{analysis:p}),(0,b.jsxs)(`div`,{className:`reference-guide`,children:[(0,b.jsx)(`h3`,{children:`Quick Reference`}),(0,b.jsxs)(`div`,{className:`reference-grid`,children:[(0,b.jsxs)(`div`,{className:`reference-card`,children:[(0,b.jsx)(`h4`,{children:`General Tire Wear`}),(0,b.jsx)(`p`,{children:`The hotter the tire, the quicker it will wear.`}),(0,b.jsx)(`p`,{children:`The hottest tire on the car is the one being worked the most; the coolest is the least worked.`}),(0,b.jsx)(`p`,{children:`Focus adjustments on the most overworked or least worked corner first.`})]}),(0,b.jsxs)(`div`,{className:`reference-card`,children:[(0,b.jsx)(`h4`,{children:`Camber Issues`}),(0,b.jsx)(`p`,{children:`Too much NEGATIVE camber: excessively higher temperature at the INSIDE edges.`}),(0,b.jsx)(`p`,{children:`Too much POSITIVE camber: excessively higher temperature at the OUTSIDE edges.`})]}),(0,b.jsxs)(`div`,{className:`reference-card`,children:[(0,b.jsx)(`h4`,{children:`Inflation Issues`}),(0,b.jsx)(`p`,{children:`OVER inflated: higher middle temperature than inside & outside edges.`}),(0,b.jsx)(`p`,{children:`UNDER inflated: lower middle temperature than inside & outside edges.`})]}),(0,b.jsxs)(`div`,{className:`reference-card`,children:[(0,b.jsx)(`h4`,{children:`Toe Issues (Front Tires)`}),(0,b.jsx)(`p`,{children:`Too much toe OUT: higher temperatures on both INSIDE edges.`}),(0,b.jsx)(`p`,{children:`Too much toe IN: higher temperatures on both OUTSIDE edges.`})]}),(0,b.jsxs)(`div`,{className:`reference-card`,children:[(0,b.jsx)(`h4`,{children:`Handling & Temperature Split`}),(0,b.jsx)(`p`,{children:`RF tire HOTTER by >10°F over RR: indicates a tight condition.`}),(0,b.jsx)(`p`,{children:`RF tire COLDER by >10°F over RR: indicates a loose condition.`})]}),(0,b.jsxs)(`div`,{className:`reference-card`,children:[(0,b.jsx)(`h4`,{children:`Overall Workload`}),(0,b.jsx)(`p`,{children:`HIGHEST average temperature: corner of the car being most worked.`}),(0,b.jsx)(`p`,{children:`LOWEST average temperature: corner of the car being least worked.`})]}),(0,b.jsxs)(`div`,{className:`reference-card`,children:[(0,b.jsx)(`h4`,{children:`Ideal Inside-Outside Spread`}),(0,b.jsx)(`p`,{children:`5-20°F with inside slightly hotter`})]})]})]})]}),e===`handling`&&(0,b.jsx)(j,{}),e===`shocks`&&(0,b.jsx)(oe,{}),e===`simulation`&&(0,b.jsx)(jt,{setup:a,setSetup:o,ambient:s,setAmbient:c,inflationTemp:l,setInflationTemp:u}),e===`optimize`&&(0,b.jsx)(Xt,{setup:a,setSetup:o,ambient:s,setAmbient:c,inflationTemp:l,setInflationTemp:u}),e===`figure8`&&(0,b.jsx)(dn,{setup:a,setSetup:o,ambient:s,setAmbient:c,inflationTemp:l,setInflationTemp:u}),e===`f8optimize`&&(0,b.jsx)(Tn,{setup:a,setSetup:o,ambient:s,setAmbient:c,inflationTemp:l,setInflationTemp:u}),e===`mathref`&&(0,b.jsx)(af,{}),e===`suggested`&&(0,b.jsx)(ff,{})]}),(0,b.jsx)(`footer`,{className:`app-footer`,children:(0,b.jsx)(`p`,{children:`Data sourced from Team NASA, Billy Hines, and Bobby.`})})]})}(0,_.createRoot)(document.getElementById(`root`)).render((0,b.jsx)(v.StrictMode,{children:(0,b.jsx)(hf,{})}));
