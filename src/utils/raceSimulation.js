@@ -220,39 +220,90 @@ function pressureGripFactor(hotPsi, tireLoad) {
 //   Rear (solid axle, outside): groundCamber = roll (no static camber, just body roll)
 //   Rear (solid axle, inside):  groundCamber = -roll
 //
-// Ideal ground camber:
-//   Outside front (RF): Not 0° — slight negative needed to counter centrifugal crown and load.
-//     Empirical for bias-ply/street tires on short oval: ≈ -1.5° to -2.5° ground.
-//     Calibrated to -2.0° ground for the Ironman 235/55R17 (tall compliant sidewall absorbs
-//     some of the load skew that a stiff R-compound needs more static camber to manage).
-//     NOTE: To refine this, measure camber thrust curve vs. load with a proper tire test or
-//     back-calculate from I/O pyrometer splits at various static settings.
-//   Inside front (LF): 0° ground — flat contact patch maximizes area on lightly loaded inside.
-//     IMPORTANT: to achieve 0° GROUND camber on the LF, the static alignment must be POSITIVE
-//     (or near-zero). This is because chassis roll subtracts camber in the ground frame:
-//       groundCamber(LF) = staticCamber + casterGain(+) + SLAdroop(+) + KPI(-) - cornerRoll
-//     With cornerRoll ~1-2° and caster/droop gains ~0.4-0.6°, the net subtraction is ~0.5-1.5°.
-//     So a static LF of 0° ends up with -0.5° to -1.5° ground camber — slightly negative.
-//     A static LF of +1° to +1.5° is often needed to hit 0° ground at the contact patch.
-//     This is why oval racers run positive (or very slightly negative) LF static camber —
-//     the car's own cornering roll corrects it to near-flat at the contact patch.
-//   Outside rear (RR): 0° ground — solid axle, can't adjust; 0° is the physics-correct target.
-//   Inside rear (LR): 0° ground — same reasoning.
-const IDEAL_GROUND_CAMBER_RF = -2.0;  // ° — outside front (RF). Calibrated estimate; see above.
-const IDEAL_GROUND_CAMBER_LF =  0.0;  // ° — inside front (LF). Flat patch at contact.
-const IDEAL_GROUND_CAMBER_REAR = 0.0; // ° — both rears (solid axle, no adjustment possible).
+// Ideal ground camber — the tire-to-road angle that maximizes grip at each corner.
+//
+//   RF (outside front, heavily loaded ~1,300–1,700 lbs at 0.8G):
+//     −2.0° ground. Slight negative counters centrifugal crown and keeps full contact patch.
+//     Calibrated for Ironman 235/55R17 tall sidewall; R-compound slicks need −2.5° to −3.0°.
+//     Literature (NASCAR, IMCA baselines): −2.0° to −2.25° for street tires at heavy load.
+//     Sidewall compliance adds +0.45° at RF load, so static must be set to ~−2.5° to reach −2.0° ground.
+//     Back-calculate with I/O pyrometer splits to refine: even split = optimal.
+//
+//   LF (inside front, lightly loaded ~600–900 lbs at 0.8G):
+//     +0.75° ground. NOT 0° — the optimum is a small positive ground angle.
+//     At 0° ground (flat patch) the LF contributes maximum contact area but zero camber thrust.
+//     Camber thrust on the lightly loaded inside tire sharpens turn-in response and aids rotation.
+//     Research (short oval practice, tire physics): +0.5° to +1.0° ground is the practical optimum
+//     where camber thrust benefit exceeds the modest contact patch reduction (~5% at +0.75°).
+//     To achieve +0.75° ground: static LF ≈ +1.5° to +2° (chassis roll subtracts 1–2° in ground frame).
+//     Going negative (insufficient positive, below +0.75°) loses camber thrust AND narrows the patch.
+//     Going above +2° ground starts losing more patch than the camber thrust can recover.
+//
+//   RR (outside rear, solid axle): 0° ground — body roll is the only camber source; unavoidable.
+//   LR (inside rear, solid axle): 0° ground — same; reduce body roll to minimize deviation.
+const IDEAL_GROUND_CAMBER_RF   = -2.0;  // ° — outside front. Literature: −2.0° to −2.25° for street tires.
+const IDEAL_GROUND_CAMBER_LF   = +0.75; // ° — inside front. Small positive: camber thrust > patch loss.
+const IDEAL_GROUND_CAMBER_REAR =  0.0;  // ° — both rears (solid axle, no static adjustment).
 
-function camberGripFactor(groundCamber, isOutside, isFront) {
-  // All inputs and ideals are now in ground frame.
-  let ideal;
-  if (isFront) {
-    ideal = isOutside ? IDEAL_GROUND_CAMBER_RF : IDEAL_GROUND_CAMBER_LF;
-  } else {
-    ideal = IDEAL_GROUND_CAMBER_REAR; // solid axle — 0° ground target for both sides
+// camberGripFactor — asymmetric, load-weighted penalty curve.
+//
+// WHY ASYMMETRIC:
+//   RF (outside, heavily loaded): Insufficient camber (too positive) is ~1.6× more damaging than
+//   over-camber (too negative). At insufficient camber, the outer edge lifts and lateral force drops
+//   sharply. At over-camber, the inner edge carries load and some lateral force is retained.
+//   Source: Pacejka tire model, JOES Racing / Speed Academy contact patch research.
+//
+//   LF (inside, lightly loaded): Going below the +0.75° ideal (toward 0° or negative) removes
+//   camber thrust AND reduces the contact patch — double penalty. Going above +0.75° mainly just
+//   reduces contact patch with modest camber thrust still present — single, gentler penalty.
+//
+// WHY LOAD-WEIGHTED:
+//   Camber thrust coefficient scales nearly linearly with vertical load (Pacejka). A 1° deviation
+//   costs more grip on the heavily loaded RF (~1.5%/°) than on the lightly loaded LF (~0.8%/°).
+//   load parameter = actual corner load (lbs). Defaults to average load if omitted (F8/rear uses).
+//
+// PENALTY RATES (per degree of deviation from ideal ground camber):
+//   RF insufficient (groundCamber > IDEAL_RF): 1.6%/° base + 0.4%/° per × average load
+//   RF over-camber  (groundCamber < IDEAL_RF): 1.0%/° flat
+//   LF too-low      (groundCamber < IDEAL_LF): 1.2%/° (loses both thrust and patch)
+//   LF too-high     (groundCamber > IDEAL_LF): 0.7%/° (loses mostly patch, thrust still present)
+//   Rear (both):    1.0%/° symmetric (no adjustment, informational only)
+//   Floor: 0.88 (12% max loss) — unchanged.
+function camberGripFactor(groundCamber, isOutside, isFront, load = VEH.weight / 4) {
+  const avgLoad = VEH.weight / 4; // 1025 lbs
+
+  if (!isFront) {
+    // Rear solid axle — symmetric 1.0%/° (no adjustment possible, informational only)
+    const ideal = IDEAL_GROUND_CAMBER_REAR;
+    const dev = Math.abs(groundCamber - ideal);
+    return Math.max(0.88, 1 - 0.010 * dev);
   }
-  const dev = Math.abs(groundCamber - ideal);
-  // 0.012/° matches prior calibration: 0.25° dev = ~0.3% loss, 2° dev = ~2.4% loss, floor 88%
-  return Math.max(0.88, 1 - 0.012 * dev);
+
+  if (isOutside) {
+    // RF: asymmetric. Insufficient camber penalizes harder than over-camber.
+    const ideal = IDEAL_GROUND_CAMBER_RF;
+    const dev = groundCamber - ideal; // positive = insufficient (too close to 0), negative = over-camber
+    if (dev > 0) {
+      // Insufficient: load-weighted penalty. At RF ~1,400 lbs: 1.6% + (1400/1025-1)×0.4% ≈ 1.75%/°
+      const penalty = 0.016 + Math.max(0, (load / avgLoad - 1.0)) * 0.004;
+      return Math.max(0.88, 1 - penalty * dev);
+    } else {
+      // Over-camber: gentler flat penalty
+      return Math.max(0.88, 1 - 0.010 * Math.abs(dev));
+    }
+  } else {
+    // LF: asymmetric. Below ideal loses both camber thrust and contact patch (steeper).
+    //     Above ideal loses mainly contact patch (gentler — camber thrust still partially present).
+    const ideal = IDEAL_GROUND_CAMBER_LF;
+    const dev = groundCamber - ideal; // positive = above ideal, negative = below ideal
+    if (dev < 0) {
+      // Below ideal: double penalty (thrust lost + patch reduced)
+      return Math.max(0.88, 1 - 0.012 * Math.abs(dev));
+    } else {
+      // Above ideal: gentler (mainly patch reduction, camber thrust still present)
+      return Math.max(0.88, 1 - 0.007 * dev);
+    }
+  }
 }
 
 // Caster: contributes dynamic camber gain on outside front tire during cornering.
@@ -478,7 +529,7 @@ function calcPerformance(setup, tires, inflationTemp = COLD_PSI_TEMP) {
       // Add sidewall compliance camber: loaded sidewall deflects outward, adding positive camber
       // at the contact patch regardless of which corner. Uses actual corner load (not refG load).
       const groundCamber = geomGroundCamber + sidewallCamberDeg(cornerLoads[c]);
-      mu *= camberGripFactor(groundCamber, outside, true);
+      mu *= camberGripFactor(groundCamber, outside, true, cornerLoads[c]);
       // Caster direct effect (trail, stability)
       mu *= casterGripFactor(caster[c], outside, true);
     } else {
@@ -976,7 +1027,7 @@ export function analyzeSetup(setup, ambientTemp = 65, inflationTemp = COLD_PSI_T
       groundCamber = geomGroundCamber + swCamber;
       idealGroundCamber = outside ? IDEAL_GROUND_CAMBER_RF : IDEAL_GROUND_CAMBER_LF;
       camberDev = Math.abs(groundCamber - idealGroundCamber);
-      camberFactor = camberGripFactor(groundCamber, outside, true);
+      camberFactor = camberGripFactor(groundCamber, outside, true, cornerLoads[c]);
       casterFactor = casterGripFactor(caster[c], outside, true);
       // Optimal static camber: back-calculate from ideal ground camber including sidewall offset.
       // idealGround = geomGround + swCamber

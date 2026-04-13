@@ -89,12 +89,12 @@ const TIPS = {
   groundCamber: 'Tire-to-road angle at mid-corner — the contact patch metric. Accounts for body roll rotating the chassis: outside tire\'s ground camber = effective + cornerRoll; inside = effective − cornerRoll. This is what actually determines how the contact patch loads.',
   idealCamber: {
     outside: 'Target ground camber for the outside front (RF): −2.0°. At 0° ground the contact patch is geometrically flat, but under cornering load the outside tread crown lifts slightly — a small negative ground angle compensates. Calibrated for the Ironman 235/55R17 tall sidewall; a stiffer low-profile tire would need more negative. Refine this target with camber sweep tests: the setting that produces even I/M/O pyrometer temps is the true optimum.',
-    inside: 'Target ground camber for the inside front (LF): 0° (flat contact patch at the tire-to-road interface). IMPORTANT: to achieve 0° ground camber, the static alignment must be positive or near-zero. Body roll subtracts camber in the ground frame — chassis rolls right, so the LF wheel top is pulled inward (negative ground camber). Caster and SLA droop geometry add back some positive camber, but the net effect still requires a static setting of roughly 0° to +1.5° to land at 0° ground at the contact patch. This is why oval racers run positive LF static camber — it looks wrong in the garage but correct at speed.',
+    inside: 'Target ground camber for the inside front (LF): +0.75°. This is NOT 0° — a small positive ground angle is optimal. At 0° ground the contact patch is flat but produces zero camber thrust; at +0.75° the lightly loaded LF generates meaningful camber thrust (inward force that aids rotation and turn-in) while the contact patch loss is only ~5%. Research (short oval practice, tire physics): +0.5° to +1.0° ground optimum for lightly loaded inside tire. To achieve +0.75° ground: static LF ≈ +1.5° to +2° (chassis roll subtracts 1–2° in ground frame). Going below +0.75° loses both thrust and contact patch. Going above ~+2° ground mainly loses contact patch with diminishing thrust return.',
     rearOutside: 'Target ground camber for the outside rear (RR): 0°. With a solid axle the tire tilts with body roll — the car rolls outward, adding positive ground camber to the outside rear. Stiffer rear shocks reduce roll and keep this closer to 0°.',
     rearInside: 'Target ground camber for the inside rear (LR): 0°. The inside rear is very lightly loaded. No adjustment possible — controlled only by reducing body roll.',
   },
   solidAxle: 'The rear axle is solid (live axle) — both rear wheels tilt together with body roll. You cannot set rear camber directly. Reducing body roll (stiffer rear shocks) brings ground camber closer to 0° on both rears.',
-  camberScore: 'Grip multiplier from camber alignment. 100% = ground camber matches the target for this corner. Each degree of deviation from target costs roughly 1.2% grip.',
+  camberScore: 'Grip multiplier from camber alignment. 100% = ground camber matches the target. Penalty is asymmetric and load-weighted: RF loses ~1.6–1.8%/° when not negative enough (insufficient camber is more damaging than over-camber). LF loses ~1.2%/° below the +0.75° target (both thrust and contact patch lost), ~0.7%/° above it (mainly contact patch). Rears ~1.0%/° symmetric.',
   alignmentRange: 'P71 front camber range assumes camber bolts are installed (replaces one or both strut pinch bolts). With a camber bolt: RF adjustable from 0° to −4°; LF adjustable from −4° to +4°. Positive LF static camber is normal for oval racing — chassis roll subtracts ~1–2° in the ground frame, so +1° to +2° static produces near-flat contact patch in the corner. Values beyond ±4° require additional hardware (alignment shims or plates).',
   sidewallCamber: 'Positive camber added at the contact patch by sidewall compliance. The 235/55R17 55-series sidewall deflects outward under load, shifting the contact patch and effectively leaning the tire away from center. This is load-dependent (heavier corner = more deflection) and must be offset by additional static negative camber. Data: Ironman iMove Gen3 AS 235/55R17, section height 5.09\", load-deflection curve measured at 500/1000/1500/1929 lbs.',
   pressureSection: 'Tire pressure affects contact patch shape. Under-inflated tires flex excessively and overheat the edges; over-inflated tires crown and only use the center of the tread.',
@@ -344,11 +344,11 @@ function BalanceGauge({ frontGripPct, frontLLTD, springLLTD, corners, setup }) {
 
 // ── Static Camber Calculator ──────────────────────────────────────────────────
 // Coefficients mirror raceSimulation.js exactly.
-// All ideals now in GROUND FRAME (tire-to-road angle) — consistent with camberGripFactor.
-//   RF (outside): idealGround = -2.0° → chassis-relative ideal = idealGround - cornerRoll
-//   LF (inside):  idealGround =  0.0° → chassis-relative ideal = idealGround + cornerRoll
+// All ideals in GROUND FRAME (tire-to-road angle) — consistent with camberGripFactor.
+//   RF (outside): idealGround = -2.0° → needs negative camber to maximize contact patch under load
+//   LF (inside):  idealGround = +0.75° → small positive ground angle: camber thrust > contact patch loss
 // rollCoeff 0.355 = 1.1° camber gain / 3.1° body roll (measured: 1.7" wheel disp × 0.65°/in)
-const IDEAL_GROUND = { RF: -2.0, LF: 0.0 }; // ° ground camber targets
+const IDEAL_GROUND = { RF: -2.0, LF: 0.75 }; // ° ground camber targets (must match raceSimulation.js)
 const CALC = {
   RF: { outside: true,  casterCoeff: 0.18, rollCoeff: 0.355 },
   LF: { outside: false, casterCoeff: 0.10, rollCoeff: 0.15  },
