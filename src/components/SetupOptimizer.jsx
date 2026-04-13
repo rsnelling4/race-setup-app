@@ -148,8 +148,26 @@ function BalanceGauge({ frontGripPct, frontLLTD, springLLTD, corners, setup }) {
   // Front grip share > 55% = front is the limit = front is overworked = push/tight.
   // gripDev: + means front has LESS than its proportional share → rear is limiting → loose.
   const gripDev  = 0.55 - balFrontGripPct;   // + = front under-contributing = loose
-  const lltdDev  = (frontLLTD - 0.55) * 0.3; // + = front LLTD too high = front overloaded = push, so subtract
-  const tendency = gripDev - lltdDev;         // + = loose, - = push
+
+  // LLTD contribution — U-shaped, centered on 46% optimal.
+  //
+  // LLTD deviation from 46% in EITHER direction is a push signal:
+  //   HIGH LLTD (> 50%): front axle overloaded by weight transfer → front reaches grip limit
+  //     first → push/understeer.
+  //   LOW LLTD (< 38%): RF is starved of load — can't generate lateral force without vertical
+  //     load. Front washes. This is push, not loose, even though the rear isn't overloaded.
+  //     Both extremes push; only 42–50% allows natural rotation.
+  //
+  // lltdPush: always negative (push direction), magnitude grows with distance from 46%.
+  // Calibrated: at LLTD=33% (13 pts off): lltdPush ≈ -0.059 → "Tight" zone.
+  //             at LLTD=38% (8 pts off):  lltdPush ≈ -0.022 → "Slight Push".
+  //             at LLTD=46% (0 pts off):  lltdPush = 0.
+  //             at LLTD=54% (8 pts off):  lltdPush ≈ -0.022 → "Slight Push".
+  //             at LLTD=59% (13 pts off): lltdPush ≈ -0.059 → "Tight".
+  // Formula: -3.5 × deviation² (gaugeMax = 0.12, thresholds at ±0.015/0.04/0.08)
+  const OPTIMAL_LLTD = 0.46;
+  const lltdPush = -3.5 * Math.pow(frontLLTD - OPTIMAL_LLTD, 2); // always ≤ 0
+  const tendency = gripDev + lltdPush;  // + = loose, - = push
 
   const gaugeMax = 0.12;
   // gaugePos: 0 = full loose (left), 1 = full push (right)
@@ -193,7 +211,10 @@ function BalanceGauge({ frontGripPct, frontLLTD, springLLTD, corners, setup }) {
   const toeEntryBias    = Math.max(0.2, Math.min(0.8, 0.5 + (setup.toe + 0.25) * 0.5));
   const rfCamEntryBias  = Math.max(0.2, Math.min(0.8, 0.5 + corners.RF.camberDev * 0.04));
   const rfPresEntryBias = Math.max(0.2, Math.min(0.8, 0.5 + corners.RF.psiDev * 0.022));
-  const entryBias = 0.32 * entryOutsideBias + 0.17 * frontLLTD + 0.18 * toeEntryBias + 0.14 * rfCamEntryBias + 0.19 * rfPresEntryBias;
+  // LLTD entry contribution: U-curve — both too-low and too-high LLTD push toward understeer on entry.
+  // Map to 0–1 bias scale: 0.46 LLTD → 0.5 (neutral), deviating either way → toward push (>0.5).
+  const lltdEntryBias = Math.min(0.8, 0.5 + 3.5 * Math.pow(frontLLTD - OPTIMAL_LLTD, 2));
+  const entryBias = 0.32 * entryOutsideBias + 0.17 * lltdEntryBias + 0.18 * toeEntryBias + 0.14 * rfCamEntryBias + 0.19 * rfPresEntryBias;
   const entry = phaseLabel(entryBias);
 
   // MID — steady-state corner. Shocks have stopped moving; only springs determine LLTD.
@@ -201,7 +222,11 @@ function BalanceGauge({ frontGripPct, frontLLTD, springLLTD, corners, setup }) {
   // < 0.55 = rear is the limiting axle = loose. Includes amplified pressure correction.
   // LLTD contribution uses springLLTD only — dampers are irrelevant at steady-state mid-corner.
   const midGripBias = Math.max(0.1, Math.min(0.9, 0.5 + (balFrontGripPct - 0.55) * 3));
-  const midBias = 0.55 * midGripBias + 0.45 * springLLTD;
+  // LLTD mid contribution: U-curve — both too-low and too-high push at mid-corner.
+  // At steady-state (shocks stopped), spring ratio dominates, but we use frontLLTD
+  // for consistency with the overall tendency signal.
+  const lltdMidBias = Math.min(0.8, 0.5 + 3.5 * Math.pow(frontLLTD - OPTIMAL_LLTD, 2));
+  const midBias = 0.55 * midGripBias + 0.45 * lltdMidBias;
   const mid = phaseLabel(midBias);
 
   // EXIT — off corner under throttle.
@@ -213,7 +238,9 @@ function BalanceGauge({ frontGripPct, frontLLTD, springLLTD, corners, setup }) {
   const frontGripAvg = (corners.RF.adjustableScore + corners.LF.adjustableScore) / 2;
   const gripDiffBias   = Math.max(0.1, Math.min(0.9, 0.5 + (rearGripAvg - frontGripAvg) * 5));
   const rrPresExitBias = Math.max(0.2, Math.min(0.8, 0.5 - corners.RR.psiDev * 0.020));
-  const exitBias = 0.27 * diagBias + 0.22 * frontLLTD + 0.24 * gripDiffBias + 0.27 * rrPresExitBias;
+  // LLTD exit contribution: U-curve — low LLTD starves RF on exit just as much as high.
+  const lltdExitBias = Math.min(0.8, 0.5 + 3.5 * Math.pow(frontLLTD - OPTIMAL_LLTD, 2));
+  const exitBias = 0.27 * diagBias + 0.22 * lltdExitBias + 0.24 * gripDiffBias + 0.27 * rrPresExitBias;
   const exit = phaseLabel(exitBias);
 
   // Phase notes — surface the dominant driver for each phase
@@ -259,18 +286,25 @@ function BalanceGauge({ frontGripPct, frontLLTD, springLLTD, corners, setup }) {
   let description, action;
   if (tendency < -0.015) {
     const drivers = [];
-    if (frontLLTD > 0.51) drivers.push('high front LLTD — front shocks transferring too much cornering load to front axle');
+    if (frontLLTD < 0.42) {
+      drivers.push(`low front LLTD (${(frontLLTD * 100).toFixed(0)}%) — RF is starved of cornering load and can't build lateral force. Front washes even though rear isn't overloaded. Target 42–50%`);
+    } else if (frontLLTD > 0.51) {
+      drivers.push('high front LLTD — front shocks transferring too much cornering load to front axle, front reaches grip limit first');
+    }
     if (frontGripPct > 0.57) drivers.push('front tires overworked relative to rears (front is the limiting axle)');
     if (!rfCamberOk) drivers.push('RF camber could be improved');
     if (!frontPresOk) drivers.push('front tire pressures off target');
     if (frontAvgScore < rearAvgScore - 0.03) drivers.push('front grip scores lower than rear');
     description = drivers.length
       ? `Car tends to push. Contributing factors: ${drivers.join('; ')}.`
-      : 'Front axle is working harder than the rear relative to weight distribution.';
-    action = 'To loosen: raise RF pressure (quickest fix — more RF grip turns the car), raise RR pressure (plants rear), raise LF pressure, lower LR pressure. If still pushing: soften front struts, stiffen rear shocks, or add RF negative camber.';
+      : 'Front axle is not generating enough lateral force relative to the rear.';
+    // Action depends on which end of the LLTD range we're in
+    action = frontLLTD < 0.42
+      ? 'To fix push from low LLTD: stiffen front struts (increase front roll resistance so RF gets more load in corners). Also check RF camber and pressure — the RF needs load AND good contact patch to generate cornering force.'
+      : 'To loosen: raise RF pressure (quickest fix — more RF grip turns the car), raise RR pressure (plants rear), raise LF pressure, lower LR pressure. If still pushing: soften front struts, stiffen rear shocks, or add RF negative camber.';
   } else if (tendency > 0.015) {
     const drivers = [];
-    if (frontLLTD < 0.41) drivers.push('low front LLTD — rear shocks handling too much cornering load, overloading rear axle');
+    if (frontLLTD >= 0.42 && frontLLTD < 0.46) drivers.push('front LLTD slightly below optimal — rear handling slightly more load than ideal');
     if (frontGripPct < 0.53) drivers.push('rear tires overworked relative to fronts (rear is the limiting axle)');
     if (!rearPresOk) drivers.push('rear tire pressures off target');
     if (rearAvgScore < frontAvgScore - 0.03) drivers.push('rear grip scores lower than front');
