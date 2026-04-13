@@ -105,18 +105,21 @@ const VEH = {
 // Positive scrub: kingpin axis meets ground inboard of contact patch center.
 // Creates self-centering moment and mild pull toward a braking wheel.
 //
-// KPI-induced camber gain during steering (adds positive camber to outside tire):
-//   Δcamber = sin(KPI) × sin(steerAngle)
-//   At 10° steer: sin(9.5°) × sin(10°) = 0.165 × 0.174 = +0.029°
-// This is a ~+0.03° positive camber addition to RF — below practical measurement resolution.
-// Included for completeness; has negligible effect on recommendations (<0.1° total).
+// KPI-induced camber gain during steering (adds positive camber to both front tires):
+//   Correct formula: KPI_deg × (1 - cos(steerAngle))
+//   At 10° steer: 9.5° × (1 - cos(10°)) = 9.5 × 0.01519 = +0.144°
+//   (Previous formula sin(KPI)×sin(steer) was wrong — underestimated by ~5×.)
 const GEOM = {
   kpi:         9.5,                          // ° — kingpin inclination (measured)
   wheelOffset: 1.75,                         // inches — P71 17×7 factory wheel
   scrubRadius: 13.6 * Math.tan(9.5 * Math.PI / 180) - 1.75, // ≈ 0.525"
   steerAngle:  10,                           // ° — estimated front steer at corner apex
   // KPI camber gain: positive on outside tire (RF), negative on inside (LF)
-  kpiCamberGain: Math.sin(9.5 * Math.PI / 180) * Math.sin(10 * Math.PI / 180), // ≈ +0.029°
+  // Correct formula: KPI_deg × (1 - cos(steerAngle)) — derived from wheel rotating about
+  // a tilted kingpin axis. NOT sin(KPI)×sin(steer) which underestimates by ~5×.
+  // At 10° steer: 9.5° × (1 - cos(10°)) = 9.5 × 0.01519 = +0.144°
+  // Source: standard suspension geometry (EvolutionM, Eng-Tips, Kelvin Tse kinematic curves)
+  kpiCamberGain: (9.5 * Math.PI / 180) * (1 - Math.cos(10 * Math.PI / 180)), // ≈ +0.144°
 };
 
 // ============ TIRE SIDEWALL COMPLIANCE ============
@@ -474,9 +477,12 @@ function calcPerformance(setup, tires, inflationTemp = COLD_PSI_TEMP) {
   const toe = setup.toe !== undefined ? setup.toe : -0.25;
   const caster = setup.caster || { LF: 3.5, RF: 5.0 };
 
-  // Actual body roll in racing corners — used for both front ground-camber conversion
+  // Actual body roll at the corner apex — used for both front ground-camber conversion
   // and rear solid-axle ground camber. Computed once here, shared across all corners.
-  const cornerRoll = roll * OVAL_CORNER_G;
+  // MUST use OVAL_RACING_G (instantaneous apex G = 0.813), NOT OVAL_CORNER_G (lap-average G = 0.407).
+  // OVAL_CORNER_G is correct only for tire pressure/thermal load averages — not for
+  // instantaneous suspension geometry at the corner apex.
+  const cornerRoll = roll * OVAL_RACING_G;
 
   let totalForce = 0;
   let frontForce = 0;
@@ -505,19 +511,17 @@ function calcPerformance(setup, tires, inflationTemp = COLD_PSI_TEMP) {
       const casterCamberGain = outside
         ? -(caster[c] * 0.18 * refG)  // RF: negative camber gain (adds to static neg camber)
         :  (caster[c] * 0.10 * refG); // LF: positive camber gain from caster (geometric)
-      // SLA body roll camber: computed at actual racing G (OVAL_CORNER_G), not 1G.
-      // The 1G reference used for everything else is a normalized metric; body roll is a
-      // physical effect limited to actual corner G. Using 1G overstates roll by 2.7× and
-      // throws off optStaticCamber recommendations significantly.
+      // SLA body roll camber at actual corner apex (cornerRoll = roll × OVAL_RACING_G).
       // RF (outside, jounce): SLA gains NEGATIVE camber — key advantage over MacPherson.
       // LF (inside, droop): gains POSITIVE camber — same direction as MacPherson droop.
       // SLA jounce coefficient: 1.7" wheel displacement at 3.1° roll → 1.1° camber gain.
-      //   1.1° / 3.1° = 0.355°/° roll. Droop coefficient 0.15 unchanged.
+      //   1.1° / 3.1° = 0.355°/° roll. Droop coefficient 0.15 (jounce:droop asymmetry is
+      //   normal for SLA — jounce rate is always higher than droop rate in four-bar linkage).
       const bodyRollCamber = outside
-        ? -(cornerRoll * 0.355) // RF in jounce: SLA gains negative camber (1.1°/3.1°=0.355)
-        :  (cornerRoll * 0.15); // LF in droop: gains positive camber (low inside load)
+        ? -(cornerRoll * 0.355) // RF in jounce: SLA gains negative camber (0.355°/° roll)
+        :  (cornerRoll * 0.15); // LF in droop: gains positive camber (0.15°/° roll)
       // KPI camber: steering adds +positive on outside (RF), -negative on inside (LF).
-      // sin(9.5°)×sin(10° steer) ≈ +0.029° — small but included for completeness.
+      // Formula: KPI_deg × (1 - cos(steerAngle)). At 10° steer: 9.5° × 0.01519 ≈ +0.144°
       const kpiCamber = outside ? GEOM.kpiCamberGain : -GEOM.kpiCamberGain;
       const effectiveCamber = setup.camber[c] + casterCamberGain + bodyRollCamber + kpiCamber;
       // Convert chassis-frame effective camber → ground-frame (tire-to-road) angle.
@@ -1002,7 +1006,7 @@ export function analyzeSetup(setup, ambientTemp = 65, inflationTemp = COLD_PSI_T
     // Camber — all calculations in GROUND FRAME (tire-to-road angle)
     // Ground camber > 0 = top of tire leans outward (bad for cornering load)
     // Ground camber < 0 = top leans inward (negative camber, loads outside tread)
-    const cornerRoll = roll * OVAL_CORNER_G; // actual body roll at racing corners
+    const cornerRoll = roll * OVAL_RACING_G; // body roll at corner apex (instantaneous, not lap-average)
     let groundCamber, idealGroundCamber, camberDev, camberFactor;
     let casterGain = 0, casterFactor = 1, optStaticCamber = null, bodyRollCamber = 0, kpiCamber = 0, swCamber = 0;
     let effectiveCamber = null; // chassis-relative, exposed for display only
@@ -1011,9 +1015,9 @@ export function analyzeSetup(setup, ambientTemp = 65, inflationTemp = COLD_PSI_T
     if (front) {
       // Caster gain: RF (outside) gains negative, LF (inside) gains positive — geometric.
       casterGain = outside ? -(caster[c] * 0.18) : (caster[c] * 0.10);
-      // SLA body roll camber at actual racing G (not 1G).
+      // SLA body roll camber at actual corner apex (cornerRoll = roll × OVAL_RACING_G).
       bodyRollCamber = outside ? -(cornerRoll * 0.355) : (cornerRoll * 0.15);
-      // KPI camber: +positive on outside (RF), -negative on inside (LF). ≈ ±0.029°.
+      // KPI camber: +positive on outside (RF), -negative on inside (LF). ≈ ±0.144°.
       kpiCamber = outside ? GEOM.kpiCamberGain : -GEOM.kpiCamberGain;
       effectiveCamber = setup.camber[c] + casterGain + bodyRollCamber + kpiCamber;
       // Convert chassis-relative → ground frame

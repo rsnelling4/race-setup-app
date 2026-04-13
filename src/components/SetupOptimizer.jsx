@@ -84,7 +84,7 @@ const TIPS = {
   tempFactor: 'Grip multiplier from tire temperature. These all-season tires are optimal between 100–165°F. Below 100°F the tire is cold and loses grip; above 165°F heat starts to degrade the compound.',
   camberSection: 'Camber is the inward/outward tilt of the tire. Negative camber tilts the top of the tire inward. The outside front (RF in a left turn) needs negative camber to stay flat on the road under cornering load.',
   staticCamber: 'Your static alignment setting in degrees. Negative = top of tire tilted inward toward the car. This is what you set in the garage.',
-  casterGain: 'Combined dynamic camber change from three sources: (1) Caster geometry — RF gains negative camber (~0.18°/deg caster), LF gains positive (~0.10°/deg). (2) SLA body roll — RF gains additional negative in jounce (0.355°/° roll), LF gains slight positive in droop. (3) KPI (kingpin inclination 9.5°) — adds +0.03° positive camber to RF, −0.03° to LF at ~10° steer. KPI effect is small but included for accuracy.',
+  casterGain: 'Combined dynamic camber change from three sources: (1) Caster geometry — RF gains negative camber (~0.18°/deg caster), LF gains positive (~0.10°/deg). (2) SLA body roll — RF gains additional negative in jounce (0.355°/° roll), LF gains slight positive in droop. (3) KPI (kingpin inclination 9.5°) — adds +0.14° positive camber to RF, −0.14° to LF at ~10° steer. Formula: KPI_deg × (1 − cos(steer)).',
   effectiveCamber: 'Chassis-relative effective camber at mid-corner: static setting plus caster gain, SLA body-roll gain, and KPI-induced camber. This is the angle relative to the car body — not the same as tire-to-road angle.',
   groundCamber: 'Tire-to-road angle at mid-corner — the contact patch metric. Accounts for body roll rotating the chassis: outside tire\'s ground camber = effective + cornerRoll; inside = effective − cornerRoll. This is what actually determines how the contact patch loads.',
   idealCamber: {
@@ -353,10 +353,10 @@ const CALC = {
   RF: { outside: true,  casterCoeff: 0.18, rollCoeff: 0.355 },
   LF: { outside: false, casterCoeff: 0.10, rollCoeff: 0.15  },
 };
-const OVAL_CORNER_G_CALC = 0.375;
+const OVAL_RACING_G_CALC = 0.813; // instantaneous apex G — must match raceSimulation.js OVAL_RACING_G
 
 function CamberCalc({ roll, setupCaster }) {
-  const cornerRoll = roll * OVAL_CORNER_G_CALC;
+  const cornerRoll = roll * OVAL_RACING_G_CALC;
 
   const [caster, setCaster] = useState({
     LF: setupCaster?.LF ?? 3.5,
