@@ -95,7 +95,7 @@ const TIPS = {
   },
   solidAxle: 'The rear axle is solid (live axle) — both rear wheels tilt together with body roll. You cannot set rear camber directly. Reducing body roll (stiffer rear shocks) brings ground camber closer to 0° on both rears.',
   camberScore: 'Grip multiplier from camber alignment. 100% = ground camber matches the target for this corner. Each degree of deviation from target costs roughly 1.2% grip.',
-  alignmentRange: 'P71 front camber adjustable range differs by side. RF (outside): approximately −0.5° to −3.0° with stock eccentric bolts. LF (inside): the same bolt turned the opposite direction gives approximately −1.5° to +1.5° — positive LF camber is achievable and often needed for oval racing. Values outside either range require aftermarket camber bolts or shims.',
+  alignmentRange: 'P71 front camber range assumes camber bolts are installed (replaces one or both strut pinch bolts). With a camber bolt: RF adjustable from 0° to −4°; LF adjustable from −4° to +4°. Positive LF static camber is normal for oval racing — chassis roll subtracts ~1–2° in the ground frame, so +1° to +2° static produces near-flat contact patch in the corner. Values beyond ±4° require additional hardware (alignment shims or plates).',
   sidewallCamber: 'Positive camber added at the contact patch by sidewall compliance. The 235/55R17 55-series sidewall deflects outward under load, shifting the contact patch and effectively leaning the tire away from center. This is load-dependent (heavier corner = more deflection) and must be offset by additional static negative camber. Data: Ironman iMove Gen3 AS 235/55R17, section height 5.09\", load-deflection curve measured at 500/1000/1500/1929 lbs.',
   pressureSection: 'Tire pressure affects contact patch shape. Under-inflated tires flex excessively and overheat the edges; over-inflated tires crown and only use the center of the tread.',
   coldHot: 'Cold PSI is what you set when inflating the tires. Hot PSI is calculated via ideal gas law using the "Tires Set At" temperature as the cold reference. At 200°F tires set at 85°F: 34 cold → ~40.9 PSI hot. Setting tires on a hot day means less pressure rise — and shifts target cold PSI higher.',
@@ -535,7 +535,7 @@ function CornerCard({ c, data, setup }) {
               warn={alignmentOutOfRange}
               label="Ground camber"
               value={`${groundCamber !== null ? (groundCamber >= 0 ? '+' : '') + groundCamber.toFixed(2) : '—'}° (target ${idealGroundCamber !== undefined ? (idealGroundCamber >= 0 ? '+' : '') + idealGroundCamber.toFixed(1) : '—'}°)`}
-              action={optStaticCamber !== null ? `Set static to ${optStaticCamber}°${alignmentOutOfRange ? ' ⚠ outside stock range' : ''}` : null}
+              action={optStaticCamber !== null ? `Set static to ${optStaticCamber}°${alignmentOutOfRange ? ' ⚠ beyond ±4° camber bolt range' : ''}` : null}
               tip={idealTip}
             />
             {expanded && (

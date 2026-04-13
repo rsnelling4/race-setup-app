@@ -986,21 +986,21 @@ export function analyzeSetup(setup, ambientTemp = 65, inflationTemp = COLD_PSI_T
         ? idealGroundCamber - swCamber - cornerRoll
         : idealGroundCamber - swCamber + cornerRoll;
       optStaticCamber = Math.round((effectiveIdeal - casterGain - bodyRollCamber - kpiCamber) * 4) / 4;
-      // Check against P71 hardware alignment range — DIFFERENT for each side.
-      // RF (outside front, oval): needs negative camber to maintain contact patch under load.
-      //   Eccentric bolt range (P71): approx -0.5° to -3.0°.
-      //   Values more positive than -0.5° or more negative than -3.0° need aftermarket hardware.
-      // LF (inside front, oval): needs positive or near-zero static camber to compensate for
-      //   chassis roll subtracting camber in the ground frame. The same eccentric bolt can be
-      //   turned the other direction: LF achievable range is approximately +1.5° to -1.5°.
-      //   Positive LF camber is physically correct for oval racing — flag truly extreme values only.
+      // Check against P71 hardware alignment range with camber bolt installed.
+      // Camber bolts are assumed always present — they replace one or both front strut pinch bolts
+      // and extend the adjustable range to approximately ±4° on either side.
+      // RF (outside front): needs negative camber. Range with camber bolt: -4.0° to 0°.
+      // LF (inside front): needs positive camber for oval. Range with camber bolt: -4.0° to +4.0°.
+      //   Positive LF static is correct — chassis roll subtracts ~1-2° in the ground frame,
+      //   so +1° to +2° static lands near 0° ground camber at the contact patch.
+      // Flag values outside ±4° as requiring additional hardware (shims, plates, etc.).
       if (outside) {
-        const RF_MIN = -3.0; // max negative on RF
-        const RF_MAX = -0.5; // least negative on RF
+        const RF_MIN = -4.0; // max negative on RF with camber bolt
+        const RF_MAX =  0.0; // RF should never need positive static
         alignmentOutOfRange = optStaticCamber < RF_MIN || optStaticCamber > RF_MAX;
       } else {
-        const LF_MIN = -1.5; // max negative on LF (rare, would mean very little roll)
-        const LF_MAX = +1.5; // max positive on LF (stock eccentric bolt opposite direction)
+        const LF_MIN = -4.0; // max negative on LF with camber bolt (unusual for oval)
+        const LF_MAX = +4.0; // max positive on LF with camber bolt
         alignmentOutOfRange = optStaticCamber < LF_MIN || optStaticCamber > LF_MAX;
       }
     } else {
@@ -1074,7 +1074,7 @@ export function analyzeSetup(setup, ambientTemp = 65, inflationTemp = COLD_PSI_T
       current: `${cur}°`, currentVal: cur,
       optimal: `${opt}°`, optimalVal: opt,
       gain,
-      detail: `Ground camber: ${corners[c].groundCamber !== null ? (corners[c].groundCamber >= 0 ? '+' : '') + corners[c].groundCamber.toFixed(2) : '—'}° → target ${corners[c].idealGroundCamber.toFixed(1)}°${corners[c].alignmentOutOfRange ? ' ⚠ outside stock hardware range' : ''}`,
+      detail: `Ground camber: ${corners[c].groundCamber !== null ? (corners[c].groundCamber >= 0 ? '+' : '') + corners[c].groundCamber.toFixed(2) : '—'}° → target ${corners[c].idealGroundCamber.toFixed(1)}°${corners[c].alignmentOutOfRange ? ' ⚠ beyond ±4° camber bolt range' : ''}`,
       note: `Dynamic gains: ${Math.abs(corners[c].casterGain).toFixed(2)}° caster + ${Math.abs(corners[c].bodyRollCamber).toFixed(2)}° body roll = ${Math.abs(corners[c].dynamicGain).toFixed(2)}° total — verify with tire temps`,
     });
   }
