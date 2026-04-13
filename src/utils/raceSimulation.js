@@ -309,24 +309,77 @@ function camberGripFactor(groundCamber, isOutside, isFront, load = VEH.weight / 
   }
 }
 
-// Caster: contributes dynamic camber gain on outside front tire during cornering.
-// More caster on RF = more negative camber gain when turning left = better grip.
-// Also affects mechanical trail → steering feel/stability.
+// Caster: modeled via mechanical trail — the correct physical mechanism.
+//
+// NOTE: Caster's camber gain effect is already fully captured in casterCamberGain
+// (caster × 0.18 for RF, × 0.10 for LF) which feeds into effectiveCamber →
+// groundCamber → camberGripFactor. This function handles ONLY the steering
+// torque / driveability effect of mechanical trail.
+//
+// Mechanical trail formula (side-view geometry, exact):
+//   MT = R_tire × sin(caster_rad) − scrubRadius × cos(caster_rad)
+//   R_tire = 13.6", scrubRadius ≈ 0.525" (positive = contact patch outboard of steering axis)
+//
+// Trail values across the P71 caster range:
+//   3°  → 0.19"  (very light — little self-centering, car wanders)
+//   5°  → 0.66"  (good light feel, within beneficial zone)
+//   7°  → 1.13"  (solid self-centering, manageable without power steering)
+//   9°  → 1.60"  (approaching workload limit at 27 mph)
+//   9.75° → 1.79" (at/past fatigue threshold for slow no-power-steering oval)
+//
+// On a left-turn oval, RF trail has a BENEFICIAL self-aligning effect —
+// it resists the car's tendency to chase the inside and reduces steering
+// corrections mid-corner. Benefit peaks ~0.9–1.1", then excessive trail
+// becomes a driver workload penalty above ~1.5".
+//
+// LF (inside tire): trail creates an opposing torque that fights turn-in
+// and loads the inside edge. Optimal LF trail is low — 0.3–0.6".
+// Above ~0.8" LF trail adds to push tendency.
+//
+// Sources: SAE mechanical trail geometry, circle-track caster research
+// (iRacing/Speed Academy), DrRacing SAT model, P71 alignment community data.
+//
+// Realistic P71 stock-class range: RF 4.5–7.0°, LF 0.5–3.0°
+const TRAIL_R   = 13.6;    // tire radius (inches)
+const TRAIL_S   = 0.525;   // scrub radius (inches)
+
+function mechanicalTrail(casterDeg) {
+  const c = casterDeg * Math.PI / 180;
+  return TRAIL_R * Math.sin(c) - TRAIL_S * Math.cos(c);
+}
+
 function casterGripFactor(casterDeg, isOutside, isFront) {
-  if (!isFront) return 1.0; // Caster only affects front
-  // Dynamic camber gain from caster: ~0.5° camber per degree caster per G
-  // On outside tire (RF for left turns), more caster = more neg camber = better
-  // On inside tire (LF), effect is reversed but smaller
+  if (!isFront) return 1.0;
+
+  const trail = mechanicalTrail(casterDeg);
+
   if (isOutside) {
-    // Optimal caster for RF in left-turn oval: 4-6 degrees
-    const optimal = 5.0;
-    const dev = Math.abs(casterDeg - optimal);
-    return Math.max(0.96, 1 - 0.004 * dev);
+    // RF (outside in left turn): self-aligning trail is BENEFICIAL in the sweet spot.
+    // Sweet spot: 0.6–1.2" — provides natural straight-tracking resistance.
+    // Below 0.5": stability deficit, driver must steer actively → small penalty.
+    // Above 1.5": steering torque exceeds comfortable range without power steering → penalty.
+    // Above 2.0": severe workload/fatigue cost at slow oval speeds.
+    // Modeled as a parabola peaking at 0.9" with asymmetric tails.
+    const PEAK_TRAIL = 0.9;  // inches — peak of benefit curve
+    if (trail < PEAK_TRAIL) {
+      // Below peak: small stability deficit. 1% loss at 0" trail, 0 at peak.
+      const deficit = (PEAK_TRAIL - trail) / PEAK_TRAIL;
+      return Math.max(0.97, 1 - 0.010 * deficit * deficit * PEAK_TRAIL * PEAK_TRAIL);
+    } else {
+      // Above peak: driver workload penalty. Gentle to 1.5", steeper above.
+      // At 1.5": ~0.5% loss. At 1.79" (9.75°): ~2.0%. At 2.0": ~3.5%. Floor 0.94.
+      const excess = trail - PEAK_TRAIL;
+      return Math.max(0.94, 1 - 0.055 * excess * excess);
+    }
   } else {
-    // LF: less caster is better (reduces positive camber gain on inside)
-    const optimal = 3.0;
-    const dev = Math.abs(casterDeg - optimal);
-    return Math.max(0.97, 1 - 0.003 * dev);
+    // LF (inside in left turn): trail creates torque that fights turn-in and
+    // loads the inside edge. Optimal is low — 0.3–0.5". Above 0.8" adds push.
+    // At 3° LF caster → trail ≈ 0.19" (near ideal).
+    // At 6° LF caster → trail ≈ 0.88" (starting to hurt).
+    // At 7° LF caster → trail ≈ 1.13" (noticeable push contribution).
+    const OPTIMAL_LF = 0.35; // inches
+    const excess = Math.max(0, trail - OPTIMAL_LF);
+    return Math.max(0.96, 1 - 0.030 * excess * excess);
   }
 }
 

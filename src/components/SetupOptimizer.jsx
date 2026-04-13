@@ -992,8 +992,9 @@ export default function SetupOptimizer({ setup, setSetup, ambient, setAmbient, i
 
       <div className="sim-disclaimer">
         <strong>Model note:</strong> Analysis uses steady-state equilibrium temperatures.
-        Camber recommendations use caster-induced dynamic camber gain of 0.18°/degree (RF outside)
-        and 0.10°/degree (LF inside), calibrated from geometric formula caster × sin(~10° steer angle).
+        Camber recommendations use caster-induced dynamic camber gain of 0.18°/deg (RF) and 0.10°/deg (LF)
+        from caster × sin(~10° steer). Caster grip score is based on mechanical trail
+        (R × sin(caster) − scrub × cos(caster)) — RF sweet spot ~0.9" trail (~5–6°), LF optimal low (~0.3–0.5").
         All display scores match the lap time model exactly. Always verify camber with real pyrometer data.
       </div>
     </div>
