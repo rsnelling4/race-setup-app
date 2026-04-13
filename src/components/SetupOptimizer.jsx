@@ -89,13 +89,13 @@ const TIPS = {
   groundCamber: 'Tire-to-road angle at mid-corner — the contact patch metric. Accounts for body roll rotating the chassis: outside tire\'s ground camber = effective + cornerRoll; inside = effective − cornerRoll. This is what actually determines how the contact patch loads.',
   idealCamber: {
     outside: 'Target ground camber for the outside front (RF): −2.0°. At 0° ground the contact patch is geometrically flat, but under cornering load the outside tread crown lifts slightly — a small negative ground angle compensates. Calibrated for the Ironman 235/55R17 tall sidewall; a stiffer low-profile tire would need more negative. Refine this target with camber sweep tests: the setting that produces even I/M/O pyrometer temps is the true optimum.',
-    inside: 'Target ground camber for the inside front (LF): 0° (flat contact patch). The inside front is lightly loaded — maximum contact patch area matters more than centrifugal compensation.',
+    inside: 'Target ground camber for the inside front (LF): 0° (flat contact patch at the tire-to-road interface). IMPORTANT: to achieve 0° ground camber, the static alignment must be positive or near-zero. Body roll subtracts camber in the ground frame — chassis rolls right, so the LF wheel top is pulled inward (negative ground camber). Caster and SLA droop geometry add back some positive camber, but the net effect still requires a static setting of roughly 0° to +1.5° to land at 0° ground at the contact patch. This is why oval racers run positive LF static camber — it looks wrong in the garage but correct at speed.',
     rearOutside: 'Target ground camber for the outside rear (RR): 0°. With a solid axle the tire tilts with body roll — the car rolls outward, adding positive ground camber to the outside rear. Stiffer rear shocks reduce roll and keep this closer to 0°.',
     rearInside: 'Target ground camber for the inside rear (LR): 0°. The inside rear is very lightly loaded. No adjustment possible — controlled only by reducing body roll.',
   },
   solidAxle: 'The rear axle is solid (live axle) — both rear wheels tilt together with body roll. You cannot set rear camber directly. Reducing body roll (stiffer rear shocks) brings ground camber closer to 0° on both rears.',
   camberScore: 'Grip multiplier from camber alignment. 100% = ground camber matches the target for this corner. Each degree of deviation from target costs roughly 1.2% grip.',
-  alignmentRange: 'P71 front camber adjustable range: approximately −0.5° to −3.0° with stock eccentric alignment bolts. Values outside this range require aftermarket camber bolts or alignment shims.',
+  alignmentRange: 'P71 front camber adjustable range differs by side. RF (outside): approximately −0.5° to −3.0° with stock eccentric bolts. LF (inside): the same bolt turned the opposite direction gives approximately −1.5° to +1.5° — positive LF camber is achievable and often needed for oval racing. Values outside either range require aftermarket camber bolts or shims.',
   sidewallCamber: 'Positive camber added at the contact patch by sidewall compliance. The 235/55R17 55-series sidewall deflects outward under load, shifting the contact patch and effectively leaning the tire away from center. This is load-dependent (heavier corner = more deflection) and must be offset by additional static negative camber. Data: Ironman iMove Gen3 AS 235/55R17, section height 5.09\", load-deflection curve measured at 500/1000/1500/1929 lbs.',
   pressureSection: 'Tire pressure affects contact patch shape. Under-inflated tires flex excessively and overheat the edges; over-inflated tires crown and only use the center of the tread.',
   coldHot: 'Cold PSI is what you set when inflating the tires. Hot PSI is calculated via ideal gas law using the "Tires Set At" temperature as the cold reference. At 200°F tires set at 85°F: 34 cold → ~40.9 PSI hot. Setting tires on a hot day means less pressure rise — and shifts target cold PSI higher.',
@@ -104,14 +104,14 @@ const TIPS = {
   loadMismatch: 'This corner\'s load is far from the car\'s average, so the mathematically optimal pressure is outside a practical range. Run the lowest safe pressure for lightly loaded corners and the highest safe pressure for heavily loaded ones.',
   frontShock: 'Average stiffness rating of the two front struts (0 = stiffest, 10 = softest). Stiffer fronts resist body roll and reduce weight transfer to the front tires during braking and corner entry.',
   rearShock: 'Average stiffness rating of the two rear shocks (0 = stiffest, 10 = softest). Stiffer rears limit body roll on a solid axle, keeping dynamic rear camber closer to ideal.',
-  frontLLTD: 'Lateral Load Transfer Distribution — the share of total cornering weight transfer handled by the front axle. Higher = more understeer tendency. On an oval, 38–55% works well — slightly below the 55% weight bias gives the car rotation through the corners.',
-  frontGripShare: 'The front axle\'s share of total cornering grip based on current tire temperatures and pressures. 55% ideal matches the car\'s front weight bias and aerodynamic balance in left turns.',
+  frontLLTD: 'Lateral Load Transfer Distribution — the share of total cornering weight transfer handled by the front axle. Higher = more understeer/push tendency. On an oval, target ~46% (green zone 41–51%) — keeping LLTD slightly below the 55% front weight bias gives the car natural rotation through the corners. Outside this range costs ~1–3% grip.',
+  frontGripShare: 'The front axle\'s share of total cornering grip based on current tire temperatures and pressures. 55% ideal matches the car\'s front weight bias. The gauge above shows a pressure-adjusted version of this number used to calculate the needle position — the two will differ slightly when pressures are off-target.',
   bodyRoll: 'Estimated chassis lean angle at 1G of lateral force. More roll tilts the solid rear axle and degrades camber on both rear tires. Target under 3° for this suspension geometry.',
   balanceScore: 'Combined grip penalty from front/rear imbalance. 100% = perfectly balanced. Score drops when the front and rear axles contribute unequal grip, causing understeer or oversteer.',
   toeCurrent: 'Current toe setting. Toe-out (negative) points the front tires slightly away from center, sharpening turn-in response. Toe-in (positive) improves straight-line stability but dulls corner entry.',
   toeOptimal: 'Model optimum: ¼" toe-out. This is the peak of the turn-in grip curve for this car — enough to sharpen initial steering response without excessive tire scrub or drag.',
   turnInGrip: 'Grip multiplier from toe angle. Peaks near ¼"–⅜" toe-out and falls off with excessive toe in either direction. 100% = best achievable toe grip.',
-  toeDragPenalty: 'Straight-line speed penalty from toe angle. Even small amounts of toe-out create tire scrub on the straights. Displayed as % increase in effective drag coefficient.',
+  toeDragPenalty: 'Straight-line speed penalty from toe angle. Even small amounts of toe-out create tire scrub on the straights. ~0.5% drag at ¼" toe, ~2% at ½". Displayed as % increase in rolling resistance.',
 };
 
 // ── Phase tendency helper ─────────────────────────────────────────────────────
@@ -128,31 +128,27 @@ function phaseLabel(bias) {
 }
 
 // ── Handling Balance Gauge ────────────────────────────────────────────────────
-function BalanceGauge({ frontGripPct, frontLLTD, corners, setup }) {
-  // Pressure balance correction.
-  // Uses absolute deviation from load-optimal: ANY deviation (over OR under) loses grip.
-  // RF/LF off-optimal → less front grip → push tendency (negative).
-  // RR/LR off-optimal → less rear grip → loose tendency (positive).
-  //
-  // This matches oval racing convention for typical Setup B pressure positions:
-  //   RF/LF/LR are below optimal → raising toward optimal = more grip.
-  //     RF higher = more front grip = loose. RF lower = less grip = tight.
-  //   RR is slightly above optimal → lowering toward optimal = more grip.
-  //     RR lower = more rear grip = tight. RR higher = less grip = loose.
-  //
+function BalanceGauge({ frontGripPct, frontLLTD, springLLTD, corners, setup }) {
+  // Pressure balance correction — directional, not absolute.
+  // RF under-optimal (psiDev < 0) → less front grip → front is less limiting → loose tendency.
+  // RF over-optimal (psiDev > 0) → less front grip (crowning) → same loose tendency.
+  // Magnitude captures the grip loss regardless of direction.
+  // RR off-optimal → less rear grip → rear is less limiting → push tendency.
+  // Net: front pressure deviation = loose signal; rear pressure deviation = push signal.
   // Scaled so 3-5 PSI of RF or RR spans one full balance zone boundary.
   const presAdj =
-    -Math.abs(corners.RF.psiDev) * 0.010 +
-     Math.abs(corners.RR.psiDev) * 0.008 +
-    -Math.abs(corners.LF.psiDev) * 0.004 +
-     Math.abs(corners.LR.psiDev) * 0.003;
+    +Math.abs(corners.RF.psiDev) * 0.010 +  // RF off optimal → less front grip → looser
+    -Math.abs(corners.RR.psiDev) * 0.008 +  // RR off optimal → less rear grip → tighter
+    +Math.abs(corners.LF.psiDev) * 0.004 +  // LF off optimal → less front grip → looser
+    -Math.abs(corners.LR.psiDev) * 0.003;   // LR off optimal → less rear grip → tighter
   const balFrontGripPct = Math.max(0.3, Math.min(0.7, frontGripPct + presAdj));
 
-  // Positive = loose tendency, negative = push tendency
-  // Center on weight bias (55%) — that's the neutral handling point.
-  // On an oval you typically WANT slight loose (LLTD below 55%) for rotation.
-  const gripDev  = balFrontGripPct - 0.55;    // + = front has spare grip = loose
-  const lltdDev  = (frontLLTD - 0.55) * 0.3; // + = front overloaded = push (gentle scaling)
+  // Sign convention: positive tendency = LOOSE (rear is limiting axle).
+  // Front grip share < 55% = front is NOT the limit = rear is overworked = loose.
+  // Front grip share > 55% = front is the limit = front is overworked = push/tight.
+  // gripDev: + means front has LESS than its proportional share → rear is limiting → loose.
+  const gripDev  = 0.55 - balFrontGripPct;   // + = front under-contributing = loose
+  const lltdDev  = (frontLLTD - 0.55) * 0.3; // + = front LLTD too high = front overloaded = push, so subtract
   const tendency = gripDev - lltdDev;         // + = loose, - = push
 
   const gaugeMax = 0.12;
@@ -177,22 +173,35 @@ function BalanceGauge({ frontGripPct, frontLLTD, corners, setup }) {
   const total = Math.max(rfS + lfS + rrS + lrS, 1);
 
   // ENTRY — which axle loads first on turn-in?
-  // RF/RR stiffness ratio: RF stiffer = front loads first = push; RR stiffer = rear loads = rotation.
-  // Toe: toe-in (toward 0 from -0.25 optimal) = front doesn't bite = push on entry.
-  // RF camber deviation: off ideal = less RF grip on initial load = push on entry.
-  // RF pressure: over-inflated = smaller contact patch = push on entry.
-  const entryOutsideBias = rfS / Math.max(rfS + rrS, 1);
+  // RF stiffer compression → front loads faster → push on entry.
+  // RR stiffer compression → resists rear squat → rear doesn't rotate → also pushier entry.
+  // So BOTH RF and RR stiffness push toward understeer at entry.
+  // The relevant signal is RF dominance relative to total outside stiffness:
+  //   high RF relative to RR = front-biased load rate = push
+  //   high RR relative to RF = rear-biased load rate = ALSO push (rear can't squat/rotate)
+  // Net: entry is pushiest when either outside corner dominates. Freest entry = RF ≈ RR balanced
+  // and both relatively soft. We model this as: bias toward push when RF or RR is dominant.
+  // Use (rfS - rrS) deviation from balanced: RF > RR = push, RR > RF = also push but less so
+  // because at least the rear is loading (even if resisting squat). Simplification: treat
+  // balanced RF=RR as most neutral (0.5), RF heavier = push (>0.5), RR heavier = slight push (>0.5).
+  const outsideBalance = (rfS - rrS) / Math.max(rfS + rrS, 1); // +1 = all RF, -1 = all RR
+  // Center at 0.5; RF dominant → push (>0.5); RR dominant → slight push (above 0.5 but less)
+  // Use asymmetric mapping: RF dominance is a stronger push signal than RR dominance
+  const entryOutsideBias = outsideBalance >= 0
+    ? Math.max(0.2, Math.min(0.8, 0.5 + outsideBalance * 0.35))   // RF stiffer → push
+    : Math.max(0.2, Math.min(0.8, 0.5 + outsideBalance * 0.15));  // RR stiffer → mild push
   const toeEntryBias    = Math.max(0.2, Math.min(0.8, 0.5 + (setup.toe + 0.25) * 0.5));
   const rfCamEntryBias  = Math.max(0.2, Math.min(0.8, 0.5 + corners.RF.camberDev * 0.04));
   const rfPresEntryBias = Math.max(0.2, Math.min(0.8, 0.5 + corners.RF.psiDev * 0.022));
   const entryBias = 0.32 * entryOutsideBias + 0.17 * frontLLTD + 0.18 * toeEntryBias + 0.14 * rfCamEntryBias + 0.19 * rfPresEntryBias;
   const entry = phaseLabel(entryBias);
 
-  // MID — steady-state corner.
-  // Primary: pressure-adjusted front/rear grip balance. balFrontGripPct > 0.55 = rear limited = loose;
-  // < 0.55 = front limited = push. Includes amplified pressure correction.
+  // MID — steady-state corner. Shocks have stopped moving; only springs determine LLTD.
+  // Primary: pressure-adjusted front/rear grip balance. balFrontGripPct > 0.55 = front is the limiting axle = push;
+  // < 0.55 = rear is the limiting axle = loose. Includes amplified pressure correction.
+  // LLTD contribution uses springLLTD only — dampers are irrelevant at steady-state mid-corner.
   const midGripBias = Math.max(0.1, Math.min(0.9, 0.5 + (balFrontGripPct - 0.55) * 3));
-  const midBias = 0.55 * midGripBias + 0.45 * frontLLTD;
+  const midBias = 0.55 * midGripBias + 0.45 * springLLTD;
   const mid = phaseLabel(midBias);
 
   // EXIT — off corner under throttle.
@@ -223,10 +232,10 @@ function BalanceGauge({ frontGripPct, frontLLTD, corners, setup }) {
     entryNote = corners.RF.psiDev > 0
       ? `RF over-inflated ${corners.RF.psiDev.toFixed(1)} PSI above target — harder contact patch`
       : `RF under-inflated ${Math.abs(corners.RF.psiDev).toFixed(1)} PSI below target`;
-  } else if (entryOutsideBias > 0.53) {
-    entryNote = 'RF strut stiffer than RR — front loads faster on turn-in';
-  } else if (entryOutsideBias < 0.47) {
-    entryNote = 'RR shock stiffer than RF — rear loads faster, car rotates on entry';
+  } else if (entryOutsideBias > 0.55) {
+    entryNote = rfS > rrS
+      ? 'RF strut stiffer than RR — front loads faster on turn-in, pushier entry'
+      : 'RR shock stiffer than RF — resists rear squat, less rotation on entry';
   }
 
   let exitNote = '';
@@ -250,8 +259,8 @@ function BalanceGauge({ frontGripPct, frontLLTD, corners, setup }) {
   let description, action;
   if (tendency < -0.015) {
     const drivers = [];
-    if (frontLLTD > 0.60) drivers.push('high front LLTD — front shocks transferring more cornering load than rear');
-    if (frontGripPct < 0.53) drivers.push('front tires generating less grip than rears');
+    if (frontLLTD > 0.51) drivers.push('high front LLTD — front shocks transferring too much cornering load to front axle');
+    if (frontGripPct > 0.57) drivers.push('front tires overworked relative to rears (front is the limiting axle)');
     if (!rfCamberOk) drivers.push('RF camber could be improved');
     if (!frontPresOk) drivers.push('front tire pressures off target');
     if (frontAvgScore < rearAvgScore - 0.03) drivers.push('front grip scores lower than rear');
@@ -261,8 +270,8 @@ function BalanceGauge({ frontGripPct, frontLLTD, corners, setup }) {
     action = 'To loosen: raise RF pressure (quickest fix — more RF grip turns the car), raise RR pressure (plants rear), raise LF pressure, lower LR pressure. If still pushing: soften front struts, stiffen rear shocks, or add RF negative camber.';
   } else if (tendency > 0.015) {
     const drivers = [];
-    if (frontLLTD < 0.40) drivers.push('low front LLTD — rear shocks transferring more cornering load than front');
-    if (frontGripPct > 0.57) drivers.push('rear tires generating less grip than fronts');
+    if (frontLLTD < 0.41) drivers.push('low front LLTD — rear shocks handling too much cornering load, overloading rear axle');
+    if (frontGripPct < 0.53) drivers.push('rear tires overworked relative to fronts (rear is the limiting axle)');
     if (!rearPresOk) drivers.push('rear tire pressures off target');
     if (rearAvgScore < frontAvgScore - 0.03) drivers.push('rear grip scores lower than front');
     description = drivers.length
@@ -305,7 +314,7 @@ function BalanceGauge({ frontGripPct, frontLLTD, corners, setup }) {
           <div className="opt-phase-row">
             <span className="opt-phase-name">Mid</span>
             <span className="opt-phase-label" style={{ color: mid.color }}>{mid.label}</span>
-            <span className="opt-phase-note">Front grip {(balFrontGripPct * 100).toFixed(0)}% (ideal 55%) · LLTD {(frontLLTD * 100).toFixed(0)}%</span>
+            <span className="opt-phase-note">Front grip {(balFrontGripPct * 100).toFixed(0)}% (ideal 55%) · Spring LLTD {(springLLTD * 100).toFixed(0)}%</span>
           </div>
           <div className="opt-phase-row">
             <span className="opt-phase-name">Exit</span>
@@ -316,15 +325,15 @@ function BalanceGauge({ frontGripPct, frontLLTD, corners, setup }) {
       </div>
 
       <div className="opt-stat-pair" style={{ marginTop: 4 }}>
-        <span>Front grip share</span>
-        <span style={{ color: Math.abs(gripDev) < 0.02 ? 'var(--green)' : 'var(--yellow)' }}>
+        <span>Front grip share (pres. adj.)</span>
+        <span style={{ color: Math.abs(gripDev) < 0.04 ? 'var(--green)' : 'var(--yellow)' }}>
           {(balFrontGripPct * 100).toFixed(1)}% <span className="opt-stat-ideal">(ideal 55%)</span>
         </span>
       </div>
       <div className="opt-stat-pair">
         <span>Front LLTD</span>
-        <span style={{ color: frontLLTD >= 0.35 && frontLLTD <= 0.60 ? 'var(--green)' : 'var(--yellow)' }}>
-          {(frontLLTD * 100).toFixed(1)}% <span className="opt-stat-ideal">(oval target 38–55%)</span>
+        <span style={{ color: frontLLTD >= 0.41 && frontLLTD <= 0.51 ? 'var(--green)' : 'var(--yellow)' }}>
+          {(frontLLTD * 100).toFixed(1)}% <span className="opt-stat-ideal">(oval target ~46%)</span>
         </span>
       </div>
       <div className="opt-hb-desc">{description}</div>
@@ -871,7 +880,7 @@ export default function SetupOptimizer({ setup, setSetup, ambient, setAmbient, i
       {/* ── Balance & Toe ── */}
       <div className="opt-section">
         <h3 className="opt-section-title">Balance & Toe</h3>
-        <BalanceGauge frontGripPct={frontGripPct} frontLLTD={ss.frontLLTD} corners={corners} setup={setup} />
+        <BalanceGauge frontGripPct={frontGripPct} frontLLTD={ss.frontLLTD} springLLTD={ss.springLLTD} corners={corners} setup={setup} />
         <div className="opt-balance-row" style={{ marginTop: 14 }}>
           <div className="opt-balance-card">
             <div className="opt-factor-title">Lateral Balance (at 1G)</div>
@@ -887,7 +896,7 @@ export default function SetupOptimizer({ setup, setSetup, ambient, setAmbient, i
             </div>
             <div className="opt-stat-pair">
               <Tooltip text={TIPS.frontGripShare}><span>Front grip share</span></Tooltip>
-              <span style={{ color: Math.abs(frontGripPct - 0.55) < 0.01 ? 'var(--green)' : 'var(--yellow)' }}>
+              <span style={{ color: Math.abs(frontGripPct - 0.55) < 0.04 ? 'var(--green)' : 'var(--yellow)' }}>
                 {(frontGripPct * 100).toFixed(1)}% <span className="opt-stat-ideal">(ideal 55%)</span>
               </span>
             </div>
@@ -911,7 +920,7 @@ export default function SetupOptimizer({ setup, setSetup, ambient, setAmbient, i
             <div className="opt-stat-pair" style={{ marginTop: 6 }}>
               <Tooltip text={TIPS.toeDragPenalty}><span>Drag penalty</span></Tooltip>
               <span style={{ color: toeDrag > 1.001 ? 'var(--yellow)' : 'var(--green)' }}>
-                +{((toeDrag - 1) * 100).toFixed(3)}%
+                +{((toeDrag - 1) * 100).toFixed(2)}%
               </span>
             </div>
           </div>

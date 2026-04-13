@@ -23,20 +23,21 @@ export const REAR_SHOCKS = [
   { manufacturer: 'Monroe',    part: '550018',      type: 'Magnum Severe Service (TT)',    use: 'Police / Taxi',           rating: 1  },
 ];
 
-// springRate: only set for complete strut assemblies that include a coil spring.
-// "Quick-Strut" (Monroe) and "Strut-Plus" (KYB) are complete spring+strut+mount kits.
-// All other entries are damper-only — they use the car's existing spring (P71 stock = 475 lbs/in).
-// Civilian (Base/LX) spring: ~440 lbs/in. Police/Taxi spring: ~475 lbs/in.
+// springRate: set for ALL complete strut assemblies — every entry in FRONT_STRUTS is a
+// pre-assembled unit that ships with its own coil spring. KYB 551600 is the sole exception:
+// it is a bare monotube damper body without a spring (must reuse existing spring).
+// Civilian (Base/LX) strut assemblies use ~440 lbs/in spring.
+// Police/Taxi strut assemblies use ~475 lbs/in spring (stiffer police-package spring).
 export const FRONT_STRUTS = [
-  { manufacturer: 'FCS',       part: '1336343',     type: 'Strut Assembly (Twin-Tube)',    use: 'Base Model / LX',         rating: 9                   },
-  { manufacturer: 'PRT',       part: '714075',      type: 'Strut Assembly (Twin-Tube)',    use: 'Base Model / LX',         rating: 9                   },
+  { manufacturer: 'FCS',       part: '1336343',     type: 'Strut Assembly (Twin-Tube)',    use: 'Base Model / LX',         rating: 9, springRate: 440  },
+  { manufacturer: 'PRT',       part: '714075',      type: 'Strut Assembly (Twin-Tube)',    use: 'Base Model / LX',         rating: 9, springRate: 440  },
   { manufacturer: 'Monroe',    part: '171346',      type: 'Quick-Strut (Twin-Tube)',       use: 'Base Model / LX',         rating: 8, springRate: 440  },
   { manufacturer: 'KYB',       part: 'SR4140',      type: 'Strut-Plus (Monotube)',         use: 'Base Model / LX',         rating: 6, springRate: 440  },
   { manufacturer: 'KYB',       part: '551600',      type: 'Strut (Monotube)',              use: 'Base Model / LX',         rating: 6                   },
-  { manufacturer: 'FCS',       part: '1336349',     type: 'Strut Assembly (Twin-Tube)',    use: 'Police / Taxi',           rating: 4                   },
-  { manufacturer: 'PRT',       part: '710415',      type: 'Strut Assembly (Twin-Tube)',    use: 'Police / Taxi',           rating: 3                   },
+  { manufacturer: 'FCS',       part: '1336349',     type: 'Strut Assembly (Twin-Tube)',    use: 'Police / Taxi',           rating: 4, springRate: 475  },
+  { manufacturer: 'PRT',       part: '710415',      type: 'Strut Assembly (Twin-Tube)',    use: 'Police / Taxi',           rating: 3, springRate: 475  },
   { manufacturer: 'Monroe',    part: '271346',      type: 'Quick-Strut (Twin-Tube)',       use: 'Police / Taxi',           rating: 2, springRate: 475  },
-  { manufacturer: 'Monroe',    part: '550055',      type: 'Magnum Severe Service (TT)',    use: 'Police Interceptor',      rating: 1                   },
+  { manufacturer: 'Monroe',    part: '550055',      type: 'Magnum Severe Service (TT)',    use: 'Police Interceptor',      rating: 1, springRate: 475  },
 ];
 
 // Build a label string: "Monroe | 5993 | 10"

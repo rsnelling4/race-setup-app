@@ -89,7 +89,7 @@ const TIPS = {
   loadMismatch: 'Corner load is far from average — the mathematically optimal pressure is outside a practical range.',
   frontShock: 'Average stiffness rating of front struts. For figure 8, symmetric front shock settings are preferred since the car rolls equally in both directions.',
   rearShock: 'Average stiffness rating of rear shocks. Controls body roll, which averages to near-zero in figure 8 but stiffer rears still help stability through the crossing.',
-  frontLLTD: 'Lateral Load Transfer Distribution — front axle share of total cornering weight transfer. In figure 8, this applies equally to both turn directions.',
+  frontLLTD: 'Lateral Load Transfer Distribution — front axle share of total cornering weight transfer. Target ~46% (green zone 41–51%). In figure 8, this applies equally to both turn directions. Outside this range costs ~1–3% grip.',
   frontGripShare: 'Front axle share of total grip. Target is 55% — matching the car\'s front weight bias (4100 lbs × 55% front). Even though figure 8 loads symmetrically left/right, the car is still nose-heavy and the performance model penalizes deviation from 55%.',
   bodyRoll: 'Estimated chassis lean at 1G. In figure 8 the car rolls left and right alternately — average is ~0°, but peak roll each way still affects tire geometry through corners.',
   balanceScore: 'Front/rear grip balance. 100% = equal front and rear grip contribution (50/50 target for figure 8). Imbalance causes push or loose handling.',
@@ -112,8 +112,11 @@ function phaseLabelF8(bias) {
 }
 
 // ── Handling Balance Gauge (F8) ───────────────────────────────────────────────
-function BalanceGaugeF8({ frontGripPct, frontLLTD, corners, setup }) {
-  const gripDev  = frontGripPct - 0.55;
+function BalanceGaugeF8({ frontGripPct, frontLLTD, springLLTD, corners, setup }) {
+  // Sign convention: positive tendency = LOOSE (rear is limiting axle).
+  // frontGripPct < 0.55 = front under-contributing = rear overworked = loose.
+  // frontGripPct > 0.55 = front overworked = push.
+  const gripDev  = 0.55 - frontGripPct;   // + = front under-contributing = loose
   const lltdDev  = (frontLLTD - 0.55) * 0.3;
   const tendency = gripDev - lltdDev;
 
@@ -138,8 +141,18 @@ function BalanceGaugeF8({ frontGripPct, frontLLTD, corners, setup }) {
 
   // ENTRY — both turn directions: each front tire alternates as outside/inside.
   // Left turn: RF/RR outside pair. Right turn: LF/LR outside pair.
-  const entryLeftBias  = rfS / Math.max(rfS + rrS, 1);
-  const entryRightBias = lfS / Math.max(lfS + lrS, 1);
+  // Stiffer outside front OR stiffer outside rear both push toward understeer on entry:
+  //   outside front stiffer → front loads faster → push (stronger signal)
+  //   outside rear stiffer  → resists rear squat → less rotation → mild push
+  // Use signed deviation: RF>RR → push; RR>RF → mild push. Same for LF/LR in right turns.
+  const leftBalance  = (rfS - rrS) / Math.max(rfS + rrS, 1);
+  const rightBalance = (lfS - lrS) / Math.max(lfS + lrS, 1);
+  const entryLeftBias  = leftBalance  >= 0
+    ? Math.max(0.2, Math.min(0.8, 0.5 + leftBalance  * 0.35))
+    : Math.max(0.2, Math.min(0.8, 0.5 + leftBalance  * 0.15));
+  const entryRightBias = rightBalance >= 0
+    ? Math.max(0.2, Math.min(0.8, 0.5 + rightBalance * 0.35))
+    : Math.max(0.2, Math.min(0.8, 0.5 + rightBalance * 0.15));
   const entryShockBias = (entryLeftBias + entryRightBias) / 2;
   // Toe: symmetric — toe-in = less front bite = push on entry in both directions
   const toeEntryBias    = Math.max(0.2, Math.min(0.8, 0.5 + (setup.toe + 0.25) * 0.5));
@@ -152,10 +165,10 @@ function BalanceGaugeF8({ frontGripPct, frontLLTD, corners, setup }) {
   const entryBias = 0.35 * entryShockBias + 0.20 * frontLLTD + 0.20 * toeEntryBias + 0.15 * camberEntryBias + 0.10 * presEntryBias;
   const entry = phaseLabelF8(entryBias);
 
-  // MID — steady-state: actual grip balance is primary.
-  // frontGripPct > 0.55 = rear limited = loose; < 0.55 = front limited = push.
+  // MID — steady-state: shocks stopped moving, only springs determine LLTD.
+  // frontGripPct > 0.55 = front is the limiting axle = push; < 0.55 = rear is limiting = loose.
   const midGripBias = Math.max(0.1, Math.min(0.9, 0.5 + (frontGripPct - 0.55) * 3));
-  const midBias = 0.55 * midGripBias + 0.45 * frontLLTD;
+  const midBias = 0.55 * midGripBias + 0.45 * springLLTD;
   const mid = phaseLabelF8(midBias);
 
   // EXIT — off throttle in both directions.
@@ -209,7 +222,7 @@ function BalanceGaugeF8({ frontGripPct, frontLLTD, corners, setup }) {
   let description, action;
   if (tendency < -0.015) {
     const drivers = [];
-    if (frontLLTD > 0.60) drivers.push('high front LLTD — front struts transferring more cornering load than rear');
+    if (frontLLTD > 0.51) drivers.push('high front LLTD — front struts handling too much cornering load, overworking front axle');
     if (!camberOk) drivers.push('front camber could be improved toward optimal');
     if (!frontPresOk) drivers.push('front tire pressures off optimal');
     if (frontAvgScore < rearAvgScore - 0.03) drivers.push('front grip scores lower than rear');
@@ -219,7 +232,7 @@ function BalanceGaugeF8({ frontGripPct, frontLLTD, corners, setup }) {
     action = 'To loosen: adjust camber toward optimal, soften front struts, check front pressures.';
   } else if (tendency > 0.015) {
     const drivers = [];
-    if (frontLLTD < 0.40) drivers.push('low front LLTD — rear shocks transferring more cornering load than front');
+    if (frontLLTD < 0.41) drivers.push('low front LLTD — rear shocks handling too much cornering load, overloading rear axle');
     if (!rearPresOk) drivers.push('rear tire pressures off optimal');
     if (rearAvgScore < frontAvgScore - 0.03) drivers.push('rear grip scores lower than front');
     description = drivers.length
@@ -261,7 +274,7 @@ function BalanceGaugeF8({ frontGripPct, frontLLTD, corners, setup }) {
           <div className="opt-phase-row">
             <span className="opt-phase-name">Mid</span>
             <span className="opt-phase-label" style={{ color: mid.color }}>{mid.label}</span>
-            <span className="opt-phase-note">Front grip {(frontGripPct * 100).toFixed(0)}% (ideal 55%) · LLTD {(frontLLTD * 100).toFixed(0)}%</span>
+            <span className="opt-phase-note">Front grip {(frontGripPct * 100).toFixed(0)}% (ideal 55%) · Spring LLTD {(springLLTD * 100).toFixed(0)}%</span>
           </div>
           <div className="opt-phase-row">
             <span className="opt-phase-name">Exit</span>
@@ -279,8 +292,8 @@ function BalanceGaugeF8({ frontGripPct, frontLLTD, corners, setup }) {
       </div>
       <div className="opt-stat-pair">
         <span>Front LLTD</span>
-        <span style={{ color: frontLLTD >= 0.40 && frontLLTD <= 0.60 ? 'var(--green)' : 'var(--yellow)' }}>
-          {(frontLLTD * 100).toFixed(1)}% <span className="opt-stat-ideal">(F8 target 45–55%)</span>
+        <span style={{ color: frontLLTD >= 0.41 && frontLLTD <= 0.51 ? 'var(--green)' : 'var(--yellow)' }}>
+          {(frontLLTD * 100).toFixed(1)}% <span className="opt-stat-ideal">(F8 target ~46%)</span>
         </span>
       </div>
       <div className="opt-hb-desc">{description}</div>
@@ -628,7 +641,7 @@ export default function Figure8Optimizer({ setup, setSetup, ambient, setAmbient,
       {/* ── Balance & Toe ── */}
       <div className="opt-section">
         <h3 className="opt-section-title">Balance & Toe</h3>
-        <BalanceGaugeF8 frontGripPct={frontGripPct} frontLLTD={ss.frontLLTD} corners={corners} setup={setup} />
+        <BalanceGaugeF8 frontGripPct={frontGripPct} frontLLTD={ss.frontLLTD} springLLTD={ss.springLLTD} corners={corners} setup={setup} />
         <div className="opt-balance-row" style={{ marginTop: 14 }}>
           <div className="opt-balance-card">
             <div className="opt-factor-title">Lateral Balance</div>
