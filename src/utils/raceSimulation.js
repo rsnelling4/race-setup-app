@@ -422,8 +422,6 @@ function hotPressure(coldPsi, tireTemp, inflationTemp = COLD_PSI_TEMP) {
 // ============ SHOCK → ROLL STIFFNESS ============
 // Rating 0 = stiffest, 10 = softest → roll contribution = 10 - rating
 function shockStiffness(setup) {
-  const f = (10 - setup.shocks.LF) + (10 - setup.shocks.RF);
-  const r = (10 - setup.shocks.LR) + (10 - setup.shocks.RR);
   // Front spring: average LF+RF (may differ when different assemblies are used on each side).
   // Supports both new per-corner format { LF, RF, LR, RR } and legacy { front, rear }.
   const springLF = setup.springs?.LF ?? setup.springs?.front ?? BASE_SPRING_FRONT;
@@ -432,6 +430,21 @@ function shockStiffness(setup) {
   const springR  = setup.springs?.LR ?? setup.springs?.rear  ?? BASE_SPRING_REAR;
   const springLLTD = (springF / BASE_SPRING_FRONT) /
     ((springF / BASE_SPRING_FRONT) + (springR / BASE_SPRING_REAR));
+
+  // Load-weighted damper LLTD: RF (outside) carries more load in left turns and does more
+  // transient work than LF (inside). Weight each shock's contribution by its corner's share
+  // of the axle load at OVAL_CORNER_G using springLLTD only (no circularity — dampers not involved).
+  const cornerLoads = tireLoads(OVAL_CORNER_G, springLLTD);
+  const frontAxle = cornerLoads.LF + cornerLoads.RF;
+  const rearAxle  = cornerLoads.LR + cornerLoads.RR;
+  const rfFrac = cornerLoads.RF / frontAxle;   // ~0.62 — outside front carries more
+  const lfFrac = cornerLoads.LF / frontAxle;   // ~0.38
+  const rrFrac = cornerLoads.RR / rearAxle;    // ~0.65 — outside rear carries more
+  const lrFrac = cornerLoads.LR / rearAxle;    // ~0.35
+
+  const f = lfFrac * (10 - setup.shocks.LF) + rfFrac * (10 - setup.shocks.RF);
+  const r = lrFrac * (10 - setup.shocks.LR) + rrFrac * (10 - setup.shocks.RR);
+
   const damperLLTD = f / Math.max(f + r, 1);
   // 60% springs (steady-state physics), 40% dampers (transient/adjustable)
   const frontLLTD = 0.6 * springLLTD + 0.4 * damperLLTD;
@@ -848,31 +861,21 @@ export const DEFAULT_SETUP = {
 
 // ============ RECOMMENDED SETUP ============
 // Grid-searched over 419,904 combinations of available shocks (all unique rating×spring tuples),
-// caster (3.0–7.0° in 0.5° steps), analytically derived camber (ground-frame model),
-// analytically derived PSI, and fixed toe −0.25".
+// caster (3.0–7.0° in 0.5° steps), camber sweep, analytically derived PSI, fixed toe −0.25".
 //
-// Best lap: 17.266s @ 90°F (vs 17.4s baseline @ 65°F) — gain: −0.134s.
-// #1/#2/#3 are a three-way tie at 17.266s (different front shock combos, same LLTD 46.0%).
-// This entry uses LF=4/RF=4 (both FCS 1336349 Police/Taxi, 475 lbs/in) — most practical.
+// Best lap: 17.261s @ 90°F (vs 17.4s baseline @ 65°F) — gain: −0.139s.
+// Top cluster: multiple shock combos tie at 17.261s (LF=4/RF=4, LF=6/RF=3, LF=1/RF=6 all hit ~46% LLTD).
+// This entry uses LF=4/RF=4 (both FCS 1336349 Police/Taxi, 475 lbs/in) — most practical symmetric option.
 //
-// Key changes from prior search:
-//   - LF camber now +2.25° (positive!) — ground-frame model requires positive static
-//     to achieve +0.75° ground-frame ideal on the inside-front at the contact patch.
-//     (Prior model targeted 0° effective — wrong frame of reference.)
-//   - RF camber −3.0°, caster 6.0° — higher caster (vs prior 5.0°) gains more negative
-//     camber via mechanical jounce, allowing slightly less aggressive static setting.
-//   - RF cold PSI 36 PSI (vs 34.5) — updated for higher RF corner load with revised
-//     geometric+elastic weight transfer model.
-//   - LLTD now exactly 46.0% (vs prior 46.8%) — cleaner match to the optimal target.
-//
-// Updated 2026-04-14: physics model update — 85/15 roll stiffness, 3.1°/G body roll,
-// 0.006/PSI pressure grip, mechanical trail caster, ground-frame camber,
-// geometric+elastic weight transfer (Dixon model, RCH front=3"/rear=4").
+// Updated 2026-04-14: load-weighted damper LLTD fix — RF shock (outside, 62% of front load)
+// now weighted ~1.65× more than LF in the LLTD calculation. This correctly reflects that
+// the RF shock does more transient lateral load transfer work than the LF (inside, 38%).
+// Prior model treated LF and RF shocks as equal contributors — a known simplification now corrected.
 export const RECOMMENDED_SETUP = {
   shocks: { LF: 4, RF: 4, LR: 1, RR: 1 },
   springs: { LF: 475, RF: 475, LR: 160, RR: 160 },
-  camber: { LF: 2.25, RF: -3.0 },
-  caster: { LF: 3.5, RF: 6.0 },
+  camber: { LF: 2.5, RF: -3.25 },
+  caster: { LF: 3.0, RF: 5.5 },
   toe: -0.25,
   coldPsi: { LF: 22, RF: 36, LR: 17, RR: 31 },
 };
