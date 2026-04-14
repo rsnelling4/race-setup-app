@@ -847,22 +847,34 @@ export const DEFAULT_SETUP = {
 };
 
 // ============ RECOMMENDED SETUP ============
-// Grid-searched over all 180,880 combinations of available shocks, caster, camber (analytical),
-// PSI (analytical), and toe. Best lap: 17.196s @ 90°F (vs 17.4s baseline @ 65°F).
-// Shocks: LF PRT 710415 (rating 3, Police/Taxi assembly, 475 lbs/in),
-//         RF Monroe 550055 Magnum (rating 1, Police Interceptor assembly, 475 lbs/in),
-//         LR/RR Monroe 550018 Magnum Severe Service (rating 1 — stiffest available)
-// Camber analytically derived: ideal effective LF=0°, RF=-4.5° minus caster+body-roll gains.
-// Grid-search optimized (180,880 combos @ 90°F, best lap 17.200s, LLTD=0.468).
-// Updated 2026-04-01 with full physics model: 4100 lbs, RCH 3", SLA jounce 0.355°/°,
-// KPI 9.5°, sidewall compliance, ground-frame camber.
+// Grid-searched over 419,904 combinations of available shocks (all unique rating×spring tuples),
+// caster (3.0–7.0° in 0.5° steps), analytically derived camber (ground-frame model),
+// analytically derived PSI, and fixed toe −0.25".
+//
+// Best lap: 17.266s @ 90°F (vs 17.4s baseline @ 65°F) — gain: −0.134s.
+// #1/#2/#3 are a three-way tie at 17.266s (different front shock combos, same LLTD 46.0%).
+// This entry uses LF=4/RF=4 (both FCS 1336349 Police/Taxi, 475 lbs/in) — most practical.
+//
+// Key changes from prior search:
+//   - LF camber now +2.25° (positive!) — ground-frame model requires positive static
+//     to achieve +0.75° ground-frame ideal on the inside-front at the contact patch.
+//     (Prior model targeted 0° effective — wrong frame of reference.)
+//   - RF camber −3.0°, caster 6.0° — higher caster (vs prior 5.0°) gains more negative
+//     camber via mechanical jounce, allowing slightly less aggressive static setting.
+//   - RF cold PSI 36 PSI (vs 34.5) — updated for higher RF corner load with revised
+//     geometric+elastic weight transfer model.
+//   - LLTD now exactly 46.0% (vs prior 46.8%) — cleaner match to the optimal target.
+//
+// Updated 2026-04-14: physics model update — 85/15 roll stiffness, 3.1°/G body roll,
+// 0.006/PSI pressure grip, mechanical trail caster, ground-frame camber,
+// geometric+elastic weight transfer (Dixon model, RCH front=3"/rear=4").
 export const RECOMMENDED_SETUP = {
-  shocks: { LF: 3, RF: 1, LR: 1, RR: 1 },
+  shocks: { LF: 4, RF: 4, LR: 1, RR: 1 },
   springs: { LF: 475, RF: 475, LR: 160, RR: 160 },
-  camber: { LF: -0.25, RF: -2.25 },
-  caster: { LF: 3.0, RF: 5.0 },
+  camber: { LF: 2.25, RF: -3.0 },
+  caster: { LF: 3.5, RF: 6.0 },
   toe: -0.25,
-  coldPsi: { LF: 24, RF: 34.5, LR: 18, RR: 30 },
+  coldPsi: { LF: 22, RF: 36, LR: 17, RR: 31 },
 };
 
 // ============ PETE SETUP ============

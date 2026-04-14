@@ -89,7 +89,7 @@ export default function SimulationMath() {
               <span className="sep">·</span>
               <span>1/4-mile Oval &amp; Figure 8</span>
               <span className="sep">·</span>
-              <span>Updated 2026-03-23</span>
+              <span>Updated 2026-04-14</span>
             </div>
           </div>
           <div className="sim-math-toc-grid">

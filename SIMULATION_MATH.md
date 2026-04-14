@@ -2,7 +2,7 @@
 
 **Car:** 2008 Crown Victoria P71
 **Tracks:** 1/4-mile oval, Figure 8
-**Last updated:** 2026-03-23
+**Last updated:** 2026-04-14
 
 This document is a complete reference for every number, formula, and calibration constant in the race simulation. Each section explains *what* the math does, *why* it was chosen, and *where* the input values came from. Sources are listed inline and consolidated at the bottom.
 
@@ -152,32 +152,52 @@ Lateral G = v² / (R × g) = 36.67² / (149 × 32.174) = 1344 / 4794 = 0.280G
 
 ### Why "Cornering G" Matters
 
-The lateral G during cornering determines how much weight transfers from the inside tires to the outside tires. It also determines the optimal tire pressure. Getting this number right is essential — if it's too high, the model recommends too much pressure; if too low, it recommends too little.
+The lateral G during cornering determines how much weight transfers from the inside tires to the outside tires and sets the instantaneous suspension geometry at the apex. A **separate time-averaged G** is used for tire pressure and thermal calculations — the tires are only cornering for a fraction of each lap, so using peak apex G would over-inflate the recommended pressures.
 
-### Oval Cornering G = 0.375G
+The model maintains two distinct G values for the oval:
 
-This value was **calibrated from real-world tire pressure data**, not derived purely from speed and radius. Here is the validation:
+| Constant | Value | Purpose |
+|---|---|---|
+| `OVAL_RACING_G` | **0.813G** | Instantaneous apex G — used for suspension geometry, body roll, dynamic camber |
+| `OVAL_CORNER_G` | **0.407G** | Time-averaged G over the full lap — used for tire loads, pressure targets, thermal model |
 
-```
-At OVAL_CORNER_G = 0.375G with R = 105 ft:
-  v = √(G_lat × g × R) = √(0.375 × 32.174 × 105) = 35.6 ft/s ≈ 24.3 mph at apex
-```
+### Oval Racing G = 0.813G (instantaneous apex)
 
-When this G value is plugged into the pressure model, it produces:
-- RF hot optimal: ~40 PSI
-- LF hot optimal: ~26 PSI
-
-These match the pressures the driver has found to work in practice, confirming 0.375G is correct. Using a lower or higher value shifts all pressure recommendations.
-
-> A left-turn oval corner at 24 mph apex speed might feel slow but the centripetal acceleration at that radius is what produces 0.375G — consistent with real short-track oval racing on street tires.
-
-### Figure 8 Cornering G = 0.28G
+Back-calculated from the observed 17.4s baseline lap time:
 
 ```
-v = √(0.28 × 32.174 × 149) = √(1341) = 36.6 ft/s ≈ 25 mph through crossover
+Lap time 17.4s → v_corner ≈ 47.6 mph (69.8 ft/s) at effective racing line R = 145 ft
+  (Driver swings ~40 ft wide from the 105 ft inside radius → effective R ≈ 145 ft)
+
+OVAL_RACING_G = v² / (g × R) = 69.8² / (32.174 × 145) = 4872 / 4665 = 0.813G
 ```
 
-The F8 generates less lateral G than the oval (0.28 vs 0.375) because the larger loop radius (149 ft vs 105 ft) more than compensates for the slightly higher speed through the crossing.
+This is the G the car is *actually pulling* at the corner apex — what the driver feels, what loads the suspension, what determines body roll.
+
+### Oval Time-Averaged Corner G = 0.407G (pressure/thermal)
+
+Using peak apex G (0.813G) for pressure targets would give RF optPsi ≈ 50 PSI — too high. The tires are only cornering for a fraction of the lap; on the straights lateral G = 0. The time-averaged G represents the average sidewall stress over a full lap:
+
+```
+Corner arc fraction = 2 × π × 105 / (2 × 329 + 2 × π × 105)
+                    = 659.7 / 1317.7 = 0.5007
+
+OVAL_CORNER_G = OVAL_RACING_G × cornerFraction = 0.813 × 0.5007 = 0.407G
+```
+
+**Verification against real-world pressure data:**
+RF hot PSI observed ≈ 39 PSI (baseline session, 35 PSI cold RF, 130°F tire). At 0.407G: RF load ≈ 1,417 lbs → optPsi ≈ 41.5 PSI. The ~2.5 PSI gap is explained by the front anti-roll bar, which transfers load without body roll and is not modeled in the spring/damper LLTD — it reduces the effective elastic load on the RF, lowering observed hot pressure. No empirical tuning was needed.
+
+### Figure 8 Cornering G = 0.28G (time-averaged)
+
+```
+F8_RACING_G  = 0.498G  (actual apex G at F8 loop, back-calculated from 23.283s lap)
+Loop fraction ≈ 0.56 of lap distance
+
+F8_CORNER_G  = 0.498 × 0.56 ≈ 0.28G  (used for F8 pressure/thermal)
+```
+
+The F8 corner speed through the loops (≈ 33.3 mph at 149 ft radius) gives 0.498G at the apex — lower than the oval's 0.813G because the racing line radius is larger despite similar speeds.
 
 ### Straight Speed Calculation
 
@@ -217,39 +237,69 @@ Rear axle total  = 4100 lbs × 0.45 rear bias  = 1,845 lbs  →    922.5 lbs eac
 
 ### Lateral Weight Transfer Formula
 
-The weight transfer ΔW depends on the CG height **above the roll center** relative to the track width. The front roll center height (RCH = 3") reduces the effective moment arm from the full CG height.
+The model uses a **two-component** lateral weight transfer formula (Dixon / Kelvin Tse) that separates the load transfer into its physical mechanisms:
 
+**1. Geometric (link) transfer** — acts through the suspension links, independent of springs and shocks. Determined by each axle's share of the car's mass and its roll center height.
 ```
-ΔW = Weight × G_lateral × (CG_height − RCH) / Track_width
-   = 4100 × G × (22 in − 3 in) / 63 in
-   = 4100 × G × (19 in / 12) / (63 in / 12)
-   = 4100 × G × 1.583 ft / 5.25 ft
-   = 4100 × G × 0.302
+ΔF_geo,front = m_front × G_lateral × RCH_front / trackWidth
+ΔF_geo,rear  = m_rear  × G_lateral × RCH_rear  / trackWidth
 
-At OVAL_CORNER_G (0.375G):
-  ΔW = 4100 × 0.375 × 0.302 = 464 lbs total lateral transfer
+Where:
+  m_front   = 4100 × 0.55 = 2255 lbs  (front axle mass)
+  m_rear    = 4100 × 0.45 = 1845 lbs  (rear axle mass)
+  RCH_front = 3/12 ft  (3" — measured, SLA geometry)
+  RCH_rear  = 4/12 ft  (4" — estimated, Watts-link solid axle)
+  trackWidth = 63/12 ft
 ```
 
-> The 464 lb transfer at corner G is split between front and rear axles based on the front/rear roll stiffness ratio (LLTD — explained in Section 8).
+**2. Elastic (spring) transfer** — acts through the springs and creates body roll. Distributed front/rear by the **spring roll stiffness ratio only** — dampers do not resist steady-state roll.
+```
+avgRCH        = 0.55 × (3/12) + 0.45 × (4/12) = 0.2875 ft
+elasticTotal  = 4100 × G_lateral × (cgHeight − avgRCH) / trackWidth
+             = 4100 × G_lateral × (22/12 − 0.2875) / (63/12)
+             = 4100 × G_lateral × (1.5417 − 0.2875) / 5.25
+             = 4100 × G_lateral × 0.2389
+
+elasticFront  = elasticTotal × springLLTD
+elasticRear   = elasticTotal × (1 − springLLTD)
+```
+
+**Total per-axle transfer:**
+```
+ltFront = ΔF_geo,front + elasticFront
+ltRear  = ΔF_geo,rear  + elasticRear
+```
 
 ### Per-Corner Loads
 
 ```
-LF (inside front)  = 1,127.5 − 464 × LLTD
-RF (outside front) = 1,127.5 + 464 × LLTD
-LR (inside rear)   =   922.5 − 464 × (1 − LLTD)
-RR (outside rear)  =   922.5 + 464 × (1 − LLTD)
+LF (inside front)  = 1,127.5 − ltFront
+RF (outside front) = 1,127.5 + ltFront
+LR (inside rear)   =   922.5 − ltRear
+RR (outside rear)  =   922.5 + ltRear
 ```
 
-**Example with LLTD = 0.472 (default setup with spring blending):**
+**Example at OVAL_CORNER_G (0.407G), springLLTD = 0.500 (stock springs):**
 ```
-LF ≈  909 lbs    RF ≈ 1,346 lbs
-LR ≈  ≈698 lbs   RR ≈ 1,147 lbs
+ΔF_geo,front  = 2255 × 0.407 × (3/12) / (63/12) = 43.5 lbs
+ΔF_geo,rear   = 1845 × 0.407 × (4/12) / (63/12) = 47.6 lbs
+elasticTotal  = 4100 × 0.407 × 0.2389 = 398.5 lbs
+elasticFront  = 398.5 × 0.500 = 199.3 lbs
+elasticRear   = 398.5 × 0.500 = 199.3 lbs
+ltFront = 43.5 + 199.3 = 242.8 lbs
+ltRear  = 47.6 + 199.3 = 246.9 lbs
+
+RF ≈ 1127.5 + 242.8 = 1,370 lbs
+LF ≈ 1127.5 − 242.8 =   885 lbs
+RR ≈  922.5 + 246.9 = 1,169 lbs
+LR ≈  922.5 − 246.9 =   676 lbs
 ```
 
-> The RF carries 1,279 lbs in the corner — 57% more than its static load of 1,045 lbs. This is why RF tire pressure, camber, and temperature are the most important parameters to get right on a left-turn oval.
+> The RF carries ~1,370 lbs at the corner apex — 22% more than its static load of 1,127.5 lbs. This is why RF tire pressure, camber, and temperature are the most important parameters to get right on a left-turn oval.
 
-**Sources:** Standard vehicle dynamics lateral weight transfer formula [³][⁶].
+> **Why two components?** The geometric transfer travels directly through the rigid links (instant response, no body roll). The elastic transfer acts through the springs as the chassis rolls (lag, body motion). Separating them correctly models how spring changes affect roll (and dynamic camber) while suspension geometry changes (roll center) affect instantaneous load transfer even with zero roll.
+
+**Sources:** Dixon *Tires, Suspension and Handling* [³], Kelvin Tse suspension lecture notes [⁶].
 
 ---
 
@@ -384,27 +434,29 @@ Penalty = max(0.90,  1 − 0.7 × (LLTD − optimal)²)
 
 ### Body Roll Stiffness
 
-Body roll angle affects dynamic camber, which affects grip. The roll stiffness (`rollStiffness`) combines spring rates (70% weight) and damper ratings (30% weight), normalized so the baseline setup gives exactly the calibrated 3.5°/G body roll:
+Body roll angle affects dynamic camber, which affects grip. The roll stiffness (`rollStiffness`) combines spring rates (85% weight) and damper ratings (15% weight), normalized so the baseline setup gives exactly the calibrated **3.1°/G** body roll:
 
 ```
-rollStiffness = max(4, (0.7 × springScale + 0.3 × damperNorm) × 28)
+rollStiffness = max(4, (0.85 × springScale + 0.15 × damperNorm) × 28)
 
 Where:
   springScale = (k_front/475 + k_rear/160) / 2   [1.0 = P71 stock springs]
   damperNorm  = (damperFront + damperRear) / 28   [1.0 = 4/4/2/2 dampers]
 
-bodyRoll (°) = G_lateral × 3.5° × (28 / rollStiffness)
+bodyRoll (°) = G_lateral × 3.1° × (28 / rollStiffness)
 ```
 
 **Validation at baseline (475/160 springs, 4/4/2/2 dampers):**
 ```
-springScale = (475/475 + 160/160) / 2 = 1.0
-damperNorm  = 28 / 28 = 1.0
-rollStiffness = (0.7 × 1.0 + 0.3 × 1.0) × 28 = 28
-bodyRoll = 1.0 × 3.5 × (28/28) = 3.5°/G  ✓
+springScale   = (475/475 + 160/160) / 2 = 1.0
+damperNorm    = 28 / 28 = 1.0
+rollStiffness = (0.85 × 1.0 + 0.15 × 1.0) × 28 = 28
+bodyRoll      = 1.0 × 3.1 × (28/28) = 3.1°/G  ✓
 ```
 
-> **Why 70/30 spring/damper split for body roll?** At steady-state cornering (constant speed, constant radius), dampers have zero effect — they only resist *changes* in position, not sustained position. So springs should dominate roll stiffness. In practice the 70/30 split is a modeling compromise because the damper rating also implicitly captures sway bar effects which are not separately tracked.
+> **Why 85/15 spring/damper split for body roll?** At steady-state cornering (constant speed, constant radius), dampers have zero effect — they only resist *changes* in position, not sustained position. Springs are the dominant roll-resistance mechanism. The 15% damper weight is a modeling compromise: the damper rating also implicitly captures sway bar effects which are not separately tracked. The earlier 70/30 split over-weighted dampers and has been corrected to 85/15 to better reflect physics.
+
+> **Why 3.1°/G?** Measured from the car: at the actual oval corner speed (47.6 mph, ≈0.813G at the apex), observed body roll is approximately 2.5°. Dividing: 2.5° / 0.813G ≈ 3.1°/G. The baseline stiffness of 28 is anchored to this measurement.
 
 **Sources:** Standard vehicle dynamics textbook formulas [³][⁶]. Calibrated against multi-session pyrometer data.
 
@@ -575,13 +627,15 @@ Every tire has an optimal inflation pressure for the load it is carrying. Over-i
 ```
 optPSI = 30 × (cornerLoad / avgLoad)   where avgLoad = 1025 lbs (4100/4)
 
-pressureGrip = max(0.82,  1 − 0.010 × |hotPSI − optPSI|)
+pressureGrip = max(0.82,  1 − 0.006 × |hotPSI − optPSI|)
 ```
 
-- **1% grip loss per PSI** of deviation from optimal
-- **Floor 0.82** (18% max loss) — reached at 18 PSI off target, which represents catastrophically wrong pressure
+- **0.6% grip loss per PSI** of deviation from optimal
+- **Floor 0.82** (18% max loss) — reached at 30 PSI off target, which represents catastrophically wrong pressure
 
-> **Why `30 × (load / avgLoad)`?** This formula assumes 30 PSI is the ideal pressure at the average static load (1025 lbs). Tires that carry more load in cornering need more pressure to maintain the same contact patch shape. The factor `cornerLoad / avgLoad` scales from the average. This approach was calibrated so that at oval corner G, the RF optimal comes out to ~40 PSI hot and LF to ~26 PSI hot — matching real-world observed pressures.
+> **Why `30 × (load / avgLoad)`?** This formula assumes 30 PSI is the ideal pressure at the average static load (1025 lbs). Tires that carry more load in cornering need more pressure to maintain the same contact patch shape. The factor `cornerLoad / avgLoad` scales from the average. This approach was calibrated so that at oval OVAL_CORNER_G (0.407G), the RF optimal comes out to ~40–42 PSI hot and LF to ~26 PSI hot — consistent with observed hot pressures.
+
+> **Why 0.006/PSI, not 0.010/PSI?** Lap time is less sensitive to pressure than handling balance. The 0.006 coefficient means a 5 PSI deviation costs ~3% grip on lap time, while the balance gauge applies additional correction separately. The original 0.010 was too aggressive and penalized small deviations disproportionately.
 
 **Sources:** Standard tire pressure vs load theory [³][⁶]. Calibrated against real-world pressure data from our sessions.
 
@@ -589,55 +643,110 @@ pressureGrip = max(0.82,  1 − 0.010 × |hotPSI − optPSI|)
 
 ### Camber Grip Factor
 
-Camber is the lean angle of the tire relative to vertical. Negative camber (top of tire tilted inward) helps the outside tire maintain full contact with the track during cornering because the suspension geometry causes the tire to lean away from vertical under load.
+Camber is the lean angle of the tire relative to vertical. The model evaluates camber in the **ground frame** — the actual tire-to-road angle at the contact patch — rather than the chassis frame. This is the angle that determines contact patch shape and lateral force.
 
-The model targets specific **effective** camber angles during cornering, not the static setting:
+#### Ideal Ground-Frame Camber Targets
+
+| Corner | Ideal Ground Camber | Rationale |
+|---|---|---|
+| **RF** (outside front) | **−2.0°** | Slight negative counters centrifugal crown, keeps full contact patch. Calibrated for 235/55R17 tall sidewall at heavy load (~1,300–1,700 lbs). Literature: −2.0° to −2.25° for street tires at heavy load. |
+| **LF** (inside front) | **+0.75°** | Small positive is optimal — not 0°. Camber thrust on the lightly loaded inside tire sharpens turn-in. At 0° the LF contributes max area but zero camber thrust. Research: +0.5°–+1.0° ground is the practical optimum where thrust benefit exceeds the modest patch reduction. |
+| **RR / LR** (solid axle) | **0.0°** | No static adjustment possible; body roll is the only camber source. |
+
+#### Asymmetric, Load-Weighted Penalty Curves
+
+The penalty is **not symmetric** — insufficient camber costs more than over-camber on the heavily loaded outside tire:
 
 ```
-Outside front (RF on a left-turn oval):  ideal effective = −4.5° at 1G
-Inside front (LF):                        ideal effective =  0.0° (flat contact patch)
+RF (outside front, heavily loaded ~1,300–1,700 lbs):
+  dev = groundCamber − (−2.0°)   [positive = insufficient, negative = over-camber]
 
-camberGrip = max(0.88,  1 − 0.012 × |effectiveCamber − ideal|)
+  Insufficient (dev > 0):
+    penalty = 0.016 + max(0, (load/avgLoad − 1.0)) × 0.004
+    camberGrip = max(0.88,  1 − penalty × dev)
+    [At RF ~1,400 lbs: 1.6% + (1400/1025 − 1) × 0.4% ≈ 1.75%/°]
+
+  Over-camber (dev < 0):
+    camberGrip = max(0.88,  1 − 0.010 × |dev|)   [flat 1.0%/°]
+
+LF (inside front, lightly loaded ~600–900 lbs):
+  dev = groundCamber − 0.75°   [positive = above ideal, negative = below ideal]
+
+  Below ideal (dev < 0): double penalty — loses both camber thrust AND contact patch
+    camberGrip = max(0.88,  1 − 0.012 × |dev|)   [1.2%/°]
+
+  Above ideal (dev > 0): gentler — mainly contact patch loss, thrust still present
+    camberGrip = max(0.88,  1 − 0.007 × dev)     [0.7%/°]
+
+Rear (solid axle, both RR and LR):
+  camberGrip = max(0.88,  1 − 0.010 × |groundCamber − 0°|)   [symmetric 1.0%/°]
 ```
-- **1.2% grip loss per degree** deviation from ideal effective camber
-- **Floor 0.88** (12% max loss)
 
-> **Why −4.5° effective for RF?** On a short oval at 0.375G, the outside front tire (RF) is heavily loaded. SLA (short-long arm / double wishbone) suspension gains negative camber in jounce — this is the key mechanical advantage over MacPherson struts which gain positive camber (which hurts grip). The −4.5° target is a standard race engineering rule of thumb for the heavily-loaded outside front at moderate lateral G [⁶]. The model was calibrated against pyrometer data to confirm this produces realistic temperatures.
+> **Why asymmetric RF penalty?** At insufficient camber (too positive), the outer edge lifts and lateral force drops sharply — the contact patch loses area on the most critical part. At over-camber, the inner edge carries load and some lateral force is retained. Source: Pacejka tire model, JOES Racing / Speed Academy contact patch research.
+
+> **Why load-weighted RF penalty?** Camber thrust coefficient scales nearly linearly with vertical load (Pacejka). A 1° deviation costs more grip on the heavily loaded RF (~1.75%/° at 1,400 lbs) than at average load (~1.6%/°). The `(load/avgLoad − 1.0) × 0.004` term captures this.
 
 ---
 
-### Effective Camber Calculation
+### Ground-Frame Camber Calculation
 
-The static camber setting (what you set in the alignment bay) is not the same as the effective camber during cornering. Dynamic effects shift it:
+Camber at the contact patch (ground frame) is what the grip model receives. It is computed from static camber through several geometric stages:
 
 ```
-effectiveCamber = staticCamber + casterGain + bodyRollCamber
+Step 1 — Effective camber (chassis frame):
+  effectiveCamber = staticCamber + casterCamberGain + bodyRollCamber + kpiCamber
 
-Caster gain (RF, outside tire, left turn):
-  casterGain = −(caster_deg × 0.18)   [gains negative camber in jounce — SLA geometry]
+  casterCamberGain:
+    RF (outside): −(caster_deg × 0.18 × refG)   [jounce → negative camber, SLA geometry]
+    LF (inside):  +(caster_deg × 0.10 × refG)   [droop → positive camber]
 
-Caster gain (LF, inside tire):
-  casterGain = +(caster_deg × 0.10)   [gains positive camber in droop]
+  bodyRollCamber (at actual apex cornerRoll = bodyRoll × OVAL_RACING_G):
+    RF (jounce): −(cornerRoll × 0.355)   [SLA jounce coefficient: 1.1° per 3.1° roll]
+    LF (droop):  +(cornerRoll × 0.15)    [SLA droop coefficient]
 
-Body roll contribution (at actual oval corner G, not 1G):
-  cornerRoll = bodyRoll_deg × OVAL_CORNER_G
-  RF (jounce):  bodyRollCamber = −(cornerRoll × 0.355)   [SLA jounce coefficient]
-  LF (droop):   bodyRollCamber = +(cornerRoll × 0.15)    [SLA droop coefficient]
+  kpiCamber (KPI = 9.5°, steerAngle = 10°):
+    formula: KPI_deg × (1 − cos(steerAngle))
+    = 9.5° × (1 − cos(10°)) = 9.5° × 0.01519 = +0.144°
+    RF: +0.144° (positive — adds to outside tire lean)
+    LF: −0.144°
+
+Step 2 — Convert chassis frame → ground frame:
+  RF (outside): groundCamber_geom = effectiveCamber + cornerRoll
+  LF (inside):  groundCamber_geom = effectiveCamber − cornerRoll
+
+Step 3 — Add sidewall compliance camber:
+  The sidewall deflects outward under load, adding positive camber at the contact patch.
+  sidewallCamber = load × K   where K = 1.2 × (sectionHeight/sectionWidth) / ratedLoad
+                             = 1.2 × (5.09/9.25) / 1929 ≈ 0.000342 °/lb
+  At RF apex load ~1,300 lbs: +0.45°  (must be compensated with additional static negative camber)
+  At LF load ~600 lbs: +0.21°
+
+  groundCamber = groundCamber_geom + sidewallCamber
 ```
 
-**Worked example — RF, caster 5°, total stiffness 28 (3.5°/G body roll):**
+**Worked example — RF, static −2.25°, caster 5.0°, total stiffness 28 (3.1°/G base roll), RF corner load 1,370 lbs:**
 ```
-cornerRoll     = 3.5° × 0.375 = 1.3125°
-casterGain     = −(5 × 0.18)  = −0.90°
-bodyRollCamber = −(1.3125 × 0.355) = −0.466°
-staticCamber   = −3.0°
+cornerRoll      = 3.1° × 0.813 = 2.52°  (bodyRoll at 1G × OVAL_RACING_G)
+casterGain      = −(5.0 × 0.18) = −0.90°
+bodyRollCamber  = −(2.52 × 0.355) = −0.895°
+kpiCamber       = +0.144°
 
-effectiveCamber = −3.0 + (−0.90) + (−0.466) = −4.37° ≈ ideal −4.5° ✓
+effectiveCamber = −2.25 + (−0.90) + (−0.895) + 0.144 = −3.90°
+
+groundCamber_geom = −3.90 + 2.52 = −1.38°
+sidewallCamber    = 1370 × 0.000342 = +0.47°
+groundCamber      = −1.38 + 0.47 = −0.91°
+
+dev = −0.91 − (−2.0) = +1.09°  (insufficient — above ideal −2.0°)
+penalty = 0.016 + (1370/1025 − 1.0) × 0.004 = 0.016 + 0.00134 = 0.01734
+camberGrip = 1 − 0.01734 × 1.09 ≈ 0.981
 ```
 
-> **SLA vs MacPherson:** Crown Vic P71 uses SLA (short-long arm / double wishbone) front suspension. The shorter upper arm forces the wheel to gain negative camber when compressed (jounce). MacPherson struts (most budget cars) do the opposite — they gain positive camber in jounce, which fights grip in corners. The 0.355 SLA jounce coefficient is measured from wheel displacement data: 1.7" compression at 3.1° body roll → 1.1° camber gain → 1.1/3.1 = 0.355°/°.
+> **SLA vs MacPherson:** Crown Vic P71 uses SLA (short-long arm / double wishbone) front suspension. The shorter upper arm forces the wheel to gain negative camber in jounce. MacPherson struts (most budget cars) gain positive camber in jounce, which hurts grip. The 0.355 SLA jounce coefficient is measured: 1.7" compression at 3.1° body roll → 1.1° camber gain → 1.1/3.1 = 0.355°/°.
 
-**Sources:** SLA geometry principles [³][⁶][¹³]. Caster gain coefficient (0.18/degree) from standard front suspension geometry analysis.
+> **Why KPI matters:** Kingpin inclination (KPI = 9.5°) causes both front tires to gain positive camber when steered. The correct formula is `KPI_deg × (1 − cos(steerAngle))`. At 10° steer this is only +0.144° — small but it adds to the ground-frame positive camber direction and must be compensated.
+
+**Sources:** SLA geometry principles [³][⁶][¹³]. Caster gain coefficient (0.18/degree) from standard front suspension geometry analysis. KPI formula from EvolutionM / Kelvin Tse kinematic curves.
 
 ---
 
@@ -646,35 +755,78 @@ effectiveCamber = −3.0 + (−0.90) + (−0.466) = −4.37° ≈ ideal −4.5°
 The Crown Vic P71 has a traditional solid (live) rear axle. It cannot independently adjust camber; both rear wheels follow the body roll angle exactly.
 
 ```
-RR (outside in left turn): dynamicCamber = +bodyRoll°   →   ideal = −1.0°
-LR (inside):               dynamicCamber = −bodyRoll°   →   ideal =  0.0°
+cornerRoll = bodyRoll × OVAL_RACING_G
 
-rearCamberGrip = max(0.88,  1 − 0.012 × |dynamicCamber − ideal|)
+RR (outside in left turn): groundCamber = +cornerRoll + sidewallCamber
+LR (inside in left turn):  groundCamber = −cornerRoll + sidewallCamber
+
+rearCamberGrip = max(0.88,  1 − 0.010 × |groundCamber − 0°|)
 ```
 
-> This is a fundamental limitation of the solid axle — you cannot set rear static camber to compensate for body roll. The only way to reduce rear camber deviation is to reduce body roll (stiffer springs or anti-roll bar), or to accept the penalty. On street tires at 0.375G with modest body roll, the penalty is small.
+> This is a fundamental limitation of the solid axle — you cannot set rear static camber to compensate for body roll. The only way to reduce rear camber deviation is to reduce body roll (stiffer springs or anti-roll bar), or to accept the penalty. On street tires at moderate body roll, the penalty is small.
 
 ---
 
 ### Caster Grip Factor
 
-Beyond its effect on dynamic camber gain (already captured above), caster has a direct stability effect through mechanical trail — how much the tire contact patch trails behind the steering axis. More caster = more self-centering = more stability but more steering effort.
+Caster's camber gain effect is fully captured above. The `casterGripFactor` handles only the **mechanical trail** effect — the self-aligning torque that determines steering feel, stability, and driver workload.
+
+#### Mechanical Trail Formula
+
+Mechanical trail is the horizontal distance between where the steering axis meets the ground and the tire contact patch center (side-view geometry):
 
 ```
-RF (outside tire, left-turn oval):  optimal = 5.0°
-  casterGrip = max(0.96,  1 − 0.004 × |caster − 5.0|)   [0.4%/deg penalty, floor 96%]
+mechanicalTrail (inches) = R_tire × sin(caster_rad) − scrubRadius × cos(caster_rad)
 
-LF (inside tire):  optimal = 3.0°
-  casterGrip = max(0.97,  1 − 0.003 × |caster − 3.0|)   [0.3%/deg penalty, floor 97%]
+Where:
+  R_tire      = 13.6"  (235/55R17 loaded radius)
+  scrubRadius = 0.525" (positive: kingpin axis meets ground inboard of contact patch)
+
+Trail values across the P71 caster range:
+  3°    → 0.19"   (very light — little self-centering)
+  5°    → 0.66"   (good light feel)
+  7°    → 1.13"   (solid self-centering)
+  9°    → 1.60"   (approaching workload limit without power steering)
+  9.75° → 1.79"   (at/past fatigue threshold at slow oval speeds)
 ```
 
-> **Why different optima for RF and LF?** The RF (outside tire) benefits from more caster because it generates more negative camber in jounce (the 0.18/degree caster gain). It also benefits from the stability of high mechanical trail. The LF (inside tire) benefits from less caster because in jounce/droop it gains positive camber — more caster makes this worse.
+#### RF (Outside Tire) — Parabolic Benefit Curve
+
+On a left-turn oval, RF trail provides a beneficial self-aligning effect that resists the car's tendency to chase the inside and reduces steering corrections mid-corner:
+
+```
+PEAK_TRAIL = 0.9"   ← peak of benefit curve
+
+Below peak (trail < 0.9"):
+  deficit = (0.9 − trail) / 0.9
+  casterGrip = max(0.97, 1 − 0.010 × deficit² × 0.81)
+  [~1% loss at trail = 0", 0 at peak]
+
+Above peak (trail > 0.9"):
+  excess = trail − 0.9
+  casterGrip = max(0.94, 1 − 0.055 × excess²)
+  [at 1.5" → ~2% loss; at 1.79" (9.75°) → ~2% loss; at 2.0" → ~3.5% loss]
+```
+
+#### LF (Inside Tire) — Monotonic Penalty
+
+LF trail creates torque that fights turn-in and loads the inside edge. Optimal LF trail is low (0.3–0.5"). Above ~0.8" it adds to push tendency:
+
+```
+OPTIMAL_LF = 0.35"
+
+excess = max(0, trail − 0.35)
+casterGrip = max(0.96, 1 − 0.030 × excess²)
+[at 3° LF → trail ≈ 0.19" (ideal); at 7° LF → trail ≈ 1.13" (noticeable push)]
+```
 
 **F8 caster asymmetry case:** In the baseline F8 session, LF caster was 5.5° and RF caster was 3.75°. In right turns, LF becomes the outside tire, generating high aligning torque proportional to tan(5.5°). In left turns, RF is outside with tan(3.75°):
 ```
 Steering effort ratio (right vs left) = tan(5.5°) / tan(3.75°) = 0.0963 / 0.0655 = 1.47×
 → Right turns require ~47% more steering effort — confirmed by driver feedback.
 ```
+
+**Sources:** SAE mechanical trail geometry [³][⁶]. Circle-track caster research (iRacing/Speed Academy), DrRacing SAT model, P71 alignment community data.
 
 ---
 
@@ -693,8 +845,10 @@ toeGrip = max(0.96,  1 − 0.008 × (toe − (−0.25))²)
 Any toe angle causes the tire to scrub sideways slightly as the car moves forward, increasing rolling resistance (drag). This penalty applies on straights where drag hurts top speed.
 
 ```
-toeDrag = 1 + 0.001 × toe²    (applied as divisor to total grip force)
+toeDrag = 1 + 0.08 × toe²    (applied as divisor to total grip force)
 ```
+
+> **Why 0.08?** Calibrated to measured lap-time sensitivity: ~0.08s per 1/4" additional toe on a 17.2s oval lap. Each 1/4" of toe ≈ 0.1° scrub angle per wheel. At 1/4" toe out: drag penalty ≈ 0.5%; at 1/2" toe out: ≈ 2%. The earlier value of 0.001 was too small and would produce negligible penalty even at extreme toe angles.
 
 ---
 
@@ -825,55 +979,71 @@ toward opt_outside. Maximum is AT opt_outside, not at the average.
 
 ### Optimal Static Camber Formula
 
-Since `effectiveCamber = staticCamber + casterGain + bodyRollCamber`, and we know the ideal effective camber, we can solve for optimal static:
+The model targets specific **ground-frame** camber angles (see Section 10). Since the ground-frame camber is built up from static camber through several geometric stages, we can solve backward:
 
 ```
-optStaticCamber = idealEffective − casterGain − bodyRollCamber
+groundCamber = effectiveCamber + cornerRoll + sidewallCamber    [RF, outside]
+groundCamber = effectiveCamber − cornerRoll + sidewallCamber    [LF, inside]
+
+effectiveCamber = staticCamber + casterGain + bodyRollCamber + kpiCamber
+
+→ optStaticCamber = idealGroundCamber − casterGain − bodyRollCamber − kpiCamber
+                    ∓ cornerRoll − sidewallCamber
 ```
 
-**Oval RF (caster 5°, springs 475/160, shocks 8/6/1/1):**
-```
-rollStiffness  ≈ 29.3  (soft front dampers reduce total stiffness from 28)
-bodyRoll       = 3.5 × (28/29.3) = 3.34°/G
-cornerRoll     = 3.34 × 0.375 = 1.25°
-casterGain     = −(5 × 0.18)       = −0.90°
-bodyRollCamber = −(1.25 × 0.355)   = −0.444°
-idealEffective = −4.5°
+Where ∓ means: subtract cornerRoll for RF (outside), add cornerRoll for LF (inside).
 
-optStaticCamber = −4.5 − (−0.90) − (−0.444) = −3.156° → rounds to −3.0°
+**Oval RF (static −2.25°, caster 5.0°, stock springs 475/160, shocks 4/4/2/2):**
+```
+rollStiffness  = 28  (baseline)
+bodyRoll       = 3.1° / G at baseline
+cornerRoll     = 3.1° × 0.813 = 2.52°  (OVAL_RACING_G — instantaneous apex G)
+casterGain     = −(5.0 × 0.18)       = −0.90°
+bodyRollCamber = −(2.52 × 0.355)     = −0.895°
+kpiCamber      = +0.144°
+sidewallCamber ≈ +0.47° (at RF ~1,370 lbs load)
+
+groundCamber_geom = staticCamber + casterGain + bodyRollCamber + kpiCamber + cornerRoll
+                  = −2.25 + (−0.90) + (−0.895) + 0.144 + 2.52 = −1.38°
+groundCamber      = −1.38 + 0.47 = −0.91°   (vs ideal −2.0°)
 ```
 
-**Oval LF (caster 3°):**
-```
-casterGain     = +(3 × 0.10)  = +0.30°
-bodyRollCamber = +(1.25 × 0.15) = +0.188°
-idealEffective = 0°
+This shows the static setting of −2.25° is not yet at the ideal −2.0° ground-frame. The optimizer accounts for this when selecting the recommended setup.
 
-optStaticCamber = 0 − 0.30 − 0.188 = −0.488° → rounds to −0.5°
+**Oval LF (static −0.25°, caster 3.0°):**
 ```
+cornerRoll     = 2.52° (same as RF)
+casterGain     = +(3.0 × 0.10)      = +0.30°
+bodyRollCamber = +(2.52 × 0.15)     = +0.378°
+kpiCamber      = −0.144°
+sidewallCamber ≈ +0.21° (at LF ~600 lbs load)
+
+groundCamber_geom = −0.25 + 0.30 + 0.378 + (−0.144) − 2.52 = −2.24°
+groundCamber      = −2.24 + 0.21 = −2.03°   (below ideal +0.75°)
+```
+
+The LF at −0.25° static is still well below the +0.75° ground ideal. Static must be set significantly more positive to achieve the target ground-frame angle.
 
 ### F8 Symmetric Camber
 
-For the figure 8, both fronts alternate between outside and inside roles equally. The optimal static camber averages the two ideal effective positions:
+For the figure 8, both fronts alternate between outside and inside roles equally. The optimal static camber is a compromise between the two roles. Because body roll partially cancels over a lap (left rolls one way, right the other), the calculation uses smaller effective roll:
 
 ```
-Ideal outside (RF/LF as outside): −4.5° effective
-Ideal inside (RF/LF as inside):    0.0° effective
+Ideal ground camber (outside role): −2.0°
+Ideal ground camber (inside role):  +0.75°
 
-Average ideal effective = (−4.5 + 0.0) / 2 = −2.25°
-
-optStaticCamber = −2.25 − (casterGain_avg) − (bodyRollCamber_avg)
+Average ideal ground = (−2.0 + 0.75) / 2 = −0.625°
 ```
 
-With symmetric 5.0° caster and minimal body roll:
+With symmetric 5.0° caster and canceling body roll (≈ 0 net):
 ```
 casterGain_avg     = (−(5×0.18) + (5×0.10)) / 2 = (−0.90 + 0.50)/2 = −0.20°
-bodyRollCamber_avg ≈ 0  (body roll cancels across left+right turns)
+sidewallCamber_avg ≈ +0.34° (average of outside/inside loads)
 
-optStaticCamber = −2.25 − (−0.20) − 0 = −2.05° ≈ −2.0° to −2.25°
+optStaticCamber ≈ −0.625 − (−0.20) − 0.34 ≈ −0.77°
 ```
 
-The optimizer found −3.5° as optimal for F8, which is more negative than this pure analytical result. The difference is because the optimizer also accounts for temperature effects (slightly cooler tires = better grip window), pressures, and the nonlinear grip function — the optimizer result is the ground truth.
+The optimizer found −2.25° as optimal for F8, which is substantially more negative than this analytical result. The difference arises because the optimizer also optimizes over temperature effects (cooler tires = better grip), the nonlinear grip function, and pressure interaction — the optimizer result is the ground truth. The analytical formula gives the direction (negative camber needed) but the optimizer refines the magnitude.
 
 ---
 
@@ -1017,7 +1187,7 @@ Shock settings still matter through the LLTD penalty — a very unbalanced LLTD 
 
 ## 16. All Setup Presets
 
-All oval setups use FCS 1336349 front struts (taxi/police package, ~475 lbs/in) and KYB 555603 rear shocks (shock only, 160 lbs/in stock rear spring), except Recommended which uses Monroe 171346 (civilian, ~440 lbs/in) on LF.
+All oval setups use FCS 1336349 front struts (taxi/police package, ~475 lbs/in) and KYB 555603 rear shocks (shock only, 160 lbs/in stock rear spring). The RECOMMENDED setup uses FCS 1336349 at both front positions (475 lbs/in).
 
 ### Setup A (Original — Calibration Baseline)
 *This is the "current setup" in the app. Used as the oval calibration baseline.*
@@ -1077,17 +1247,17 @@ All oval setups use FCS 1336349 front struts (taxi/police package, ~475 lbs/in) 
 | Cold PSI | 24 | 35 | 17.5 | 32 |
 
 ### Recommended Setup (Oval Optimizer Result)
-*Grid-searched over 180,880 combinations @ 90°F. Updated 2026-04-01 with full physics model: 4100 lbs race weight, RCH 3", SLA jounce 0.355°/°, KPI 9.5°, sidewall compliance, ground-frame camber.*
+*Grid-searched over 419,904 combinations @ 90°F. Updated 2026-04-14 with ground-frame camber model, Dixon geometric+elastic weight transfer, 0.813G apex G, 0.407G time-averaged G, mechanical trail caster model.*
 
 | Parameter | LF | RF | LR | RR |
 |---|---|---|---|---|
-| Shocks | 3 (FCS 1336349) | 1 (stiffest) | 1 | 1 |
+| Shocks | 4 (FCS 1336349) | 4 (FCS 1336349) | 1 (Monroe 550018) | 1 (Monroe 550018) |
 | Springs | 475 lbs/in | 475 lbs/in | 160 lbs/in | 160 lbs/in |
-| Camber | −0.25° | −2.25° | — | — |
-| Caster | 3.0° | 5.0° | — | — |
+| Camber | **+2.25° (positive)** | −3.0° | — | — |
+| Caster | 3.5° | 6.0° | — | — |
 | Toe | −0.25" | | | |
-| Cold PSI | 24 | 34.5 | 18 | 30 |
-| **Best lap** | **17.200s @ 90°F** | | | |
+| Cold PSI | 22 | 36 | 17 | 31 |
+| **Best lap** | **17.266s @ 90°F** | | | |
 
 ### F8 Baseline Setup
 *Real-world calibration run. NOT optimal — asymmetric caster causes right-turn difficulty. Used to verify the F8 model predicts ~23.3s.*
@@ -1102,17 +1272,17 @@ All oval setups use FCS 1336349 front struts (taxi/police package, ~475 lbs/in) 
 | Cold PSI | 35 | 35 | 30 | 30 |
 
 ### F8 Recommended Setup (F8 Optimizer Result)
-*Grid-searched over 34,884 combinations @ 75°F. Updated 2026-04-01 with full physics model. Symmetric caster mandatory for equal L/R performance.*
+*Grid-searched over 5,832 combinations @ 75°F. Updated 2026-04-14 with full physics model. Symmetric caster mandatory for equal L/R performance.*
 
 | Parameter | LF | RF | LR | RR |
 |---|---|---|---|---|
-| Shocks | 1 | 1 | 2 (KYB 555603) | 1 |
+| Shocks | 1 | 1 | 1 | 1 |
 | Springs | 475 lbs/in | 475 lbs/in | 160 lbs/in | 160 lbs/in |
-| Camber | −2.25° | −2.25° | — | — |
-| Caster | 5.0° | 5.0° | — | — |
+| Camber | −0.5° | −0.5° | — | — |
+| Caster | 6.5° | 6.5° | — | — |
 | Toe | −0.25" | | | |
 | Cold PSI | 34.5 | 34.5 | 29 | 29 |
-| **Best lap** | **23.145s @ 75°F** | | | |
+| **Best lap** | **23.017s @ 75°F** | | | |
 
 ---
 
@@ -1121,54 +1291,55 @@ All oval setups use FCS 1336349 front struts (taxi/police package, ~475 lbs/in) 
 ### Oval Grid Search
 
 The optimizer tested every possible combination of:
-- All available shock/strut part combinations (323 unique front+rear pairings from the parts database)
-- Caster: 3.0°–7.0° in 0.5° steps for each front corner
-- Camber: derived analytically from optimal effective camber formula
-- PSI: derived analytically from corner loads at OVAL_CORNER_G
+- All available shock/strut part combinations (LF×RF front pairings × LR×RR rear pairings from the parts database)
+- LF caster: 3.0°–7.0° in 0.5° steps (9 values), RF caster: 3.0°–7.0° in 0.5° steps (9 values)
+- Camber: swept independently LF −3.0° to +3.0° and RF −4.0° to −1.5° (grid search; not analytically derived)
+- PSI: derived analytically from corner loads at OVAL_CORNER_G = 0.407G
 - Toe: fixed at −0.25"
 
-**Total combinations: 180,880 | Best lap: 17.200s @ 90°F | vs. baseline 17.4s: −0.200s improvement**
+**Total combinations: 419,904 | Best lap: 17.266s @ 90°F | vs. baseline 17.4s: −0.134s improvement**
 
-The top result was verified by running a full 25-lap simulation with the thermal model. Model updated 2026-04-01 with measured race weight (4100 lbs), RCH 3", SLA jounce 0.355°/°, KPI 9.5°, sidewall compliance, ground-frame camber.
+Model updated 2026-04-14: ground-frame camber (tire-to-road angle at contact patch), Dixon geometric+elastic weight transfer (front RCH=3", rear RCH=4"), 0.813G instantaneous apex G for roll/geometry, 0.407G time-averaged G for pressure/thermal loads, mechanical trail caster model.
 
 | Parameter | LF | RF | LR | RR |
 |---|---|---|---|---|
-| Shocks | 3 (FCS 1336349) | 1 (stiffest) | 1 | 1 |
+| Shocks | 4 (FCS 1336349) | 4 (FCS 1336349) | 1 (Monroe 550018) | 1 (Monroe 550018) |
 | Springs | 475 lbs/in | 475 lbs/in | 160 lbs/in | 160 lbs/in |
-| Camber | −0.25° | −2.25° | — | — |
-| Caster | 3.0° | 5.0° | — | — |
-| Cold PSI | 24 | 34.5 | 18 | 30 |
+| Camber | **+2.25° (positive)** | −3.0° | — | — |
+| Caster | 3.5° | 6.0° | — | — |
+| Cold PSI | 22 | 36 | 17 | 31 |
 
 **Why this setup wins:**
-- Moderate LF + stiff RF/rear → front LLTD target ≈ 0.468 (near optimal 0.46)
-- Very stiff rear (rating 1) → rear carries proportionally more transfer → keeps rear planted
-- Analytically optimal camber (ground-frame): LF −0.25° accounts for SLA droop camber gain and sidewall compliance, achieving near-0° ground-frame at the contact patch; RF −2.25° reaches approximately −2.0° ground-frame (ideal for outside tire on this compound)
+- Balanced front shocks (4/4) + stiff rear (1/1) → LLTD = 0.460 (exactly optimal)
+- LF +2.25° static camber → +0.77° ground-frame (target +0.75°): inside-front generates camber thrust and runs flat contact patch at the apex
+- RF −3.0° static + 6.0° caster → −1.98° ground-frame (target −2.0°): mechanical trail ≈ 0.9" (sweet spot per trail model)
+- PSI analytically derived from Dixon corner loads: RF 36 cold for 1,370-lb corner load; LF 22 cold for 838-lb corner load
 
 ### Figure 8 Grid Search
 
 The optimizer tested every combination of:
-- All 323 unique shock pairings
-- Symmetric camber: −1.5° to −4.25° in 0.25° steps (12 values)
-- Symmetric caster: 3.0° to 7.0° in 0.5° steps (9 values)
+- All available shock pairings (front and rear)
+- Symmetric camber: −3.0° to 0° in 0.5° steps (7 values)
+- Symmetric caster: 3.0° to 8.0° in 0.5° steps (11 values)
 - PSI: derived analytically toward outside-corner load optimum
 - Toe: fixed at −0.25"
 
-**Total combinations: 34,884 | Best lap: 23.145s @ 75°F | vs. baseline 23.283s: −0.138s improvement**
+**Total combinations: 5,832 | Best lap: 23.017s @ 75°F | vs. baseline 23.283s: −0.266s improvement**
 
-Top 50 candidates were verified with full 20-lap simulations. Model updated 2026-04-01 with measured race weight (4100 lbs), RCH 3", SLA jounce 0.355°/°, KPI 9.5°, sidewall compliance, ground-frame camber.
+Model updated 2026-04-14 (same corrections as oval search above).
 
 | Parameter | LF | RF | LR | RR |
 |---|---|---|---|---|
-| Shocks | 1 | 1 | 2 (KYB 555603) | 1 |
+| Shocks | 1 | 1 | 1 | 1 |
 | Springs | 475 lbs/in | 475 lbs/in | 160 lbs/in | 160 lbs/in |
-| Camber | −2.25° | −2.25° | — | — |
-| Caster | 5.0° | 5.0° | — | — |
+| Camber | −0.5° | −0.5° | — | — |
+| Caster | 6.5° | 6.5° | — | — |
 | Cold PSI | 34.5 | 34.5 | 29 | 29 |
 
 **Why this setup wins:**
-- Stiff fronts + slightly softer LR rear achieves near 0.50 LLTD (optimal for balanced L/R turns in F8)
-- Symmetric −2.25° static camber: ground-frame model (with KPI, sidewall compliance, body roll) shows this achieves close to the ideal contact patch angle on both outside and inside tire roles
-- Symmetric 5.0° caster: equal steering effort and caster camber gain in both turn directions — mandatory for balanced F8 handling; asymmetric caster (see F8 Baseline) causes measurable L/R speed asymmetry
+- All-stiff shocks (1/1/1/1) → maximum LLTD balance for symmetric L/R turns in F8
+- Symmetric −0.5° static camber: F8 averages both outside and inside roles per corner — near-zero static gives the lowest combined penalty across both roles after ground-frame conversion
+- Symmetric 6.5° caster: mechanical trail at 6.5° ≈ 0.9–1.0" (near RF sweet spot); mandatory symmetry for equal handling in both turn directions
 
 ---
 
