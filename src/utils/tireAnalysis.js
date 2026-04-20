@@ -20,15 +20,14 @@ const RANKINE = 459.67;      // °F → °R conversion offset
 //
 // RF (always outside-loaded in left turns):
 //   Body roll partially "stands up" the RF even with neg camber — so outside edge
-//   will always carry some extra heat even at optimal setup.
-//   At recommended -3.5° static / -4.5° effective: RF outside ~9°F warmer than inside.
-//   At default -3.0° static / -3.9° effective: RF outside ~25°F warmer — needs more camber.
-//   Normal operating range: outside 5-15°F warmer. Flag beyond that.
+//   will always carry extra heat even at optimal setup.
+//   Empirical multi-session data at -3.0° to -3.5° static: outside 6–22°F warmer is normal.
+//   Warn below -22°F (insufficient camber) or above +5°F (inside hotter — too much camber).
 //
 // LF (always inside tire in left turns):
-//   Ideal effective = 0° (flat contact patch). Body roll adds positive camber.
-//   At recommended -1.25° static: inside ~6°F warmer (slightly over-negative).
-//   Ideal: inside ≈ outside (±5°F). Warn at ≥5°F deviation from equal.
+//   Body roll adds positive camber to LF in cornering, loading the inside edge.
+//   Empirical multi-session data at -1.5° static: inside 13–22°F hotter than outside is normal.
+//   Warn below 8°F (less than expected — body roll overcorrecting) or above 22°F (too much camber).
 
 /**
  * Analyze a single tire's temperature readings.
@@ -202,19 +201,20 @@ export function analyzeTire(inside, middle, outside, position, currentPressure =
       camberCalculation = inside - outside;  // positive = inside hotter
 
       if (isRF) {
-        // RF: outside running slightly warmer is expected (body roll partially stands RF up).
-        // Normal: outside 5-15°F warmer. Warn beyond that in either direction.
-        if (camberDiff < -25) {
+        // RF: outside running warmer is expected (primary loaded tire, body roll partially stands RF up).
+        // Empirical data (multi-session P71 at -3.0° to -3.5° static): outside 6–22°F warmer is normal.
+        // Warn outside that range in either direction.
+        if (camberDiff < -30) {
           tireRecommendations.push({
             type: 'camber', severity: 'critical',
-            message: `RF outside is ${Math.round(Math.abs(camberDiff))}°F hotter than inside — significantly insufficient negative camber. The tire is riding hard on its outside edge. Add negative camber to RF immediately.`,
+            message: `RF outside is ${Math.round(Math.abs(camberDiff))}°F hotter than inside — well beyond the normal 6–22°F range. Significantly insufficient negative camber; the tire is riding hard on its outside edge. Add negative camber to RF.`,
             action: 'more_negative',
           });
           if (overallSeverity !== 'critical') overallSeverity = 'critical';
-        } else if (camberDiff < -15) {
+        } else if (camberDiff < -22) {
           tireRecommendations.push({
             type: 'camber', severity: 'warning',
-            message: `RF outside is ${Math.round(Math.abs(camberDiff))}°F hotter than inside (normal: outside 5-15°F warmer). Insufficient negative camber — add negative camber to RF.`,
+            message: `RF outside is ${Math.round(Math.abs(camberDiff))}°F hotter than inside (normal: 6–22°F). More outside-edge heat than typical — consider adding negative camber to RF.`,
             action: 'more_negative',
           });
           if (overallSeverity === 'good') overallSeverity = 'warning';
@@ -225,49 +225,51 @@ export function analyzeTire(inside, middle, outside, position, currentPressure =
             action: 'less_negative',
           });
           if (overallSeverity !== 'critical') overallSeverity = 'critical';
-        } else if (camberDiff > 10) {
+        } else if (camberDiff > 5) {
           tireRecommendations.push({
             type: 'camber', severity: 'warning',
-            message: `RF inside is ${Math.round(camberDiff)}°F hotter than outside — slightly too much negative camber. Consider reducing negative camber on RF.`,
+            message: `RF inside is ${Math.round(camberDiff)}°F hotter than outside — the outside tire is not carrying expected load. Slightly too much negative camber; consider reducing RF static camber.`,
             action: 'less_negative',
           });
           if (overallSeverity === 'good') overallSeverity = 'warning';
         }
-        // camberDiff −15 to +10 → acceptable (outside 5-15°F warmer zone is nominal)
+        // camberDiff −22 to +5 → normal operating range for this car
 
       } else {
-        // LF: inside tire. Ideal effective = 0° (flat contact patch). Body roll adds positive.
-        // Optimal: inside ≈ outside (±5°F). Warn at 5°F to catch optimizer-level issues.
-        if (camberDiff > 12) {
+        // LF: inside tire on a left-turn oval. Body roll adds positive camber to LF in cornering,
+        // loading the inside edge. Empirical data (multi-session P71): LF inside runs 13–22°F hotter
+        // than outside as the normal operating range at -1.25° to -1.5° static.
+        // Normal: inside 8–22°F warmer. Warn beyond that in either direction.
+        if (camberDiff > 28) {
           tireRecommendations.push({
             type: 'camber', severity: 'critical',
-            message: `LF inside is ${Math.round(camberDiff)}°F hotter than outside — too much effective negative camber on the inside tire. Reduce LF negative camber.`,
+            message: `LF inside is ${Math.round(camberDiff)}°F hotter than outside — far above the normal 8–22°F range. Excessive negative camber is overloading the inside edge. Reduce LF static camber.`,
             action: 'less_negative',
           });
           if (overallSeverity !== 'critical') overallSeverity = 'critical';
-        } else if (camberDiff >= 5) {
+        } else if (camberDiff > 22) {
           tireRecommendations.push({
             type: 'camber', severity: 'warning',
-            message: `LF inside is ${Math.round(camberDiff)}°F hotter than outside (ideal: inside ≈ outside). Slightly too much effective negative camber — reduce LF static camber setting toward 0° effective in the corner.`,
+            message: `LF inside is ${Math.round(camberDiff)}°F hotter than outside (normal: 8–22°F). Slightly more inside-edge heat than expected — consider reducing LF static camber by 0.25°.`,
             action: 'less_negative',
           });
           if (overallSeverity === 'good') overallSeverity = 'warning';
-        } else if (camberDiff < -12) {
+        } else if (camberDiff < -5) {
           tireRecommendations.push({
             type: 'camber', severity: 'critical',
-            message: `LF outside is ${Math.round(Math.abs(camberDiff))}°F hotter than inside — body roll is overpowering static negative camber. Add negative camber to LF.`,
+            message: `LF outside is ${Math.round(Math.abs(camberDiff))}°F hotter than inside — body roll is completely overpowering static negative camber on the inside tire. Add significant negative camber to LF.`,
             action: 'more_negative',
           });
           if (overallSeverity !== 'critical') overallSeverity = 'critical';
-        } else if (camberDiff <= -5) {
+        } else if (camberDiff < 8) {
           tireRecommendations.push({
             type: 'camber', severity: 'warning',
-            message: `LF outside is ${Math.round(Math.abs(camberDiff))}°F hotter than inside — body roll may be overcoming static camber. Consider adding a small amount of negative camber to LF.`,
+            message: `LF inside is only ${Math.round(camberDiff)}°F hotter than outside (normal: 8–22°F). Less inside-edge heat than typical — body roll may be overcorrecting camber. Consider adding a small amount of negative camber to LF.`,
             action: 'more_negative',
           });
           if (overallSeverity === 'good') overallSeverity = 'warning';
         }
-        // camberDiff −4 to +4 → ideal range
+        // camberDiff 8–22 → normal operating range for this car
       }
     }
   }
@@ -335,13 +337,13 @@ export function analyzeFullCar(tires) {
     overallRecommendations.push({
       type: 'balance',
       severity: 'warning',
-      message: `Front tires are running ${Math.round(frontRearDiff)}°F hotter than rears on average. The front is doing more work — car may be understeering. Try reducing front tire pressure 1-2 PSI or increasing rear pressure 1-2 PSI. Also consider softening front shocks (compression).`
+      message: `Front tires are running ${Math.round(frontRearDiff)}°F hotter than rears on average. The front is doing more work — car may be understeering. Try reducing front tire pressure 1–2 PSI or increasing rear pressure 1–2 PSI. Shock valving is fixed (non-adjustable) — addressing imbalance through pressure and camber is the primary lever available.`
     });
   } else if (frontRearDiff < -20) {
     overallRecommendations.push({
       type: 'balance',
       severity: 'warning',
-      message: `Rear tires are running ${Math.round(Math.abs(frontRearDiff))}°F hotter than fronts on average. The rear is doing more work — car may be oversteering. Try reducing rear tire pressure 1-2 PSI or increasing front pressure 1-2 PSI. Also consider stiffening rear shocks (compression).`
+      message: `Rear tires are running ${Math.round(Math.abs(frontRearDiff))}°F hotter than fronts on average. The rear is doing more work — car may be oversteering. Try reducing rear tire pressure 1–2 PSI or increasing front pressure 1–2 PSI. Shock valving is fixed (non-adjustable) — pressure and camber are the primary adjustable levers.`
     });
   }
 
@@ -491,8 +493,8 @@ const perTireRecommendations = {
       RF: "Add 0.5-1.0° negative camber",       // more RF grip helps front bite on entry
     },
     Caster: {
-      LF: "Increase slightly",
-      RF: "Increase slightly",  // more RF caster = more dynamic neg camber in left turns = more RF grip
+      LF: "Increase slightly (alignment shop)",
+      RF: "Increase slightly (alignment shop)",  // more RF caster = more dynamic neg camber in left turns = more RF grip
     },
     "Front Toe": {
       "Front Toe": "Add toe-out slightly",  // more toe-out = better turn-in = less push on entry
@@ -528,7 +530,7 @@ const perTireRecommendations = {
     },
     Shock: {
       LF: "Less Compression",
-      LR: "Less Compression",
+      LR: "More Compression",
       RF: "Less Compression",       // soften RF = less front LLTD = front can grip more
       RR: "More Compression",       // stiffen RR = more rear LLTD = rear limits first
       "LF-Rebound": "Less Rebound",
@@ -557,11 +559,11 @@ const perTireRecommendations = {
     },
     Shock: {
       LF: "Leave alone",
-      LR: "Less Compression",
+      LR: "Leave alone",
       RF: "Leave alone",
       RR: "More Compression",       // stiffer RR controls how fast weight goes to rear on throttle
       "LF-Rebound": "More Rebound", // stiffer LF rebound = front doesn't unload as fast on throttle
-      "LR-Rebound": "Less Rebound",
+      "LR-Rebound": "Leave Alone",
       "RF-Rebound": "More Rebound", // stiffer RF rebound = front stays loaded longer under acceleration
       "RR-Rebound": "Leave Alone",
     },
@@ -588,8 +590,8 @@ const perTireRecommendations = {
       RF: "Reduce 0.5-1.0° negative camber",       // slightly less RF grip slows front rotation on entry
     },
     Caster: {
-      LF: "Decrease slightly",
-      RF: "Decrease slightly",  // less RF caster = less dynamic neg camber gain = less front rotation
+      LF: "Decrease slightly (alignment shop)",
+      RF: "Decrease slightly (alignment shop)",  // less RF caster = less dynamic neg camber gain = less front rotation
     },
     "Front Toe": {
       "Front Toe": "Reduce toe-out slightly",  // less toe-out = less aggressive turn-in = more stable entry
@@ -599,10 +601,10 @@ const perTireRecommendations = {
       LR: "Same compression",
       RF: "More Compression",       // stiffer RF comp = more front roll resistance = more front LLTD
       RR: "Less Compression",       // softer RR = less rear LLTD = rear doesn't break away as fast
-      "LF-Rebound": "Less Rebound", // stiffer LF rebound = LF stays down = more front roll resistance
-      "LR-Rebound": "More Rebound", // softer LR rebound = rear can settle = more rear grip on entry
+      "LF-Rebound": "More Rebound", // stiffer LF rebound = LF stays planted = more front roll resistance
+      "LR-Rebound": "Less Rebound", // softer LR rebound = rear can settle = more rear grip on entry
       "RF-Rebound": "Leave Alone",
-      "RR-Rebound": "More Rebound",
+      "RR-Rebound": "Less Rebound", // softer RR rebound = rear stays planted, doesn't snap back
     },
   },
   loose_middle: {
@@ -705,7 +707,7 @@ export function getHandlingRecommendations(condition, phase) {
         { component: 'RF Shock (Compression)', adjustment: 'Soften RF compression', effect: 'Allows the RF to load up faster and more freely on turn-in, reducing front LLTD and improving RF contact patch grip' },
         { component: 'LF Shock (Rebound)', adjustment: 'Soften LF rebound', effect: 'Left front can extend freely as body rolls, reducing front roll resistance — less front LLTD means more available front grip' },
         { component: 'RF Camber', adjustment: 'Add 0.25-0.5° negative camber to RF', effect: 'Improves RF contact patch orientation on entry — inside edge carries more load, increasing cornering grip' },
-        { component: 'RF Caster', adjustment: 'Increase RF caster', effect: 'Adds dynamic negative camber gain to the RF during steering input, increasing front grip exactly when it is needed most' },
+        { component: 'RF Caster', adjustment: 'Increase RF caster (alignment shop — not a trackside adjustment)', effect: 'Adds dynamic negative camber gain to the RF during steering input, increasing front grip exactly when it is needed most. Current Setup B RF caster is 8.0° — already near the high end; only increase if alignment shop confirms it is safe.' },
       ]
     },
     tight_middle: {
