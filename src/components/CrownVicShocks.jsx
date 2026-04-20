@@ -99,6 +99,102 @@ function SpringRateCalculator() {
   );
 }
 
+function SpringLoadCalculator() {
+  const [inputs, setInputs] = useState({ springRate: '', freeLength: '', installedHeight: '' });
+  const [result, setResult] = useState(null);
+  const [error, setError] = useState('');
+
+  const set = (field, val) => setInputs(prev => ({ ...prev, [field]: val }));
+
+  const calculate = () => {
+    const k = parseFloat(inputs.springRate);
+    const fl = parseFloat(inputs.freeLength);
+    const ih = parseFloat(inputs.installedHeight);
+
+    if ([k, fl, ih].some(isNaN) || k <= 0 || fl <= 0 || ih <= 0) {
+      setError('All fields must be positive numbers.');
+      setResult(null);
+      return;
+    }
+    if (ih >= fl) {
+      setError('Installed height must be less than free length (spring must be compressed).');
+      setResult(null);
+      return;
+    }
+
+    const deflection = fl - ih;
+    const load = k * deflection;
+
+    setError('');
+    setResult({ load: load.toFixed(1), deflection: deflection.toFixed(3) });
+  };
+
+  const reset = () => { setInputs({ springRate: '', freeLength: '', installedHeight: '' }); setResult(null); setError(''); };
+
+  return (
+    <div className="shock-info-card" style={{ marginTop: '16px' }}>
+      <h3 style={{ marginBottom: '12px' }}>Spring Load Calculator</h3>
+      <p style={{ color: 'var(--text-secondary)', marginBottom: '16px', fontSize: '0.9rem' }}>
+        Calculates how much weight the spring is supporting at ride height. Enter spring rate in lbs/in and heights in inches.
+      </p>
+
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(180px, 1fr))', gap: '12px', marginBottom: '16px' }}>
+        {[
+          { label: 'Spring Rate (lbs/in)', field: 'springRate', placeholder: 'e.g. 350' },
+          { label: 'Free Length (in)', field: 'freeLength', placeholder: 'e.g. 12.0' },
+          { label: 'Installed Height (in)', field: 'installedHeight', placeholder: 'e.g. 9.5' },
+        ].map(({ label, field, placeholder }) => (
+          <div key={field} style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
+            <label style={{ fontSize: '0.82rem', color: 'var(--text-secondary)', fontWeight: 600 }}>{label}</label>
+            <input
+              type="number"
+              min="0"
+              step="any"
+              placeholder={placeholder}
+              value={inputs[field]}
+              onChange={e => set(field, e.target.value)}
+              style={{
+                background: 'var(--bg-secondary)',
+                border: '1px solid var(--border)',
+                borderRadius: '6px',
+                color: 'var(--text-primary)',
+                padding: '8px 10px',
+                fontSize: '0.95rem',
+                width: '100%',
+              }}
+            />
+          </div>
+        ))}
+      </div>
+
+      <div style={{ display: 'flex', gap: '10px', marginBottom: '16px' }}>
+        <button onClick={calculate} className="calc-btn-primary">Calculate</button>
+        <button onClick={reset} className="calc-btn-secondary">Reset</button>
+      </div>
+
+      {error && <p style={{ color: 'var(--red)', fontSize: '0.9rem', marginBottom: '8px' }}>{error}</p>}
+
+      {result && (
+        <div style={{ background: 'var(--bg-secondary)', border: '1px solid var(--border)', borderRadius: '8px', padding: '16px' }}>
+          <div style={{ display: 'flex', flexWrap: 'wrap', gap: '24px', alignItems: 'center' }}>
+            <div>
+              <div style={{ fontSize: '0.8rem', color: 'var(--text-secondary)', marginBottom: '2px' }}>Installed Load</div>
+              <div style={{ fontSize: '1.8rem', fontWeight: 700, color: 'var(--green)' }}>{result.load} <span style={{ fontSize: '1rem', color: 'var(--text-secondary)' }}>lbs</span></div>
+            </div>
+            <div>
+              <div style={{ fontSize: '0.8rem', color: 'var(--text-secondary)', marginBottom: '2px' }}>Deflection</div>
+              <div style={{ fontSize: '1.2rem', fontWeight: 600, color: 'var(--text-primary)' }}>{result.deflection} in</div>
+            </div>
+          </div>
+          <p style={{ fontSize: '0.78rem', color: 'var(--text-secondary)', marginTop: '12px', marginBottom: 0 }}>
+            Formula: Load = k × (Free Length − Installed Height) = {inputs.springRate} × {result.deflection} = {result.load} lbs
+          </p>
+        </div>
+      )}
+    </div>
+  );
+}
+
 function CrownVicShocks() {
   // myRating: Claude independent analysis (10=softest, 0=stiffest)
   //   Factors: construction type (mono vs twin-tube), intended use, brand/product line, stroke length
@@ -330,6 +426,7 @@ function CrownVicShocks() {
       </div>
 
       <SpringRateCalculator />
+      <SpringLoadCalculator />
 
       <div className="handling-tips-considerations" style={{ marginTop: '32px' }}>
         <h3>Key Takeaways</h3>
