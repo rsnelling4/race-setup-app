@@ -215,12 +215,44 @@ function buildRecommendations(condition, phase, analysis, setup) {
     }
   }
 
-  // ── LLTD / SHOCK recommendations ────────────────────────────────────────────
+  // ── TOE recommendations ─────────────────────────────────────────────────────
+  // Toe-out helps turn-in (loosens), toe-in stabilizes (tightens).
+  // Current toe is setup.toe (negative = toe-out).
+  if (isTight && (phase === 'entry' || phase === 'middle')) {
+    const currentToe = setup.toe ?? 0;
+    if (currentToe > -0.25) {  // less than 1/4" toe-out — room to add
+      recs.push({
+        category: 'Front Toe',
+        corner: 'Both',
+        current: `${currentToe >= 0 ? '+' : ''}${currentToe.toFixed(4)}" (${currentToe >= 0 ? 'toe-in' : 'toe-out'})`,
+        suggestion: `Add toe-out: set to ${(currentToe - 0.125).toFixed(4)}" (add ~1/8" more toe-out)`,
+        reason: `More toe-out increases turn-in aggression — each front tire points slightly inward relative to direction of travel, creating a natural steering bias that helps the car rotate on entry and through mid-corner. This is one of the cheapest and fastest trackside adjustments.`,
+        primary: true,
+        priority: 2,
+      });
+    }
+  }
+
+  if (isLoose && phase === 'entry') {
+    const currentToe = setup.toe ?? 0;
+    if (currentToe < -0.125) {  // more than 1/8" toe-out — room to reduce
+      recs.push({
+        category: 'Front Toe',
+        corner: 'Both',
+        current: `${currentToe.toFixed(4)}" toe-out`,
+        suggestion: `Reduce toe-out: set to ${(currentToe + 0.125).toFixed(4)}" (reduce ~1/8" toe-out)`,
+        reason: `Less toe-out reduces turn-in aggression — the front tires are more aligned with direction of travel, which slows the initial yaw rotation on entry and gives the rear more time to settle before the car snaps into oversteer.`,
+        primary: true,
+        priority: 2,
+      });
+    }
+  }
+
+  // ── LLTD / SHOCK recommendations (secondary — only if pressure can't fix it) ─
   const targetLLTD = 0.46;
   const lltdGap = lltd - targetLLTD;
 
   if (isTight && lltdGap > 0.03) {
-    // Front LLTD too high — soften RF or stiffen RR
     const rfShock = setup.shocks.RF;
     const rrShock = setup.shocks.RR;
     recs.push({
@@ -228,25 +260,26 @@ function buildRecommendations(condition, phase, analysis, setup) {
       corner: 'RF',
       current: `RF shock rating ${rfShock}, front LLTD = ${(lltd * 100).toFixed(1)}% (target 46%)`,
       suggestion: rfShock < 8
-        ? `Soften RF shock by 1–2 steps (rating ${Math.min(10, rfShock + 2)})`
-        : `RF is already at maximum softness — focus on stiffening RR instead`,
-      reason: `Front LLTD ${(lltd * 100).toFixed(1)}% is above the 46% oval target, meaning the front is carrying a disproportionate share of lateral load transfer. Softening RF compression reduces front roll resistance, lowering front LLTD so the rear starts to share the load.`,
-      priority: 1,
+        ? `Soften RF shock by 1–2 steps (rating ${Math.min(10, rfShock + 2)}) — requires shock swap`
+        : `RF is already at maximum softness — stiffen RR instead (requires shock swap)`,
+      reason: `Front LLTD ${(lltd * 100).toFixed(1)}% is above the 46% oval target. Softening RF compression reduces front roll resistance, lowering front LLTD. Address pressure and toe first — shock swaps are a bigger commitment.`,
+      primary: false,
+      priority: 5,
     });
     if (rrShock > 1) {
       recs.push({
         category: 'Shock / LLTD',
         corner: 'RR',
         current: `RR shock rating ${rrShock}`,
-        suggestion: `Stiffen RR shock (rating ${Math.max(1, rrShock - 2)})`,
-        reason: `Stiffening RR compression increases rear roll resistance, pushing more load to the rear axle. This raises rear LLTD and reduces understeer.`,
-        priority: 2,
+        suggestion: `Stiffen RR shock (rating ${Math.max(1, rrShock - 2)}) — requires shock swap`,
+        reason: `Stiffening RR compression increases rear roll resistance, raising rear LLTD and reducing understeer.`,
+        primary: false,
+        priority: 6,
       });
     }
   }
 
   if (isLoose && lltdGap < -0.03) {
-    // Front LLTD too low — stiffen RF or soften RR
     const rfShock = setup.shocks.RF;
     const rrShock = setup.shocks.RR;
     recs.push({
@@ -254,102 +287,108 @@ function buildRecommendations(condition, phase, analysis, setup) {
       corner: 'RF',
       current: `RF shock rating ${rfShock}, front LLTD = ${(lltd * 100).toFixed(1)}% (target 46%)`,
       suggestion: rfShock > 1
-        ? `Stiffen RF shock by 1–2 steps (rating ${Math.max(1, rfShock - 2)})`
-        : `RF is already at maximum stiffness — focus on softening RR instead`,
-      reason: `Front LLTD ${(lltd * 100).toFixed(1)}% is below target — the front is not carrying enough lateral load. Stiffening RF shifts more load to the front, stabilizing the rear.`,
-      priority: 1,
+        ? `Stiffen RF shock by 1–2 steps (rating ${Math.max(1, rfShock - 2)}) — requires shock swap`
+        : `RF is already at maximum stiffness — soften RR instead (requires shock swap)`,
+      reason: `Front LLTD ${(lltd * 100).toFixed(1)}% is below target. Stiffening RF shifts more load to the front, stabilizing the rear. Address pressure and toe first — shock swaps are a bigger commitment.`,
+      primary: false,
+      priority: 5,
     });
     if (rrShock < 10) {
       recs.push({
         category: 'Shock / LLTD',
         corner: 'RR',
         current: `RR shock rating ${rrShock}`,
-        suggestion: `Soften RR shock (rating ${Math.min(10, rrShock + 2)})`,
-        reason: `Softening RR reduces rear roll resistance, lowering rear LLTD. The front now carries a higher share, stabilizing the rear against oversteer.`,
-        priority: 2,
+        suggestion: `Soften RR shock (rating ${Math.min(10, rrShock + 2)}) — requires shock swap`,
+        reason: `Softening RR reduces rear LLTD. The front carries a higher share, stabilizing the rear against oversteer.`,
+        primary: false,
+        priority: 6,
       });
     }
   }
 
-  // Entry-specific shock recommendations
+  // Entry-specific shock recommendations (secondary)
   if (phase === 'entry') {
     if (isLoose) {
       recs.push({
-        category: 'Shock (Entry Stability)',
+        category: 'Shock (Entry)',
         corner: 'LR',
         current: `LR shock rating ${setup.shocks.LR}`,
-        suggestion: `Soften LR rebound — allows the left rear to extend freely as the car rolls, keeping the rear axle planted on turn-in`,
-        reason: `On corner entry the car rolls left. If LR rebound is too stiff, the left rear is slow to extend, momentarily reducing LR contact — which unloads the rear and triggers oversteer.`,
-        priority: 2,
+        suggestion: `Soften LR rebound — requires shock swap`,
+        reason: `On corner entry the car rolls left. Stiff LR rebound is slow to extend, momentarily unloading the rear and triggering oversteer. Softer rebound lets the rear axle stay planted.`,
+        primary: false,
+        priority: 6,
       });
     }
     if (isTight) {
       recs.push({
-        category: 'Shock (Entry Response)',
+        category: 'Shock (Entry)',
         corner: 'LF',
         current: `LF shock rating ${setup.shocks.LF}`,
-        suggestion: `Soften LF rebound — allows the left front to extend freely on turn-in, reducing front roll resistance`,
-        reason: `On entry the car rolls left, compressing RF and extending LF. If LF rebound is stiff, it fights the roll and reduces RF loading — which cuts front grip exactly when you need it for turn-in.`,
-        priority: 2,
+        suggestion: `Soften LF rebound — requires shock swap`,
+        reason: `On entry the car rolls left, extending LF. Stiff LF rebound fights the roll, reducing RF loading and cutting front grip on turn-in.`,
+        primary: false,
+        priority: 6,
       });
     }
   }
 
-  // Exit-specific shock recommendations
+  // Exit-specific shock recommendations (secondary)
   if (phase === 'exit') {
     if (isLoose) {
       recs.push({
-        category: 'Shock (Exit Stability)',
+        category: 'Shock (Exit)',
         corner: 'RR',
         current: `RR shock rating ${setup.shocks.RR}`,
-        suggestion: `Stiffen RR rebound — keeps the RR compressed and planted as throttle loads the rear`,
-        reason: `On corner exit, the rear squats under power. If RR rebound is soft, the RR can bounce up and lose contact momentarily — exactly when rear grip is most needed. Stiff rebound holds the RR down.`,
-        priority: 2,
+        suggestion: `Stiffen RR rebound — requires shock swap`,
+        reason: `Under throttle the rear squats. Soft RR rebound lets the RR bounce up and lose contact exactly when rear grip is most needed. Stiffer rebound holds the RR down.`,
+        primary: false,
+        priority: 6,
       });
     }
     if (isTight) {
       recs.push({
-        category: 'Shock (Exit Grip)',
+        category: 'Shock (Exit)',
         corner: 'RF',
         current: `RF shock rating ${setup.shocks.RF}`,
-        suggestion: `Stiffen RF rebound — slows how fast the front unloads under acceleration, keeping RF steering authority longer`,
-        reason: `Under throttle, weight transfers rearward, unloading the front. Stiff RF rebound slows this unloading, keeping the RF engaged in steering on exit rather than going light and pushing.`,
-        priority: 2,
+        suggestion: `Stiffen RF rebound — requires shock swap`,
+        reason: `Under throttle, weight transfers rearward and unloads the front. Stiff RF rebound slows this unloading, keeping the RF engaged in steering on exit.`,
+        primary: false,
+        priority: 6,
       });
     }
   }
 
-  // ── CAMBER recommendations ───────────────────────────────────────────────────
+  // ── CAMBER recommendations (secondary — alignment shop required) ──────────────
   if (rfCorner) {
     const rfCamberDev = rfCorner.camberDev ?? 0;
     const rfGroundCamber = rfCorner.groundCamber ?? 0;
     const rfOptStatic = rfCorner.optStaticCamber;
 
     if (isTight && rfCamberDev > 0.3) {
-      // RF not negative enough — add camber for more RF grip
       recs.push({
-        category: 'Camber',
+        category: 'Camber (alignment shop)',
         corner: 'RF',
         current: `RF static ${setup.camber.RF}°, ground-frame ${rfGroundCamber.toFixed(2)}° (${rfCamberDev.toFixed(2)}° from ideal)`,
         suggestion: rfOptStatic != null
-          ? `Set RF static camber to ${rfOptStatic}° (model-optimal for this caster/roll)`
+          ? `Set RF static camber to ${rfOptStatic}° (model-optimal)`
           : `Add 0.25–0.5° negative camber to RF`,
-        reason: `RF ground-frame camber is ${rfCamberDev.toFixed(2)}° from ideal. More negative RF camber improves the outside-front contact patch orientation in left turns, directly adding grip where understeer begins.`,
-        priority: 1,
+        reason: `RF ground-frame camber is ${rfCamberDev.toFixed(2)}° from ideal. More negative RF camber improves outside-front contact patch in left turns. Requires alignment shop — address pressure and toe first.`,
+        primary: false,
+        priority: 7,
       });
     }
 
     if (isLoose && rfCamberDev < -0.3) {
-      // RF too negative — camber is past ideal, less RF grip control
       recs.push({
-        category: 'Camber',
+        category: 'Camber (alignment shop)',
         corner: 'RF',
         current: `RF static ${setup.camber.RF}°, ground-frame ${rfGroundCamber.toFixed(2)}° (${Math.abs(rfCamberDev).toFixed(2)}° past ideal)`,
         suggestion: rfOptStatic != null
           ? `Set RF static camber to ${rfOptStatic}° (model-optimal)`
           : `Reduce RF negative camber by 0.25°`,
-        reason: `RF camber is past the ideal ground angle — the outside-front tire has rolled too far inward, reducing the effective contact patch. Raising RF camber toward the model-optimal reduces front bite, balancing the front/rear grip ratio.`,
-        priority: 3,
+        reason: `RF camber is past ideal — effective contact patch is reduced. Raising RF camber toward model-optimal reduces front bite, balancing grip ratio. Requires alignment shop.`,
+        primary: false,
+        priority: 7,
       });
     }
   }
@@ -361,36 +400,39 @@ function buildRecommendations(condition, phase, analysis, setup) {
 
     if (isTight && lfDev > 0.5) {
       recs.push({
-        category: 'Camber',
+        category: 'Camber (alignment shop)',
         corner: 'LF',
-        current: `LF static ${setup.camber.LF}°, ground-frame ${lfGroundCamber.toFixed(2)}° (too negative for inside-front role)`,
+        current: `LF static ${setup.camber.LF}°, ground-frame ${lfGroundCamber.toFixed(2)}°`,
         suggestion: lfOptStatic != null
           ? `Set LF static camber to ${lfOptStatic}° (model-optimal)`
           : `Raise LF camber toward 0° static`,
-        reason: `LF is the inside-front in left turns. Too much negative camber means the inside edge is carrying excess load — confirmed by pyrometer (inside edge hotter). Raising LF camber toward 0° effective improves the inside-front contact patch and overall front grip.`,
-        priority: 2,
+        reason: `LF is the inside-front in left turns. Too much negative camber overloads the inside edge. Raising toward 0° effective improves the inside-front contact patch. Requires alignment shop.`,
+        primary: false,
+        priority: 8,
       });
     }
   }
 
-  // ── CASTER recommendations ───────────────────────────────────────────────────
+  // ── CASTER recommendations (secondary — alignment shop required) ──────────────
   if (isTight && (phase === 'entry' || phase === 'middle')) {
     const rfCaster = setup.caster.RF;
     if (rfCaster < 5.0) {
       recs.push({
-        category: 'Caster',
+        category: 'Caster (alignment shop)',
         corner: 'RF',
         current: `RF caster ${rfCaster}°`,
-        suggestion: `Increase RF caster toward 5.0°`,
-        reason: `RF caster adds dynamic negative camber gain during steering input. At ${rfCaster}°, the model calculates ${(rfCaster * 0.18).toFixed(2)}° of dynamic camber gain. At 5.0° it would be 0.90° — more RF grip on turn-in and mid-corner.`,
-        priority: 2,
+        suggestion: `Increase RF caster toward 5.0° — alignment shop required`,
+        reason: `RF caster adds dynamic negative camber gain during steering input. At ${rfCaster}° the model gives ${(rfCaster * 0.18).toFixed(2)}° dynamic gain; at 5.0° it would be 0.90°. More RF grip on turn-in and mid-corner. Address pressure and toe first.`,
+        primary: false,
+        priority: 8,
       });
     }
   }
 
-  // ── Sort by priority ─────────────────────────────────────────────────────────
-  recs.sort((a, b) => a.priority - b.priority);
-  return recs;
+  // ── Sort: primary first (by priority), then secondary (by priority) ───────────
+  const primary = recs.filter(r => r.primary !== false).sort((a, b) => a.priority - b.priority);
+  const secondary = recs.filter(r => r.primary === false).sort((a, b) => a.priority - b.priority);
+  return [...primary, ...secondary];
 }
 
 // ── Main component ───────────────────────────────────────────────────────────
@@ -552,36 +594,80 @@ export default function HandlingDiagnosis({ setup, setSetup, ambient, setAmbient
             <div className="handling-tip">
               The model does not identify a clear issue for this symptom with the current setup. The LLTD, pressures, and camber are all near their targets. Look to driver technique or track conditions.
             </div>
-          ) : (
-            <>
-              <p className="handling-desc" style={{ marginBottom: 12 }}>
-                {recs.length} specific {recs.length === 1 ? 'adjustment' : 'adjustments'} identified from your setup data. Start with the first item — it has the highest model impact. Make one change at a time and re-evaluate.
-              </p>
+          ) : (() => {
+            const primaryRecs = recs.filter(r => r.primary !== false);
+            const secondaryRecs = recs.filter(r => r.primary === false);
+            let num = 0;
+            return (
+              <>
+                <p className="handling-desc" style={{ marginBottom: 12 }}>
+                  Start with tire pressure and toe — they are the fastest, cheapest adjustments and cover most balance issues. Only move to the secondary section if pressure and toe are maxed out and the problem persists.
+                </p>
 
-              <div className="hd-recs-list">
-                {recs.map((r, i) => (
-                  <div key={i} className="hd-rec-card">
-                    <div className="hd-rec-header">
-                      <span className="hd-rec-num">{i + 1}</span>
-                      <span className="hd-rec-category">{r.category}</span>
-                      <span className="hd-rec-corner">{r.corner}</span>
+                {primaryRecs.length > 0 && (
+                  <>
+                    <div className="hd-tier-label primary">Pressure &amp; Toe — Try these first</div>
+                    <div className="hd-recs-list">
+                      {primaryRecs.map((r, i) => {
+                        num++;
+                        return (
+                          <div key={i} className="hd-rec-card">
+                            <div className="hd-rec-header">
+                              <span className="hd-rec-num">{num}</span>
+                              <span className="hd-rec-category">{r.category}</span>
+                              <span className="hd-rec-corner">{r.corner}</span>
+                            </div>
+                            <div className="hd-rec-body">
+                              <div className="hd-rec-row">
+                                <span className="hd-rec-field">Current</span>
+                                <span className="hd-rec-val current">{r.current}</span>
+                              </div>
+                              <div className="hd-rec-row">
+                                <span className="hd-rec-field">Suggested</span>
+                                <span className="hd-rec-val suggested">{r.suggestion}</span>
+                              </div>
+                              <div className="hd-rec-reason">{r.reason}</div>
+                            </div>
+                          </div>
+                        );
+                      })}
                     </div>
-                    <div className="hd-rec-body">
-                      <div className="hd-rec-row">
-                        <span className="hd-rec-field">Current</span>
-                        <span className="hd-rec-val current">{r.current}</span>
-                      </div>
-                      <div className="hd-rec-row">
-                        <span className="hd-rec-field">Suggested</span>
-                        <span className="hd-rec-val suggested">{r.suggestion}</span>
-                      </div>
-                      <div className="hd-rec-reason">{r.reason}</div>
+                  </>
+                )}
+
+                {secondaryRecs.length > 0 && (
+                  <>
+                    <div className="hd-tier-label secondary">If pressure &amp; toe aren't enough — bigger changes</div>
+                    <div className="hd-recs-list">
+                      {secondaryRecs.map((r, i) => {
+                        num++;
+                        return (
+                          <div key={i} className="hd-rec-card hd-rec-secondary">
+                            <div className="hd-rec-header">
+                              <span className="hd-rec-num">{num}</span>
+                              <span className="hd-rec-category">{r.category}</span>
+                              <span className="hd-rec-corner">{r.corner}</span>
+                            </div>
+                            <div className="hd-rec-body">
+                              <div className="hd-rec-row">
+                                <span className="hd-rec-field">Current</span>
+                                <span className="hd-rec-val current">{r.current}</span>
+                              </div>
+                              <div className="hd-rec-row">
+                                <span className="hd-rec-field">Suggested</span>
+                                <span className="hd-rec-val suggested">{r.suggestion}</span>
+                              </div>
+                              <div className="hd-rec-reason">{r.reason}</div>
+                            </div>
+                          </div>
+                        );
+                      })}
                     </div>
-                  </div>
-                ))}
-              </div>
-            </>
-          )}
+                  </>
+                )}
+              </>
+            );
+          })()}
         </div>
       )}
 
