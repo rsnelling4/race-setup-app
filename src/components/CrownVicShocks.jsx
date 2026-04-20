@@ -106,19 +106,19 @@ function CrownVicShocks() {
   const rearShocks = [
     { manufacturer: 'Monroe', partNumber: '5993', type: 'OESpectrum (Twin-Tube)', intendedUse: 'Base Model / LX', compressed: 12.5, extended: 21.25, stroke: 8.75, myRating: 10 },
     { manufacturer: 'Monroe', partNumber: '210108', type: 'Restore (Twin-Tube)', intendedUse: 'Economy (Mustang)', compressed: 12.21, extended: 20.04, stroke: 7.84, myRating: 10 },
-    { manufacturer: 'Monroe', partNumber: '210149', type: 'Restore', intendedUse: 'Base Model / LX', compressed: 12.28, extended: 20.04, stroke: 7.76, myRating: 9 },
+    { manufacturer: 'Monroe', partNumber: '210149', type: 'Restore (Twin-Tube)', intendedUse: 'Base Model / LX', compressed: 12.28, extended: 20.04, stroke: 7.76, myRating: 9 },
     { manufacturer: 'PRT', partNumber: '173898', type: 'Shock Absorber (Twin-Tube)', intendedUse: 'Base Model / LX (Mustang)', compressed: 12.21, extended: 20.04, stroke: 7.84, myRating: 8 },
     { manufacturer: 'Motorcraft', partNumber: 'ASH24539 06+', type: 'Shock Absorber (Twin-Tube)', intendedUse: 'Standard Duty', compressed: 12.4, extended: 20.1, stroke: 7.7, rating: 8, myRating: 8 },
     { manufacturer: 'FCS', partNumber: '341967', type: 'Shock Absorber (Twin-Tube)', intendedUse: 'Base Model / LX', compressed: 12.56, extended: 20.2, stroke: 7.64, rating: 8, myRating: 8 },
     { manufacturer: 'Duralast', partNumber: 'TS33-31962B', type: 'Shock Absorber (Twin-Tube)', intendedUse: 'Base Model', compressed: 12.56, extended: 20.16, stroke: 7.6, rating: 8, myRating: 8 },
-    { manufacturer: 'FCS', partNumber: '341587', type: 'Shock Absorber (Twin-Tube)', intendedUse: 'GT Base / Original Ride (Mustang)', compressed: 12.2, extended: 20.08, stroke: 7.88, rating: 8, myRating: 8 },
+    { manufacturer: 'FCS', partNumber: '341587', type: 'Shock Absorber (Twin-Tube)', intendedUse: 'GT Base / Original Ride (Mustang)', compressed: 12.2, extended: 20.08, stroke: 7.88, rating: 8, myRating: 7 },
     { manufacturer: 'Monroe', partNumber: '5783', type: 'OESpectrum (Twin-Tube)', intendedUse: 'Original Ride Quality (Mustang)', compressed: 12.5, extended: 20.0, stroke: 7.5, rating: 8, myRating: 8 },
     { manufacturer: 'Gabriel', partNumber: '69593', type: 'Ultra (Twin-Tube)', intendedUse: 'Convertible / Original Ride (Mustang)', compressed: 12.56, extended: 20.07, stroke: 7.51, rating: 7, myRating: 7 },
     { manufacturer: 'Gabriel', partNumber: '69592', type: 'Ultra (Twin-Tube)', intendedUse: 'Coupe / Original Ride (Mustang)', compressed: 12.56, extended: 20.07, stroke: 7.51, rating: 7, myRating: 7 },
     { manufacturer: 'KYB', partNumber: '349026', type: 'Excel-G (Twin-Tube)', intendedUse: 'GT Model / Original Ride (Mustang)', compressed: 12.2, extended: 20.03, stroke: 7.83, rating: 7, myRating: 7 },
     { manufacturer: 'Gabriel', partNumber: '69575', type: 'Ultra (Twin-Tube)', intendedUse: 'Base Model / LX', compressed: 12.4, extended: 20.16, stroke: 7.76, rating: 7, myRating: 7 },
     { manufacturer: 'KYB', partNumber: '555601', type: 'Gas-a-Just (Monotube)', intendedUse: 'Performance Upgrade', compressed: 12.92, extended: 20.09, stroke: 7.17, rating: 5, myRating: 4 },
-    { manufacturer: 'FCS', partNumber: 'DT551380', type: 'Monotube Gas Charged', intendedUse: 'Base Model', compressed: 12.99, extended: 20.0, stroke: 7.01, rating: 5, myRating: 4 },
+    { manufacturer: 'FCS', partNumber: 'DT551380', type: 'Monotube Gas Charged', intendedUse: 'Base Model', compressed: 12.99, extended: 20.0, stroke: 7.01, rating: 5, myRating: 5 },
     { manufacturer: 'Motorcraft', partNumber: 'ASH12277 03-05', type: 'Shock Absorber (Twin-Tube)', intendedUse: 'Heavy Duty / Handling', compressed: 12.5, extended: 20.26, stroke: 7.76, rating: 4, myRating: 4 },
     { manufacturer: 'KYB', partNumber: '554355', type: 'Gas-A-Just (Monotube)', intendedUse: 'Increased Handling (Mustang)', compressed: 12.79, extended: 20.03, stroke: 7.24, rating: 4, myRating: 3 },
     { manufacturer: 'PRT', partNumber: '194510', type: 'Shock Absorber (Twin-Tube)', intendedUse: 'Police / Taxi', compressed: 12.28, extended: 20.04, stroke: 7.76, rating: 4, myRating: 3 },
@@ -127,6 +127,7 @@ function CrownVicShocks() {
     { manufacturer: 'PRT', partNumber: '194574', type: 'Shock Absorber (Twin-Tube)', intendedUse: 'Police / Taxi', compressed: 12.99, extended: 19.88, stroke: 6.89, rating: 3, myRating: 2 },
     { manufacturer: 'KYB', partNumber: '555603', type: 'Gas-a-Just (Monotube)', intendedUse: 'Police / Taxi', compressed: 12.92, extended: 20.09, stroke: 7.17, rating: 2, myRating: 1 },
     { manufacturer: 'Monroe', partNumber: '550018', type: 'Magnum Severe Service (Twin-Tube)', intendedUse: 'Police / Taxi', compressed: 12.5, extended: 20.0, stroke: 7.5, rating: 1, myRating: 1 },
+    { manufacturer: 'Monroe', partNumber: '550055', type: 'Magnum Severe Service (Twin-Tube)', intendedUse: 'Police Interceptor', compressed: 12.375, extended: 20.125, stroke: 7.75, myRating: 1 },
   ];
 
   const frontStruts = [
@@ -138,7 +139,6 @@ function CrownVicShocks() {
     { manufacturer: 'FCS', partNumber: '1336349', type: 'Strut Assembly (Twin-Tube)', intendedUse: 'Police / Taxi', compressed: 11.85, extended: 15.94, stroke: 4.09, myRating: 4 },
     { manufacturer: 'PRT', partNumber: '710415', type: 'Strut Assembly (Twin-Tube)', intendedUse: 'Police / Taxi', compressed: 12.28, extended: 15.71, stroke: 3.43, myRating: 3 },
     { manufacturer: 'Monroe', partNumber: '271346', type: 'Quick-Strut (Twin-Tube)', intendedUse: 'Police / Taxi', compressed: 12.25, extended: 15.52, stroke: 3.27, myRating: 2 },
-    { manufacturer: 'Monroe', partNumber: '550055', type: 'Magnum Severe Service (Twin-Tube)', intendedUse: 'Police Interceptor', compressed: 12.375, extended: 20.125, stroke: 7.75, myRating: 1 },
   ];
 
   // Rating color: 10=soft(green), 0=stiff(red)
@@ -337,7 +337,7 @@ function CrownVicShocks() {
           <li>Damping rate (stiffness) is determined entirely by internal valving — stroke length does not set how stiff a shock feels, only how much travel is available.</li>
           <li>Monotube shocks operate at roughly 2–2.5× the gas pressure of twin-tube units (~360 psi vs ~150 psi). This, combined with a single working chamber, makes them inherently firmer and more responsive than twin-tube equivalents.</li>
           <li>Police/Taxi rated shocks use significantly firmer valving designed for high-speed stability under sustained heavy load — commonly used in performance and track applications for the same reason.</li>
-          <li>Monroe "Magnum Severe Service" (twin-tube) and KYB "Gas-A-Just" (monotube) in Police/Taxi spec are the stiffest options in this list, both rated 1 by both sources.</li>
+          <li>Monroe "Magnum Severe Service" (550018 and 550055, twin-tube) and KYB "Gas-A-Just" (monotube) in Police/Taxi spec are the stiffest rear options in this list, all rated 1.</li>
           <li>Monroe "Restore" is a budget economy line targeting minimum-spec replacement — not a performance product and not tuned to match OE damping precisely.</li>
           <li>Monroe "OESpectrum" and "Quick-Strut" are quality OE-match products, a meaningful step above Restore in consistency and durability even though both are comfort-oriented.</li>
           <li>Stroke length affects how stiffness is perceived: a short-stroke shock will bottom out sooner on rough surfaces and feel harsher, even if its valving is not particularly stiff.</li>
