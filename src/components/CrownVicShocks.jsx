@@ -1,3 +1,104 @@
+import { useState } from 'react';
+
+function SpringRateCalculator() {
+  const [inputs, setInputs] = useState({ outerDiam: '', innerDiam: '', wireDiam: '', activeCoils: '' });
+  const [result, setResult] = useState(null);
+  const [error, setError] = useState('');
+
+  const set = (field, val) => setInputs(prev => ({ ...prev, [field]: val }));
+
+  const calculate = () => {
+    const od = parseFloat(inputs.outerDiam);
+    const id = parseFloat(inputs.innerDiam);
+    const wd = parseFloat(inputs.wireDiam);
+    const ac = parseFloat(inputs.activeCoils);
+
+    if ([od, id, wd, ac].some(isNaN) || od <= 0 || id <= 0 || wd <= 0 || ac <= 0) {
+      setError('All fields must be positive numbers.');
+      setResult(null);
+      return;
+    }
+    if (wd >= od / 2 || wd >= id / 2) {
+      setError('Wire diameter must be smaller than the coil radii.');
+      setResult(null);
+      return;
+    }
+
+    // Mean coil diameter = (OD + ID) / 2
+    const meanDiam = (od + id) / 2;
+    const k = (11250000 * Math.pow(wd, 4)) / (8 * Math.pow(meanDiam, 3) * ac);
+
+    setError('');
+    setResult({ k: k.toFixed(1), meanDiam: meanDiam.toFixed(3) });
+  };
+
+  const reset = () => { setInputs({ outerDiam: '', innerDiam: '', wireDiam: '', activeCoils: '' }); setResult(null); setError(''); };
+
+  return (
+    <div className="shock-info-card" style={{ marginTop: '32px' }}>
+      <h3 style={{ marginBottom: '12px' }}>Spring Rate Calculator</h3>
+      <p style={{ color: 'var(--text-secondary)', marginBottom: '16px', fontSize: '0.9rem' }}>
+        Calculates coil spring rate using the standard steel spring formula. All measurements in inches.
+      </p>
+
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(180px, 1fr))', gap: '12px', marginBottom: '16px' }}>
+        {[
+          { label: 'Outer Diameter (in)', field: 'outerDiam', placeholder: 'e.g. 4.5' },
+          { label: 'Inner Diameter (in)', field: 'innerDiam', placeholder: 'e.g. 3.5' },
+          { label: 'Wire Diameter (in)', field: 'wireDiam', placeholder: 'e.g. 0.5' },
+          { label: 'Active Coils', field: 'activeCoils', placeholder: 'e.g. 6.5' },
+        ].map(({ label, field, placeholder }) => (
+          <div key={field} style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
+            <label style={{ fontSize: '0.82rem', color: 'var(--text-secondary)', fontWeight: 600 }}>{label}</label>
+            <input
+              type="number"
+              min="0"
+              step="any"
+              placeholder={placeholder}
+              value={inputs[field]}
+              onChange={e => set(field, e.target.value)}
+              style={{
+                background: 'var(--bg-secondary)',
+                border: '1px solid var(--border)',
+                borderRadius: '6px',
+                color: 'var(--text-primary)',
+                padding: '8px 10px',
+                fontSize: '0.95rem',
+                width: '100%',
+              }}
+            />
+          </div>
+        ))}
+      </div>
+
+      <div style={{ display: 'flex', gap: '10px', marginBottom: '16px' }}>
+        <button onClick={calculate} className="calc-btn-primary">Calculate</button>
+        <button onClick={reset} className="calc-btn-secondary">Reset</button>
+      </div>
+
+      {error && <p style={{ color: 'var(--red)', fontSize: '0.9rem', marginBottom: '8px' }}>{error}</p>}
+
+      {result && (
+        <div style={{ background: 'var(--bg-secondary)', border: '1px solid var(--border)', borderRadius: '8px', padding: '16px' }}>
+          <div style={{ display: 'flex', flexWrap: 'wrap', gap: '24px', alignItems: 'center' }}>
+            <div>
+              <div style={{ fontSize: '0.8rem', color: 'var(--text-secondary)', marginBottom: '2px' }}>Spring Rate</div>
+              <div style={{ fontSize: '1.8rem', fontWeight: 700, color: 'var(--green)' }}>{result.k} <span style={{ fontSize: '1rem', color: 'var(--text-secondary)' }}>lbs/in</span></div>
+            </div>
+            <div>
+              <div style={{ fontSize: '0.8rem', color: 'var(--text-secondary)', marginBottom: '2px' }}>Mean Coil Diameter</div>
+              <div style={{ fontSize: '1.2rem', fontWeight: 600, color: 'var(--text-primary)' }}>{result.meanDiam} in</div>
+            </div>
+          </div>
+          <p style={{ fontSize: '0.78rem', color: 'var(--text-secondary)', marginTop: '12px', marginBottom: 0 }}>
+            Formula: k = (11,250,000 × d⁴) / (8 × D³ × N) — where D = mean coil diameter = (OD + ID) / 2
+          </p>
+        </div>
+      )}
+    </div>
+  );
+}
+
 function CrownVicShocks() {
   // myRating: Claude independent analysis (10=softest, 0=stiffest)
   //   Factors: construction type (mono vs twin-tube), intended use, brand/product line, stroke length
@@ -227,6 +328,8 @@ function CrownVicShocks() {
         <h3 className="section-sub-header">Front Strut &amp; Coil Spring Assemblies</h3>
         <ShockTable data={frontStruts} />
       </div>
+
+      <SpringRateCalculator />
 
       <div className="handling-tips-considerations" style={{ marginTop: '32px' }}>
         <h3>Key Takeaways</h3>

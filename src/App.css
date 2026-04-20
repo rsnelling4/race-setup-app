@@ -327,6 +327,32 @@
   color: var(--red);
 }
 
+.calc-btn-primary {
+  padding: 9px 24px;
+  background: var(--accent);
+  color: white;
+  border: none;
+  border-radius: 8px;
+  font-size: 0.95rem;
+  font-weight: 600;
+  cursor: pointer;
+  transition: opacity 0.2s;
+}
+.calc-btn-primary:hover { opacity: 0.85; }
+
+.calc-btn-secondary {
+  padding: 9px 20px;
+  background: transparent;
+  color: var(--text-secondary);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  font-size: 0.95rem;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.2s;
+}
+.calc-btn-secondary:hover { border-color: var(--accent); color: var(--text-primary); }
+
 /* ===== COLOR UTILITIES ===== */
 .green-text {
   color: var(--green);
