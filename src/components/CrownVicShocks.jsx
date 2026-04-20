@@ -1,4 +1,61 @@
-import { useState } from 'react';
+import { useState, useRef, useEffect } from 'react';
+
+function Tooltip({ text }) {
+  const [visible, setVisible] = useState(false);
+  const ref = useRef(null);
+
+  useEffect(() => {
+    if (!visible) return;
+    const handler = (e) => { if (ref.current && !ref.current.contains(e.target)) setVisible(false); };
+    document.addEventListener('mousedown', handler);
+    return () => document.removeEventListener('mousedown', handler);
+  }, [visible]);
+
+  return (
+    <span ref={ref} style={{ position: 'relative', display: 'inline-flex', alignItems: 'center', marginLeft: '5px' }}>
+      <button
+        type="button"
+        onClick={() => setVisible(v => !v)}
+        style={{
+          background: 'var(--accent)',
+          border: 'none',
+          borderRadius: '50%',
+          width: '16px',
+          height: '16px',
+          fontSize: '10px',
+          fontWeight: 700,
+          color: 'white',
+          cursor: 'pointer',
+          lineHeight: '16px',
+          padding: 0,
+          flexShrink: 0,
+        }}
+        aria-label="Help"
+      >?</button>
+      {visible && (
+        <span style={{
+          position: 'absolute',
+          bottom: '22px',
+          left: '50%',
+          transform: 'translateX(-50%)',
+          background: 'var(--bg-primary)',
+          border: '1px solid var(--accent)',
+          borderRadius: '8px',
+          padding: '10px 12px',
+          fontSize: '0.78rem',
+          color: 'var(--text-primary)',
+          width: '220px',
+          zIndex: 100,
+          lineHeight: 1.5,
+          boxShadow: '0 4px 16px rgba(0,0,0,0.4)',
+          whiteSpace: 'normal',
+        }}>
+          {text}
+        </span>
+      )}
+    </span>
+  );
+}
 
 function SpringRateCalculator() {
   const [inputs, setInputs] = useState({ outerDiam: '', innerDiam: '', wireDiam: '', activeCoils: '' });
@@ -43,13 +100,13 @@ function SpringRateCalculator() {
 
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(180px, 1fr))', gap: '12px', marginBottom: '16px' }}>
         {[
-          { label: 'Outer Diameter (in)', field: 'outerDiam', placeholder: 'e.g. 4.5' },
-          { label: 'Inner Diameter (in)', field: 'innerDiam', placeholder: 'e.g. 3.5' },
-          { label: 'Wire Diameter (in)', field: 'wireDiam', placeholder: 'e.g. 0.5' },
-          { label: 'Active Coils', field: 'activeCoils', placeholder: 'e.g. 6.5' },
-        ].map(({ label, field, placeholder }) => (
+          { label: 'Outer Diameter (in)', field: 'outerDiam', placeholder: 'e.g. 4.5', tip: 'Measure across the outside of the coil from one side to the other (not the wire itself). Use calipers or a ruler on the widest point of the spring.' },
+          { label: 'Inner Diameter (in)', field: 'innerDiam', placeholder: 'e.g. 3.5', tip: 'Measure across the inside opening of the coil. If you only have OD and wire diameter, Inner Diameter = OD − (2 × wire diameter).' },
+          { label: 'Wire Diameter (in)', field: 'wireDiam', placeholder: 'e.g. 0.5', tip: 'Measure the thickness of the spring wire itself using calipers. Measure on a straight section, not at a bend.' },
+          { label: 'Active Coils', field: 'activeCoils', placeholder: 'e.g. 6.5', tip: 'Count the coils that are NOT touching or ground flat at the ends. Typically total coils minus 1.5–2. Partial coils count as fractions (e.g. 6.5).' },
+        ].map(({ label, field, placeholder, tip }) => (
           <div key={field} style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
-            <label style={{ fontSize: '0.82rem', color: 'var(--text-secondary)', fontWeight: 600 }}>{label}</label>
+            <label style={{ fontSize: '0.82rem', color: 'var(--text-secondary)', fontWeight: 600, display: 'flex', alignItems: 'center' }}>{label}<Tooltip text={tip} /></label>
             <input
               type="number"
               min="0"
@@ -140,12 +197,12 @@ function SpringLoadCalculator() {
 
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(180px, 1fr))', gap: '12px', marginBottom: '16px' }}>
         {[
-          { label: 'Spring Rate (lbs/in)', field: 'springRate', placeholder: 'e.g. 350' },
-          { label: 'Free Length (in)', field: 'freeLength', placeholder: 'e.g. 12.0' },
-          { label: 'Installed Height (in)', field: 'installedHeight', placeholder: 'e.g. 9.5' },
-        ].map(({ label, field, placeholder }) => (
+          { label: 'Spring Rate (lbs/in)', field: 'springRate', placeholder: 'e.g. 350', tip: 'The spring rate from the manufacturer spec sheet or calculated using the Spring Rate Calculator above. Units must be lbs per inch.' },
+          { label: 'Free Length (in)', field: 'freeLength', placeholder: 'e.g. 12.0', tip: 'The uncompressed length of the spring with no load on it. Measure with the spring off the car, standing upright on a flat surface.' },
+          { label: 'Installed Height (in)', field: 'installedHeight', placeholder: 'e.g. 9.5', tip: 'Measure from the lower spring perch to the upper spring perch with the car at normal ride height. On a Crown Vic front, this is typically around 8.0–9.5".' },
+        ].map(({ label, field, placeholder, tip }) => (
           <div key={field} style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
-            <label style={{ fontSize: '0.82rem', color: 'var(--text-secondary)', fontWeight: 600 }}>{label}</label>
+            <label style={{ fontSize: '0.82rem', color: 'var(--text-secondary)', fontWeight: 600, display: 'flex', alignItems: 'center' }}>{label}<Tooltip text={tip} /></label>
             <input
               type="number"
               min="0"
@@ -191,6 +248,158 @@ function SpringLoadCalculator() {
           </p>
         </div>
       )}
+    </div>
+  );
+}
+
+function InstalledHeightCalculator() {
+  const [inputs, setInputs] = useState({ springRate: '', freeLength: '', targetLoad: '' });
+  const [result, setResult] = useState(null);
+  const [error, setError] = useState('');
+
+  const set = (field, val) => setInputs(prev => ({ ...prev, [field]: val }));
+
+  const calculate = () => {
+    const k = parseFloat(inputs.springRate);
+    const fl = parseFloat(inputs.freeLength);
+    const tl = parseFloat(inputs.targetLoad);
+
+    if ([k, fl, tl].some(isNaN) || k <= 0 || fl <= 0 || tl <= 0) {
+      setError('All fields must be positive numbers.');
+      setResult(null);
+      return;
+    }
+    const deflection = tl / k;
+    const installedHeight = fl - deflection;
+    if (installedHeight <= 0) {
+      setError('Target load requires more deflection than the free length allows. Reduce target load or use a higher spring rate.');
+      setResult(null);
+      return;
+    }
+
+    setError('');
+    setResult({ installedHeight: installedHeight.toFixed(3), deflection: deflection.toFixed(3) });
+  };
+
+  const reset = () => { setInputs({ springRate: '', freeLength: '', targetLoad: '' }); setResult(null); setError(''); };
+
+  return (
+    <div className="shock-info-card" style={{ marginTop: '16px' }}>
+      <h3 style={{ marginBottom: '12px' }}>Installed Height for Target Load</h3>
+      <p style={{ color: 'var(--text-secondary)', marginBottom: '16px', fontSize: '0.9rem' }}>
+        Given a desired spring load at ride height, calculates the installed height you need to achieve it.
+      </p>
+
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(180px, 1fr))', gap: '12px', marginBottom: '16px' }}>
+        {[
+          { label: 'Spring Rate (lbs/in)', field: 'springRate', placeholder: 'e.g. 417.5', tip: 'The spring rate from spec sheet or calculated with the Spring Rate Calculator above. Units must be lbs per inch.' },
+          { label: 'Free Length (in)', field: 'freeLength', placeholder: 'e.g. 11.0', tip: 'The uncompressed length of the spring with no load on it. Measure with the spring off the car, standing upright on a flat surface.' },
+          { label: 'Target Load (lbs)', field: 'targetLoad', placeholder: 'e.g. 1050', tip: 'The spring load you want to achieve at ride height. For a P71 Crown Vic front, a typical target is 900–1,200 lbs per corner.' },
+        ].map(({ label, field, placeholder, tip }) => (
+          <div key={field} style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
+            <label style={{ fontSize: '0.82rem', color: 'var(--text-secondary)', fontWeight: 600, display: 'flex', alignItems: 'center' }}>{label}<Tooltip text={tip} /></label>
+            <input
+              type="number"
+              min="0"
+              step="any"
+              placeholder={placeholder}
+              value={inputs[field]}
+              onChange={e => set(field, e.target.value)}
+              style={{
+                background: 'var(--bg-secondary)',
+                border: '1px solid var(--border)',
+                borderRadius: '6px',
+                color: 'var(--text-primary)',
+                padding: '8px 10px',
+                fontSize: '0.95rem',
+                width: '100%',
+              }}
+            />
+          </div>
+        ))}
+      </div>
+
+      <div style={{ display: 'flex', gap: '10px', marginBottom: '16px' }}>
+        <button onClick={calculate} className="calc-btn-primary">Calculate</button>
+        <button onClick={reset} className="calc-btn-secondary">Reset</button>
+      </div>
+
+      {error && <p style={{ color: 'var(--red)', fontSize: '0.9rem', marginBottom: '8px' }}>{error}</p>}
+
+      {result && (
+        <div style={{ background: 'var(--bg-secondary)', border: '1px solid var(--border)', borderRadius: '8px', padding: '16px' }}>
+          <div style={{ display: 'flex', flexWrap: 'wrap', gap: '24px', alignItems: 'center' }}>
+            <div>
+              <div style={{ fontSize: '0.8rem', color: 'var(--text-secondary)', marginBottom: '2px' }}>Required Installed Height</div>
+              <div style={{ fontSize: '1.8rem', fontWeight: 700, color: 'var(--green)' }}>{result.installedHeight} <span style={{ fontSize: '1rem', color: 'var(--text-secondary)' }}>in</span></div>
+            </div>
+            <div>
+              <div style={{ fontSize: '0.8rem', color: 'var(--text-secondary)', marginBottom: '2px' }}>Required Deflection</div>
+              <div style={{ fontSize: '1.2rem', fontWeight: 600, color: 'var(--text-primary)' }}>{result.deflection} in</div>
+            </div>
+          </div>
+          <p style={{ fontSize: '0.78rem', color: 'var(--text-secondary)', marginTop: '12px', marginBottom: 0 }}>
+            Formula: Installed Height = Free Length − (Target Load ÷ k) = {inputs.freeLength} − ({inputs.targetLoad} ÷ {inputs.springRate}) = {result.installedHeight} in
+          </p>
+        </div>
+      )}
+    </div>
+  );
+}
+
+function SpringReferenceTable() {
+  const rows = [
+    { freeLength: 12.0, installedHeight: 8.0, deflection: 4.0, load: (417.5 * 4.0).toFixed(0), notes: 'Very high preload' },
+    { freeLength: 11.0, installedHeight: 8.0, deflection: 3.0, load: (417.5 * 3.0).toFixed(0), notes: 'Typical range' },
+    { freeLength: 10.5, installedHeight: 8.0, deflection: 2.5, load: (417.5 * 2.5).toFixed(0), notes: 'Moderate' },
+  ];
+
+  return (
+    <div className="shock-info-card" style={{ marginTop: '16px' }}>
+      <h3 style={{ marginBottom: '4px' }}>Crown Vic Front Spring — Reference Table</h3>
+      <p style={{ color: 'var(--text-secondary)', fontSize: '0.85rem', marginBottom: '16px' }}>
+        Example calculations at a common installed height of 8.0" using a 417.5 lbs/in spring rate. Replace free length with your measured value.
+      </p>
+      <div className="table-responsive">
+        <table className="shock-specs-table">
+          <thead>
+            <tr>
+              <th>Free Length</th>
+              <th>Installed Height</th>
+              <th>Deflection</th>
+              <th>Approx. Load (lbs)</th>
+              <th>Notes</th>
+            </tr>
+          </thead>
+          <tbody>
+            {rows.map((r, i) => (
+              <tr key={i}>
+                <td>{r.freeLength.toFixed(1)}"</td>
+                <td>{r.installedHeight.toFixed(1)}"</td>
+                <td>{r.deflection.toFixed(1)}"</td>
+                <td style={{ fontWeight: 700, color: 'var(--green)' }}>{r.load} lbs</td>
+                <td style={{ color: 'var(--text-secondary)' }}>{r.notes}</td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+
+      <div style={{ marginTop: '20px' }}>
+        <h4 style={{ marginBottom: '10px', fontSize: '0.95rem' }}>Measurement Tips</h4>
+        <ul style={{ listStyle: 'none', padding: 0, margin: 0, display: 'flex', flexDirection: 'column', gap: '8px' }}>
+          {[
+            { label: 'Free Length', desc: 'Measure with the spring completely off the car, standing upright on a flat surface with zero load applied.' },
+            { label: 'Installed Height', desc: 'Measure from the lower spring perch to the upper spring perch with the car at normal ride height.' },
+            { label: 'P71 Typical Range', desc: 'Front spring load on a P71 Crown Vic is roughly 900–1,200 lbs per spring at ride height.' },
+          ].map(({ label, desc }) => (
+            <li key={label} style={{ display: 'flex', gap: '10px', fontSize: '0.88rem', lineHeight: 1.5 }}>
+              <span style={{ color: 'var(--accent)', fontWeight: 700, whiteSpace: 'nowrap', minWidth: '120px' }}>{label}</span>
+              <span style={{ color: 'var(--text-secondary)' }}>{desc}</span>
+            </li>
+          ))}
+        </ul>
+      </div>
     </div>
   );
 }
@@ -427,6 +636,8 @@ function CrownVicShocks() {
 
       <SpringRateCalculator />
       <SpringLoadCalculator />
+      <InstalledHeightCalculator />
+      <SpringReferenceTable />
 
       <div className="handling-tips-considerations" style={{ marginTop: '32px' }}>
         <h3>Key Takeaways</h3>
