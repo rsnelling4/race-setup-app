@@ -78,7 +78,7 @@ const F8_CORNER_G   = 0.28; // F8 loop fraction × F8_RACING_G — computed afte
 const VEH = {
   weight: 4100,
   mass: 4100 / G,
-  frontBias: 0.55,
+  frontBias: 0.57,          // Ford P71 published curb weight distribution ~57/43 front-heavy
   cgHeight: 22 / 12,          // ft
   rollCenterHeight: 3 / 12,  // ft — front roll center height (measured: 3 inches, SLA geometry)
   rollCenterHeightRear: 4 / 12, // ft — rear roll center height (estimated: 4 inches; Watts linkage
