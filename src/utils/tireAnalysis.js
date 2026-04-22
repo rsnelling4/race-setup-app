@@ -4,14 +4,15 @@
 // ============ PHYSICS-BASED PRESSURE CONSTANTS ============
 // Optimal HOT tire pressures for Crown Vic P71 on a left-turn oval.
 // Derived from: optPsi = 30 × (cornerLoad / avgLoad)
-//   at OVAL_CORNER_G = 0.375G (27 mph @ 130 ft radius),
-//   frontLLTD = 0.46 (recommended shock setup), vehicle weight = 4100 lbs.
-//   RF cornerLoad ≈ 1274 lbs → 40 PSI hot   (outside loaded)
-//   LF cornerLoad ≈ 816 lbs  → 26 PSI hot   (inside, lightly loaded)
-//   RR cornerLoad ≈ 1124 lbs → 35 PSI hot   (outside rear)
-//   LR cornerLoad ≈ 586 lbs  → 19 PSI hot   (inside rear, most lightly loaded)
-// These match the optimizer's recommendations exactly.
-const OVAL_OPTIMAL_HOT_PSI = { LF: 26, RF: 40, LR: 19, RR: 35 };
+//   at OVAL_CORNER_G = 0.407G, springLLTD = 0.50 (baseline 475F/160R springs),
+//   frontBias = 0.57 (Ford published), vehicle weight = 4100 lbs.
+//   Includes ARB load transfer: P71 29.5mm front bar, 475 lbs/in wheel rate,
+//   k_roll = 39,277 lb-ft/rad → +165 lbs RF at OVAL_CORNER_G.
+//   RF cornerLoad ≈ 1625 lbs → 48 PSI hot   (outside loaded — ARB raises this significantly)
+//   LF cornerLoad ≈  713 lbs → 21 PSI hot   (inside, unloaded by ARB)
+//   RR cornerLoad ≈ 1173 lbs → 34 PSI hot   (outside rear, no rear ARB)
+//   LR cornerLoad ≈  590 lbs → 17 PSI hot   (inside rear, most lightly loaded)
+const OVAL_OPTIMAL_HOT_PSI = { LF: 21, RF: 48, LR: 17, RR: 34 };
 const COLD_REF_TEMP = 68;    // °F — temperature when cold PSI is set (garage inflate)
 const RANKINE = 459.67;      // °F → °R conversion offset
 

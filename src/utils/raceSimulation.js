@@ -493,19 +493,20 @@ function rollStiffness(setup) {
 // This is why the elastic model alone over-predicts RF hot pressure by ~2.5 PSI — the ARB
 // is doing load transfer work that the springs don't see.
 //
-// ARB roll stiffness (lb-ft/rad) = k_wheel × (t/2)²
-//   = 475 lbs/in × (63/2 in)² / 12 = 475 × 992.25 / 12 = 39,277 lb-ft/rad
-// At OVAL_RACING_G (3.1° × 0.813 = 2.52° body roll = 0.044 rad):
-//   ΔF_ARB = 39,277 × 0.044 / (63/12) = 1728 / 5.25 ≈ 329 lbs → ~65 lbs per side
-// Verified: at OVAL_CORNER_G (lap-average roll ≈ 1.26° = 0.022 rad):
-//   ΔF_ARB ≈ 164 lbs → ~2.6 PSI on RF at 63 lb/PSI load sensitivity — matches the observed gap ✓
+// ARB roll stiffness (lb-ft/rad) = k_wheel_lbft × (t/2 in ft)²
+//   k_wheel in lbs/ft = 475 lbs/in × 12 in/ft = 5700 lbs/ft
+//   (t/2) = 63/2 in = 31.5 in = 2.625 ft
+//   k_roll = 5700 × 2.625² = 5700 × 6.891 = 39,277 lb-ft/rad ✓
+// At OVAL_CORNER_G (lap-average roll ≈ 1.26° = 0.022 rad):
+//   ΔF_ARB = 39,277 × 0.022 / (63/12 ft) = 864 / 5.25 ≈ 165 lbs
+//   → ~2.6 PSI on RF at 1025 avg load — matches the observed gap ✓
 const ARB = {
   frontWheelRate: 475,       // lbs/in — P71 29.5mm solid bar, estimated midpoint
   rearWheelRate:  0,         // lbs/in — no rear ARB on P71
   trackWidth:     63,        // inches — same as VEH.trackWidth in inches
 };
-// lb-ft/rad roll stiffness: k_wheel × (t/2 in ft)²
-ARB.frontRollStiffness = ARB.frontWheelRate * Math.pow((ARB.trackWidth / 2) / 12, 2); // lb-ft/rad
+// lb-ft/rad: convert wheel rate to lbs/ft first, then multiply by (t/2 in ft)²
+ARB.frontRollStiffness = (ARB.frontWheelRate * 12) * Math.pow((ARB.trackWidth / 2) / 12, 2); // lb-ft/rad ≈ 39,277
 
 // ============ WEIGHT TRANSFER ============
 // Total lateral load transfer has THREE components per axle (Dixon / Kelvin Tse + ARB):
