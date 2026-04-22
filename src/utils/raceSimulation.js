@@ -81,9 +81,9 @@ const VEH = {
   frontBias: 0.57,          // Ford P71 published curb weight distribution ~57/43 front-heavy
   cgHeight: 22 / 12,          // ft
   rollCenterHeight: 3 / 12,  // ft — front roll center height (measured: 3 inches, SLA geometry)
-  rollCenterHeightRear: 4 / 12, // ft — rear roll center height (estimated: 4 inches; Watts linkage
-                                //   pivot on solid axle; no published Ford spec found — calibrated
-                                //   estimate consistent with Watts-link solid-axle geometry)
+  rollCenterHeightRear: 18 / 12, // ft — rear roll center height (estimated: 18 inches; Watts link
+                                 //   center pivot sits ~4.5" above rear axle centerline at 13.6".
+                                 //   Range 17–19"; using 18" midpoint. Verify with tape measure.)
   trackWidth: 63 / 12,        // ft
   tireRadius: 13.6 / 12,  // ft — 235/55R17: 129.25mm sidewall + 215.9mm wheel = 13.59" ✓
   frontalArea: 25,         // ft²
