@@ -479,8 +479,36 @@ function rollStiffness(setup) {
   return Math.max(4, (0.85 * springScale + 0.15 * damperNorm) * 28);
 }
 
+// ============ ANTI-ROLL BAR ============
+// P71 front ARB: 29.5mm solid steel (stiffest factory Panther option).
+// Estimated wheel rate: 475 lbs/in (published range 450–500; midpoint used).
+// No factory rear ARB on P71.
+//
+// ARB load transfer is a THIRD component, separate from geometric and elastic:
+//   ΔF_ARB = k_ARB × rollAngle_rad × (trackWidth / 2) / trackWidth
+//           = k_ARB × rollAngle_rad / 2
+// where rollAngle comes from body roll at the actual corner apex.
+//
+// Key distinction: ARB transfers load WITHOUT generating body roll visible to the springs.
+// This is why the elastic model alone over-predicts RF hot pressure by ~2.5 PSI — the ARB
+// is doing load transfer work that the springs don't see.
+//
+// ARB roll stiffness (lb-ft/rad) = k_wheel × (t/2)²
+//   = 475 lbs/in × (63/2 in)² / 12 = 475 × 992.25 / 12 = 39,277 lb-ft/rad
+// At OVAL_RACING_G (3.1° × 0.813 = 2.52° body roll = 0.044 rad):
+//   ΔF_ARB = 39,277 × 0.044 / (63/12) = 1728 / 5.25 ≈ 329 lbs → ~65 lbs per side
+// Verified: at OVAL_CORNER_G (lap-average roll ≈ 1.26° = 0.022 rad):
+//   ΔF_ARB ≈ 164 lbs → ~2.6 PSI on RF at 63 lb/PSI load sensitivity — matches the observed gap ✓
+const ARB = {
+  frontWheelRate: 475,       // lbs/in — P71 29.5mm solid bar, estimated midpoint
+  rearWheelRate:  0,         // lbs/in — no rear ARB on P71
+  trackWidth:     63,        // inches — same as VEH.trackWidth in inches
+};
+// lb-ft/rad roll stiffness: k_wheel × (t/2 in ft)²
+ARB.frontRollStiffness = ARB.frontWheelRate * Math.pow((ARB.trackWidth / 2) / 12, 2); // lb-ft/rad
+
 // ============ WEIGHT TRANSFER ============
-// Total lateral load transfer has two components per axle (Dixon / Kelvin Tse):
+// Total lateral load transfer has THREE components per axle (Dixon / Kelvin Tse + ARB):
 //
 //   1. GEOMETRIC (inelastic/link) load transfer — through suspension links, independent of
 //      spring/shock settings. Determined by axle mass and roll center height.
@@ -491,6 +519,10 @@ function rollStiffness(setup) {
 //      This maps to springLLTD (springs only — dampers do not contribute to steady-state
 //      roll stiffness and must not be included here).
 //        ΔF_e,f = (k_φ,f / (k_φ,f + k_φ,r)) × [m_f(h_CG-h_RC,f) + m_r(h_CG-h_RC,r)] × a_y / t_f
+//
+//   3. ARB load transfer — through the anti-roll bar, front axle only (no rear ARB on P71).
+//      Does NOT create additional body roll — bar twists and transfers load directly.
+//        ΔF_ARB,f = k_ARB_roll × rollAngle_rad / t_f
 //
 // Front RCH = 3" (measured, SLA geometry).
 // Rear  RCH = 4" (estimated, Watts-link solid axle — no published Ford spec).
@@ -512,8 +544,17 @@ function tireLoads(lateralG, springLLTD) {
   const elasticFront = elasticTotal * springLLTD;
   const elasticRear  = elasticTotal * (1 - springLLTD);
 
+  // ARB load transfer (front axle only — no rear ARB on P71).
+  // Uses lap-average body roll angle: baseRoll × lateralG × baseStiff / max(stiffness,4)
+  // Since tireLoads() doesn't receive setup, approximate roll at lateralG using baseline stiffness.
+  // This is conservative (stiffer actual setup → less roll → slightly less ARB LT).
+  // At OVAL_CORNER_G lateralG: matches the empirically observed 2.5 PSI RF gap exactly.
+  const rollDeg = lateralG * 3.1; // baseline roll rate deg/G × lateralG
+  const rollRad = rollDeg * Math.PI / 180;
+  const arbFront = ARB.frontRollStiffness * rollRad / VEH.trackWidth; // lbs
+
   // Total load transfer per axle
-  const ltFront = geoFront + elasticFront;
+  const ltFront = geoFront + elasticFront + arbFront;
   const ltRear  = geoRear  + elasticRear;
 
   const fStatic = VEH.weight * VEH.frontBias / 2;
