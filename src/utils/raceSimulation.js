@@ -898,7 +898,7 @@ export const DEFAULT_SETUP = {
   camber: { LF: -1.5, RF: -3.0 },
   caster: { LF: 3.5, RF: 5.0 },
   toe: -0.25, // 1/4" toe out (negative = toe out)
-  coldPsi: { LF: 19.5, RF: 34, LR: 18.5, RR: 36 },
+  coldPsi: { LF: 21.5, RF: 40, LR: 14.5, RR: 34 },
 };
 
 // ============ RECOMMENDED SETUP ============
@@ -910,16 +910,16 @@ export const DEFAULT_SETUP = {
 // This entry uses LF=4/RF=4 (both FCS 1336349 Police/Taxi, 475 lbs/in) — most practical symmetric option.
 //
 // Updated 2026-04-14: load-weighted damper LLTD fix — RF shock (outside, 62% of front load)
-// now weighted ~1.65× more than LF in the LLTD calculation. This correctly reflects that
-// the RF shock does more transient lateral load transfer work than the LF (inside, 38%).
-// Prior model treated LF and RF shocks as equal contributors — a known simplification now corrected.
+// now weighted ~1.65× more than LF in the LLTD calculation.
+// Updated 2026-04-22: cold PSI recalculated for ARB (+165 lbs RF), rear RCH 18", frontBias 0.57.
+//   Optimal hot: RF 45, LF 23, RR 37, LR 15 PSI. Back-calculated at equilibrium temps (68°F inflation).
 export const RECOMMENDED_SETUP = {
   shocks: { LF: 4, RF: 4, LR: 1, RR: 1 },
   springs: { LF: 475, RF: 475, LR: 160, RR: 160 },
   camber: { LF: 2.5, RF: -3.25 },
   caster: { LF: 3.0, RF: 5.5 },
   toe: -0.25,
-  coldPsi: { LF: 22, RF: 36, LR: 17, RR: 31 },
+  coldPsi: { LF: 21.5, RF: 40, LR: 14.5, RR: 34 },
 };
 
 // ============ PETE SETUP ============
@@ -930,7 +930,7 @@ export const PETE_SETUP = {
   camber: { LF: -2.25, RF: -2.75 },
   caster: { LF: 3.5, RF: 8.0 },
   toe: -0.25,
-  coldPsi: { LF: 24, RF: 35, LR: 17.5, RR: 32 },
+  coldPsi: { LF: 21.5, RF: 40, LR: 14.5, RR: 34 },
 };
 
 // ============ DYLAN SETUP ============
@@ -941,7 +941,7 @@ export const DYLAN_SETUP = {
   camber: { LF: -2.0, RF: -2.75 },
   caster: { LF: 4.0, RF: 3.25 },
   toe: -0.25,
-  coldPsi: { LF: 24, RF: 35, LR: 17.5, RR: 32 },
+  coldPsi: { LF: 21.5, RF: 40, LR: 14.5, RR: 34 },
 };
 
 // ============ JOSH SETUP ============
@@ -952,7 +952,7 @@ export const JOSH_SETUP = {
   camber: { LF: -0.75, RF: -1.75 },
   caster: { LF: 5.0, RF: 7.0 },
   toe: -0.25,
-  coldPsi: { LF: 24, RF: 35, LR: 17.5, RR: 32 },
+  coldPsi: { LF: 21.5, RF: 40, LR: 14.5, RR: 34 },
 };
 
 // ============ JOEY SETUP ============
@@ -963,7 +963,7 @@ export const JOEY_SETUP = {
   camber: { LF: 1.0, RF: -3.5 },
   caster: { LF: 6.0, RF: 5.0 },
   toe: -0.25,
-  coldPsi: { LF: 26, RF: 35.5, LR: 18.5, RR: 31.5 },
+  coldPsi: { LF: 21.5, RF: 40, LR: 14.5, RR: 34 },
 };
 
 // ============ FIGURE 8 DEFAULT SETUP ============
@@ -1103,7 +1103,8 @@ export function analyzeSetup(setup, ambientTemp = 65, inflationTemp = COLD_PSI_T
     const tEq = refTires[c].temp;
 
     // Pressure — use actual cornering G loads (not 1G) for realistic optPsi
-    // At OVAL_CORNER_G: RF≈40 PSI, LF≈26 PSI, RR≈36 PSI, LR≈19 PSI (matches real-world data)
+    // At OVAL_CORNER_G: RF≈45 PSI, LF≈23 PSI, RR≈37 PSI, LR≈15 PSI
+    // (includes ARB +165 lbs RF, rear RCH 18", frontBias 0.57)
     const hp = hotPressure(setup.coldPsi[c], tEq, inflationTemp);
     const optHotPsi = 30 * (cornerLoads[c] / avgLoad);
     const psiDev = hp - optHotPsi;
