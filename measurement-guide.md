@@ -237,9 +237,12 @@ Front SLA measurements:
   Front wheel center height:         _13____ inches
 
 Droop measurements:
+  LF Camber Static: + 2 3/4
+  RF Camber Static: -2 1/4
   LF camber at full droop:           _+1 3/4 °
   RF camber at full droop:           _-1 1/2 °
-  Droop travel (ride height → full droop): __1/2__ inches
+  LF Droop travel (ride height → full droop): __1/2__ inches
+  RF Droop travel (ride height → full droop): __7/8__ inches
 
 Caster camber gain (at 20° steer):
   LF camber at 20° steer:            +1 1/2_ °
