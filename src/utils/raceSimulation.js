@@ -496,11 +496,11 @@ function rollStiffness(setup) {
 //
 // ARB roll stiffness (lb-ft/rad) = k_wheel_lbft × (t/2 in ft)²
 //   k_wheel in lbs/ft = 475 lbs/in × 12 in/ft = 5700 lbs/ft
-//   (t/2) = 63/2 in = 31.5 in = 2.625 ft
-//   k_roll = 5700 × 2.625² = 5700 × 6.891 = 39,277 lb-ft/rad ✓
+//   (t/2) = 64/2 in = 32 in = 2.667 ft (measured track width)
+//   k_roll = 5700 × 2.667² = 5700 × 7.111 = 40,533 lb-ft/rad
 // At OVAL_CORNER_G (lap-average roll ≈ 1.26° = 0.022 rad):
-//   ΔF_ARB = 39,277 × 0.022 / (63/12 ft) = 864 / 5.25 ≈ 165 lbs
-//   → ~2.6 PSI on RF at 1025 avg load — matches the observed gap ✓
+//   ΔF_ARB = 40,533 × 0.022 / (64/12 ft) = 892 / 5.333 ≈ 167 lbs
+//   → ~2.6 PSI on RF — matches the observed gap ✓
 const ARB = {
   frontWheelRate: 475,       // lbs/in — P71 29.5mm solid bar, estimated midpoint
   rearWheelRate:  0,         // lbs/in — no rear ARB on P71
@@ -898,7 +898,7 @@ export const DEFAULT_SETUP = {
   shocks: { LF: 4, RF: 4, LR: 2, RR: 2 },
   springs: { LF: 475, RF: 475, LR: 160, RR: 160 },
   camber: { LF: 2.75, RF: -2.25 }, // measured 2026-04-22
-  caster: { LF: 3.5, RF: 8.0 },    // Setup B alignment
+  caster: { LF: 9.0, RF: 3.0 },    // current alignment (2026-04-22 post strut swap)
   toe: -0.25,
   coldPsi: { LF: 20, RF: 42, LR: 16, RR: 32 },
 };
