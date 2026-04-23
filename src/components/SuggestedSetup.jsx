@@ -122,7 +122,7 @@ export default function SuggestedSetup() {
             <div className="suggested-highlight-card green">
               <div className="sh-label">Biggest Free Gain</div>
               <div className="sh-value">+0.08–0.10s</div>
-              <div className="sh-desc">Full pressure correction: LF →21.5, RF →40, LR →14.5, RR →34 cold PSI</div>
+              <div className="sh-desc">Full pressure correction: LF →21, RF →41, LR →15, RR →33 cold PSI</div>
             </div>
             <div className="suggested-highlight-card blue">
               <div className="sh-label">Grid-Search Optimum</div>

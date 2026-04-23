@@ -79,12 +79,12 @@ const VEH = {
   weight: 4100,
   mass: 4100 / G,
   frontBias: 0.57,          // Ford P71 published curb weight distribution ~57/43 front-heavy
-  cgHeight: 22 / 12,          // ft
-  rollCenterHeight: 3 / 12,  // ft — front roll center height (measured: 3 inches, SLA geometry)
-  rollCenterHeightRear: 18 / 12, // ft — rear roll center height (estimated: 18 inches; Watts link
-                                 //   center pivot sits ~4.5" above rear axle centerline at 13.6".
-                                 //   Range 17–19"; using 18" midpoint. Verify with tape measure.)
-  trackWidth: 63 / 12,        // ft
+  cgHeight: 23 / 12,          // ft — stock ~22" + roll cage ~0.8" raise + battery in passenger seat
+  rollCenterHeight: 3 / 12,  // ft — front RCH (stated 3"; SLA hardpoint measurements inconclusive
+                              //   — upper BJ heights suggest measurement to stud top not center.
+                              //   Retaining 3" per Ford FSM reference until remeasured properly.)
+  rollCenterHeightRear: 14.5 / 12, // ft — measured: Watts link center pivot 14.5" from floor
+  trackWidth: 64 / 12,        // ft — measured front (64"); rear 65.125" — using front for model
   tireRadius: 13.6 / 12,  // ft — 235/55R17: 129.25mm sidewall + 215.9mm wheel = 13.59" ✓
   frontalArea: 25,         // ft²
   cd: 0.33,
@@ -312,7 +312,8 @@ function camberGripFactor(groundCamber, isOutside, isFront, load = VEH.weight / 
 // Caster: modeled via mechanical trail — the correct physical mechanism.
 //
 // NOTE: Caster's camber gain effect is already fully captured in casterCamberGain
-// (caster × 0.18 for RF, × 0.10 for LF) which feeds into effectiveCamber →
+// (caster × 0.25 for RF, × 0.43 for LF — measured 2026-04-22 at 20° steer, halved for 10° apex)
+// which feeds into effectiveCamber →
 // groundCamber → camberGripFactor. This function handles ONLY the steering
 // torque / driveability effect of mechanical trail.
 //
@@ -503,7 +504,7 @@ function rollStiffness(setup) {
 const ARB = {
   frontWheelRate: 475,       // lbs/in — P71 29.5mm solid bar, estimated midpoint
   rearWheelRate:  0,         // lbs/in — no rear ARB on P71
-  trackWidth:     63,        // inches — same as VEH.trackWidth in inches
+  trackWidth:     64,        // inches — measured front track width
 };
 // lb-ft/rad: convert wheel rate to lbs/ft first, then multiply by (t/2 in ft)²
 ARB.frontRollStiffness = (ARB.frontWheelRate * 12) * Math.pow((ARB.trackWidth / 2) / 12, 2); // lb-ft/rad ≈ 39,277
@@ -617,8 +618,8 @@ function calcPerformance(setup, tires, inflationTemp = COLD_PSI_TEMP) {
       // The two front wheels go OPPOSITE directions: RF (outside) gains negative, LF (inside)
       // gains positive. This is the caster geometry — same effect on both SLA and MacPherson.
       const casterCamberGain = outside
-        ? -(caster[c] * 0.18 * refG)  // RF: negative camber gain (adds to static neg camber)
-        :  (caster[c] * 0.10 * refG); // LF: positive camber gain from caster (geometric)
+        ? -(caster[c] * 0.25 * refG)  // RF: measured 2.0° at 10° steer / 8.0° caster = 0.25/deg
+        :  (caster[c] * 0.43 * refG); // LF: measured 1.5° at 10° steer / 3.5° caster = 0.43/deg
       // SLA body roll camber at actual corner apex (cornerRoll = roll × OVAL_RACING_G).
       // RF (outside, jounce): SLA gains NEGATIVE camber — key advantage over MacPherson.
       // LF (inside, droop): gains POSITIVE camber — same direction as MacPherson droop.
@@ -743,8 +744,8 @@ function updateTireTemps(tires, workFactors, ambient, lapTime, setup, inflationT
       camberVal = setup.camber[c];
       // Caster gain: RF (outside) gains negative, LF (inside) gains positive — geometric.
       const casterGain = outside
-        ? -(caster[c] * 0.18)
-        :  (caster[c] * 0.10);
+        ? -(caster[c] * 0.25)  // measured: 0.25°/°caster at 10° steer
+        :  (caster[c] * 0.43); // measured: 0.43°/°caster at 10° steer
       camberVal += casterGain;
     } else {
       // Rear: body roll effect (solid axle)
@@ -898,7 +899,7 @@ export const DEFAULT_SETUP = {
   camber: { LF: -1.5, RF: -3.0 },
   caster: { LF: 3.5, RF: 5.0 },
   toe: -0.25, // 1/4" toe out (negative = toe out)
-  coldPsi: { LF: 21.5, RF: 40, LR: 14.5, RR: 34 },
+  coldPsi: { LF: 21, RF: 41, LR: 15, RR: 33 },
 };
 
 // ============ RECOMMENDED SETUP ============
@@ -919,7 +920,7 @@ export const RECOMMENDED_SETUP = {
   camber: { LF: 2.5, RF: -3.25 },
   caster: { LF: 3.0, RF: 5.5 },
   toe: -0.25,
-  coldPsi: { LF: 21.5, RF: 40, LR: 14.5, RR: 34 },
+  coldPsi: { LF: 21, RF: 41, LR: 15, RR: 33 },
 };
 
 // ============ PETE SETUP ============
@@ -930,7 +931,7 @@ export const PETE_SETUP = {
   camber: { LF: -2.25, RF: -2.75 },
   caster: { LF: 3.5, RF: 8.0 },
   toe: -0.25,
-  coldPsi: { LF: 21.5, RF: 40, LR: 14.5, RR: 34 },
+  coldPsi: { LF: 21, RF: 41, LR: 15, RR: 33 },
 };
 
 // ============ DYLAN SETUP ============
@@ -941,7 +942,7 @@ export const DYLAN_SETUP = {
   camber: { LF: -2.0, RF: -2.75 },
   caster: { LF: 4.0, RF: 3.25 },
   toe: -0.25,
-  coldPsi: { LF: 21.5, RF: 40, LR: 14.5, RR: 34 },
+  coldPsi: { LF: 21, RF: 41, LR: 15, RR: 33 },
 };
 
 // ============ JOSH SETUP ============
@@ -952,7 +953,7 @@ export const JOSH_SETUP = {
   camber: { LF: -0.75, RF: -1.75 },
   caster: { LF: 5.0, RF: 7.0 },
   toe: -0.25,
-  coldPsi: { LF: 21.5, RF: 40, LR: 14.5, RR: 34 },
+  coldPsi: { LF: 21, RF: 41, LR: 15, RR: 33 },
 };
 
 // ============ JOEY SETUP ============
@@ -963,7 +964,7 @@ export const JOEY_SETUP = {
   camber: { LF: 1.0, RF: -3.5 },
   caster: { LF: 6.0, RF: 5.0 },
   toe: -0.25,
-  coldPsi: { LF: 21.5, RF: 40, LR: 14.5, RR: 34 },
+  coldPsi: { LF: 21, RF: 41, LR: 15, RR: 33 },
 };
 
 // ============ FIGURE 8 DEFAULT SETUP ============
@@ -1125,7 +1126,7 @@ export function analyzeSetup(setup, ambientTemp = 65, inflationTemp = COLD_PSI_T
 
     if (front) {
       // Caster gain: RF (outside) gains negative, LF (inside) gains positive — geometric.
-      casterGain = outside ? -(caster[c] * 0.18) : (caster[c] * 0.10);
+      casterGain = outside ? -(caster[c] * 0.25) : (caster[c] * 0.43); // measured coefficients
       // SLA body roll camber at actual corner apex (cornerRoll = roll × OVAL_RACING_G).
       bodyRollCamber = outside ? -(cornerRoll * 0.355) : (cornerRoll * 0.15);
       // KPI camber: +positive on outside (RF), -negative on inside (LF). ≈ ±0.144°.
