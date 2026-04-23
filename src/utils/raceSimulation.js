@@ -896,9 +896,9 @@ function metricToSpeeds(metric) {
 export const DEFAULT_SETUP = {
   shocks: { LF: 4, RF: 4, LR: 2, RR: 2 },
   springs: { LF: 475, RF: 475, LR: 160, RR: 160 },
-  camber: { LF: -1.5, RF: -3.0 },
-  caster: { LF: 3.5, RF: 5.0 },
-  toe: -0.25, // 1/4" toe out (negative = toe out)
+  camber: { LF: 2.75, RF: -2.25 }, // measured 2026-04-22
+  caster: { LF: 3.5, RF: 8.0 },    // Setup B alignment
+  toe: -0.25,
   coldPsi: { LF: 21, RF: 41, LR: 15, RR: 33 },
 };
 
