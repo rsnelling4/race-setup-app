@@ -80,9 +80,9 @@ const VEH = {
   mass: 4100 / G,
   frontBias: 0.57,          // Ford P71 published curb weight distribution ~57/43 front-heavy
   cgHeight: 23 / 12,          // ft — stock ~22" + roll cage ~0.8" raise + battery in passenger seat
-  rollCenterHeight: 3 / 12,  // ft — front RCH (stated 3"; SLA hardpoint measurements inconclusive
-                              //   — upper BJ heights suggest measurement to stud top not center.
-                              //   Retaining 3" per Ford FSM reference until remeasured properly.)
+  rollCenterHeight: 8.1 / 12, // ft — measured: SLA geometry from all 4 hardpoints (2026-04-22)
+                               //   LF IC: x=-47.2" h=20.5" → RCH 8.27". RF IC: x=-76.8" h=27.1" → RCH 7.99"
+                               //   Average 8.13" rounded to 8.1". Previously stated as 3" (Ford FSM — incorrect for this ride height.)
   rollCenterHeightRear: 14.5 / 12, // ft — measured: Watts link center pivot 14.5" from floor
   trackWidth: 64 / 12,        // ft — measured front (64"); rear 65.125" — using front for model
   tireRadius: 13.6 / 12,  // ft — 235/55R17: 129.25mm sidewall + 215.9mm wheel = 13.59" ✓
@@ -624,11 +624,12 @@ function calcPerformance(setup, tires, inflationTemp = COLD_PSI_TEMP) {
       // RF (outside, jounce): SLA gains NEGATIVE camber — key advantage over MacPherson.
       // LF (inside, droop): gains POSITIVE camber — same direction as MacPherson droop.
       // SLA jounce coefficient: 1.7" wheel displacement at 3.1° roll → 1.1° camber gain.
-      //   1.1° / 3.1° = 0.355°/° roll. Droop coefficient 0.15 (jounce:droop asymmetry is
-      //   normal for SLA — jounce rate is always higher than droop rate in four-bar linkage).
+      //   1.1° / 3.1° = 0.355°/° roll.
+      // Droop coefficient measured 2026-04-22: LF 2.0 deg/in × 0.383 in/deg-roll = 0.766
+      //   RF 0.857 deg/in × 0.383 = 0.328. Average 0.547. Use LF value for inside droop.
       const bodyRollCamber = outside
         ? -(cornerRoll * 0.355) // RF in jounce: SLA gains negative camber (0.355°/° roll)
-        :  (cornerRoll * 0.15); // LF in droop: gains positive camber (0.15°/° roll)
+        :  (cornerRoll * 0.547); // LF in droop: measured 0.766 LF / 0.328 RF, avg 0.547°/° roll
       // KPI camber: steering adds +positive on outside (RF), -negative on inside (LF).
       // Formula: KPI_deg × (1 - cos(steerAngle)). At 10° steer: 9.5° × 0.01519 ≈ +0.144°
       const kpiCamber = outside ? GEOM.kpiCamberGain : -GEOM.kpiCamberGain;
@@ -899,7 +900,7 @@ export const DEFAULT_SETUP = {
   camber: { LF: 2.75, RF: -2.25 }, // measured 2026-04-22
   caster: { LF: 3.5, RF: 8.0 },    // Setup B alignment
   toe: -0.25,
-  coldPsi: { LF: 21, RF: 41, LR: 15, RR: 33 },
+  coldPsi: { LF: 20, RF: 42, LR: 16, RR: 32 },
 };
 
 // ============ RECOMMENDED SETUP ============
@@ -920,7 +921,7 @@ export const RECOMMENDED_SETUP = {
   camber: { LF: 2.5, RF: -3.25 },
   caster: { LF: 3.0, RF: 5.5 },
   toe: -0.25,
-  coldPsi: { LF: 21, RF: 41, LR: 15, RR: 33 },
+  coldPsi: { LF: 20, RF: 42, LR: 16, RR: 32 },
 };
 
 // ============ PETE SETUP ============
@@ -931,7 +932,7 @@ export const PETE_SETUP = {
   camber: { LF: -2.25, RF: -2.75 },
   caster: { LF: 3.5, RF: 8.0 },
   toe: -0.25,
-  coldPsi: { LF: 21, RF: 41, LR: 15, RR: 33 },
+  coldPsi: { LF: 20, RF: 42, LR: 16, RR: 32 },
 };
 
 // ============ DYLAN SETUP ============
@@ -942,7 +943,7 @@ export const DYLAN_SETUP = {
   camber: { LF: -2.0, RF: -2.75 },
   caster: { LF: 4.0, RF: 3.25 },
   toe: -0.25,
-  coldPsi: { LF: 21, RF: 41, LR: 15, RR: 33 },
+  coldPsi: { LF: 20, RF: 42, LR: 16, RR: 32 },
 };
 
 // ============ JOSH SETUP ============
@@ -953,7 +954,7 @@ export const JOSH_SETUP = {
   camber: { LF: -0.75, RF: -1.75 },
   caster: { LF: 5.0, RF: 7.0 },
   toe: -0.25,
-  coldPsi: { LF: 21, RF: 41, LR: 15, RR: 33 },
+  coldPsi: { LF: 20, RF: 42, LR: 16, RR: 32 },
 };
 
 // ============ JOEY SETUP ============
@@ -964,7 +965,7 @@ export const JOEY_SETUP = {
   camber: { LF: 1.0, RF: -3.5 },
   caster: { LF: 6.0, RF: 5.0 },
   toe: -0.25,
-  coldPsi: { LF: 21, RF: 41, LR: 15, RR: 33 },
+  coldPsi: { LF: 20, RF: 42, LR: 16, RR: 32 },
 };
 
 // ============ FIGURE 8 DEFAULT SETUP ============
@@ -1128,7 +1129,7 @@ export function analyzeSetup(setup, ambientTemp = 65, inflationTemp = COLD_PSI_T
       // Caster gain: RF (outside) gains negative, LF (inside) gains positive — geometric.
       casterGain = outside ? -(caster[c] * 0.25) : (caster[c] * 0.43); // measured coefficients
       // SLA body roll camber at actual corner apex (cornerRoll = roll × OVAL_RACING_G).
-      bodyRollCamber = outside ? -(cornerRoll * 0.355) : (cornerRoll * 0.15);
+      bodyRollCamber = outside ? -(cornerRoll * 0.355) : (cornerRoll * 0.547); // measured droop coeff
       // KPI camber: +positive on outside (RF), -negative on inside (LF). ≈ ±0.144°.
       kpiCamber = outside ? GEOM.kpiCamberGain : -GEOM.kpiCamberGain;
       effectiveCamber = setup.camber[c] + casterGain + bodyRollCamber + kpiCamber;

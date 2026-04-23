@@ -8,11 +8,11 @@
 //   frontBias = 0.57, vehicle weight = 4100 lbs, track width 64" (measured).
 //   Includes ARB load transfer: P71 29.5mm front bar, k_roll = 39,277 lb-ft/rad.
 //   Rear RCH = 14.5" (measured: Watts pivot from floor). CG height 23" (cage-adjusted).
-//   RF cornerLoad ≈ 1577 lbs → 46 PSI hot
-//   LF cornerLoad ≈  760 lbs → 22 PSI hot
-//   RR cornerLoad ≈ 1240 lbs → 36 PSI hot
-//   LR cornerLoad ≈  523 lbs → 15 PSI hot
-const OVAL_OPTIMAL_HOT_PSI = { LF: 22, RF: 46, LR: 15, RR: 36 };
+//   RF cornerLoad ≈ 1615 lbs → 47 PSI hot
+//   LF cornerLoad ≈  722 lbs → 21 PSI hot
+//   RR cornerLoad ≈ 1202 lbs → 35 PSI hot
+//   LR cornerLoad ≈  561 lbs → 16 PSI hot
+const OVAL_OPTIMAL_HOT_PSI = { LF: 21, RF: 47, LR: 16, RR: 35 };
 const COLD_REF_TEMP = 68;    // °F — temperature when cold PSI is set (garage inflate)
 const RANKINE = 459.67;      // °F → °R conversion offset
 
