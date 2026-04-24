@@ -312,7 +312,7 @@ function camberGripFactor(groundCamber, isOutside, isFront, load = VEH.weight / 
 // Caster: modeled via mechanical trail — the correct physical mechanism.
 //
 // NOTE: Caster's camber gain effect is already fully captured in casterCamberGain
-// (caster × 0.25 for RF, × 0.43 for LF — measured 2026-04-22 at 20° steer, halved for 10° apex)
+// (caster × 0.667 for RF, × 0.167 for LF — measured 2026-04-22 at 20° steer, halved for 10° apex)
 // which feeds into effectiveCamber →
 // groundCamber → camberGripFactor. This function handles ONLY the steering
 // torque / driveability effect of mechanical trail.
@@ -618,8 +618,8 @@ function calcPerformance(setup, tires, inflationTemp = COLD_PSI_TEMP) {
       // The two front wheels go OPPOSITE directions: RF (outside) gains negative, LF (inside)
       // gains positive. This is the caster geometry — same effect on both SLA and MacPherson.
       const casterCamberGain = outside
-        ? -(caster[c] * 0.25 * refG)  // RF: measured 2.0° at 10° steer / 8.0° caster = 0.25/deg
-        :  (caster[c] * 0.43 * refG); // LF: measured 1.5° at 10° steer / 3.5° caster = 0.43/deg
+        ? -(caster[c] * 0.667 * refG)  // RF: measured 2.0° at 20° steer / 3.0° caster = 0.667/deg
+        :  (caster[c] * 0.167 * refG); // LF: measured 1.5° at 20° steer / 9.0° caster = 0.167/deg
       // SLA body roll camber at actual corner apex (cornerRoll = roll × OVAL_RACING_G).
       // RF (outside, jounce): SLA gains NEGATIVE camber — key advantage over MacPherson.
       // LF (inside, droop): gains POSITIVE camber — same direction as MacPherson droop.
@@ -745,8 +745,8 @@ function updateTireTemps(tires, workFactors, ambient, lapTime, setup, inflationT
       camberVal = setup.camber[c];
       // Caster gain: RF (outside) gains negative, LF (inside) gains positive — geometric.
       const casterGain = outside
-        ? -(caster[c] * 0.25)  // measured: 0.25°/°caster at 10° steer
-        :  (caster[c] * 0.43); // measured: 0.43°/°caster at 10° steer
+        ? -(caster[c] * 0.667)  // measured: 2.0° at 20° steer / 3.0° caster = 0.667/deg
+        :  (caster[c] * 0.167); // measured: 1.5° at 20° steer / 9.0° caster = 0.167/deg
       camberVal += casterGain;
     } else {
       // Rear: body roll effect (solid axle)
@@ -1127,7 +1127,7 @@ export function analyzeSetup(setup, ambientTemp = 65, inflationTemp = COLD_PSI_T
 
     if (front) {
       // Caster gain: RF (outside) gains negative, LF (inside) gains positive — geometric.
-      casterGain = outside ? -(caster[c] * 0.25) : (caster[c] * 0.43); // measured coefficients
+      casterGain = outside ? -(caster[c] * 0.667) : (caster[c] * 0.167); // measured: RF 2.0°/3°caster, LF 1.5°/9°caster
       // SLA body roll camber at actual corner apex (cornerRoll = roll × OVAL_RACING_G).
       bodyRollCamber = outside ? -(cornerRoll * 0.355) : (cornerRoll * 0.547); // measured droop coeff
       // KPI camber: +positive on outside (RF), -negative on inside (LF). ≈ ±0.144°.

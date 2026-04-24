@@ -38,8 +38,8 @@ This guide covers every measurement needed to improve the physics model accuracy
 5. Repeat at the rear.
 
 **Record:**
-- Front track width: _______ inches
-- Rear track width: _______ inches
+- Front track width: ___64__ inches
+- Rear track width: _65 1/8 inches
 - Average (if similar): _______ inches
 
 **Note:** If front and rear differ by more than 1 inch, record both separately.
@@ -61,7 +61,7 @@ This guide covers every measurement needed to improve the physics model accuracy
 - The pivot center is the center of the pivot bolt — measure to the bolt centerline, not the top or bottom of the bracket.
 
 **Record:**
-- Height of Watts link center pivot from floor: _______ inches
+- Height of Watts link center pivot from floor: 14 1/2_ inches
 
 **This is your rear roll center height. Enter it directly.**
 
@@ -83,8 +83,8 @@ The front roll center on an SLA (short-long arm) suspension is found geometrical
 4. Repeat on passenger side.
 
 **Record:**
-- LF lower ball joint height: _______ inches
-- RF lower ball joint height: _______ inches
+- LF lower ball joint height: _7 3/4_ inches
+- RF lower ball joint height: _6 3/4_ inches
 
 ### Step B — Measure upper ball joint height from ground
 
@@ -92,8 +92,8 @@ The front roll center on an SLA (short-long arm) suspension is found geometrical
 2. Measure from center of upper ball joint to floor.
 
 **Record:**
-- LF upper ball joint height: _______ inches
-- RF upper ball joint height: _______ inches
+- LF upper ball joint height: 18 1/2_ inches
+- RF upper ball joint height: 17 5/8_ inches
 
 ### Step C — Measure lower control arm inner pivot height
 
@@ -101,15 +101,15 @@ The front roll center on an SLA (short-long arm) suspension is found geometrical
 2. Measure from the center of those pivot bolts to the floor. If there are two bolts (front and rear of arm), average them.
 
 **Record:**
-- LF lower arm inner pivot height: _______ inches
-- RF lower arm inner pivot height: _______ inches
+- LF lower arm inner pivot height: _10____ inches
+- RF lower arm inner pivot height: _9 3/8  inches
 
 ### Step D — Record wheel center height
 
 1. Measure from the center of the wheel/hub to the floor.
 
 **Record:**
-- Front wheel center height: _______ inches (should be ~13.6" = tire radius)
+- Front wheel center height: _13____ inches (should be ~13.6" = tire radius)
 
 **Bring these numbers back and I will compute the roll center height geometrically from them. You do not need to do the geometry yourself.**
 
@@ -126,7 +126,7 @@ The front roll center on an SLA (short-long arm) suspension is found geometrical
    - [ ] Lowered — estimate how many inches lower than stock: _______ inches
 
 2. Does the car carry any ballast or heavy add-ons not in a stock P71? (Cage, heavy seats, batteries relocated, etc.)
-   - List anything unusual: _______________________
+   - List anything unusual: Roll Cage installed, and battery in passenger seat area
 
 **If stock ride height:** The 22" estimate is within ±1" of reality for a P71 at stock height. No change needed.
 
@@ -150,10 +150,10 @@ The front roll center on an SLA (short-long arm) suspension is found geometrical
    - Record the camber at full droop.
 
 **Record:**
-- LF camber at full droop: _______ ° (negative = tilts inward at top)
-- RF camber at full droop: _______ °
-- LF camber at ride height (your static setup): -1.5°
-- RF camber at ride height (your static setup): -3.0°
+- LF camber at full droop: +1 3/4_ ° (negative = tilts inward at top)
+- RF camber at full droop: -1 1/2_ °
+- LF camber at ride height (your static setup): +2 3/4°
+- RF camber at ride height (your static setup): -2 1/4°
 
 **Also measure full droop travel:**
 1. With wheel at full droop, measure from wheel center to the fender lip (or a fixed chassis reference point).
@@ -161,7 +161,7 @@ The front roll center on an SLA (short-long arm) suspension is found geometrical
 3. The difference is your droop travel in inches.
 
 **Record:**
-- Droop travel (ride height to full droop): _______ inches
+- Droop travel (ride height to full droop): _1/2___ inches
 - Change in camber from ride height to full droop: _______ °
 
 **I will calculate the droop coefficient (°/inch and °/° roll) from these numbers.**
@@ -172,21 +172,21 @@ The front roll center on an SLA (short-long arm) suspension is found geometrical
 
 **What it feeds:** Coefficients `RF: 0.18°/° caster, LF: 0.10°/° caster` — both estimated. These affect how much camber change we predict when steering into the corner.
 
-Your current alignment: LF 3.5° caster, RF 8.0° caster.
+Your current alignment: LF 7° caster, RF 3° caster.
 
 **How to measure:**
 
 This requires turning the wheels to a known angle and measuring camber change.
 
 1. With car at ride height on flat ground, set wheels straight ahead.
-2. Measure static camber (same as your alignment specs — LF -1.5°, RF -3.0°).
+2. Measure static camber (same as your alignment specs — LF +2 3/4 RF -2 1/4.
 3. Turn the steering wheel to the right (clockwise) until the front tires are at approximately 20° of steer. Use a reference mark on the steering wheel or count turns and use a protractor/angle finder on the tire sidewall.
 4. Measure camber of LF and RF wheels at 20° steer.
 
 **Record:**
-- LF camber at 20° steer: _______ °
-- RF camber at 20° steer: _______ °
-- Camber change LF (steer minus straight): _______ °
+- LF camber at 20° steer: _+1 1/2 °
+- RF camber at 20° steer: _+1____ °
+- Camber change LF (steer minus straight): _+ 1 1/4°
 - Camber change RF (steer minus straight): _______ °
 
 Divide each change by 20 to get °/° steer for comparison.
@@ -222,31 +222,34 @@ With a ~200 lb driver in the LF seat, front bias shifts slightly: the driver's s
 When you've completed the measurements, report these numbers and I will update `raceSimulation.js` with calibrated values:
 
 ```
-Track width (front): _______ inches
-Track width (rear):  _______ inches
+Track width (front): ___64____ inches
+Track width (rear):  ___65 1/8__ inches
 
-Rear roll center height (Watts pivot from floor): _______ inches
+Rear roll center height (Watts pivot from floor): ___14 1/2____ inches
 
 Front SLA measurements:
-  LF lower ball joint height:        _______ inches
-  RF lower ball joint height:        _______ inches
-  LF upper ball joint height:        _______ inches
-  RF upper ball joint height:        _______ inches
-  LF lower arm inner pivot height:   _______ inches
-  RF lower arm inner pivot height:   _______ inches
-  Front wheel center height:         _______ inches
+  LF lower ball joint height:        ____7 3/4___ inches
+  RF lower ball joint height:        _____6 3/4__ inches
+  LF upper ball joint height:        ____ 18 1/2___ inches
+  RF upper ball joint height:        ____17 5/8___ inches
+  LF lower arm inner pivot height:   ___10__ inches
+  RF lower arm inner pivot height:   __9 3/8 inches
+  Front wheel center height:         _13____ inches
 
 Droop measurements:
-  LF camber at full droop:           _______ °
-  RF camber at full droop:           _______ °
-  Droop travel (ride height → full droop): _______ inches
+  LF Camber Static: + 2 3/4
+  RF Camber Static: -2 1/4
+  LF camber at full droop:           _+1 3/4 °
+  RF camber at full droop:           _-1 1/2 °
+  LF Droop travel (ride height → full droop): __1/2__ inches
+  RF Droop travel (ride height → full droop): __7/8__ inches
 
 Caster camber gain (at 20° steer):
-  LF camber at 20° steer:            _______ °
-  RF camber at 20° steer:            _______ °
+  LF camber at 20° steer:            +1 1/2_ °
+  RF camber at 20° steer:            _+1____ °
 
-Ride height lowering (0 if stock):   _______ inches
-Unusual ballast or add-ons:          _______________________
+Ride height lowering (0 if stock):   ___0___ inches
+Unusual ballast or add-ons:          _Roll cage added, battery in passenger seat area
 ```
 
 ---

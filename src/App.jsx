@@ -9,6 +9,7 @@ import Figure8Simulation from './components/Figure8Simulation';
 import Figure8Optimizer from './components/Figure8Optimizer';
 import SimulationMath from './components/SimulationMath';
 import SuggestedSetup from './components/SuggestedSetup';
+import MeasurementLogger from './components/MeasurementLogger';
 import { analyzeFullCar } from './utils/tireAnalysis';
 import { DEFAULT_SETUP } from './utils/raceSimulation';
 import './App.css';
@@ -25,6 +26,7 @@ const TABS = [
   { id: 'f8optimize', label: 'F8 Optimizer' },
   { id: 'mathref',   label: 'Simulation Math' },
   { id: 'suggested', label: 'Suggested Setup' },
+  { id: 'measurements', label: 'Measurement Log' },
 ];
 
 function App() {
@@ -199,6 +201,7 @@ function App() {
         )}
         {activeTab === 'mathref' && <SimulationMath />}
         {activeTab === 'suggested' && <SuggestedSetup />}
+        {activeTab === 'measurements' && <MeasurementLogger />}
       </main>
 
       <footer className="app-footer">
