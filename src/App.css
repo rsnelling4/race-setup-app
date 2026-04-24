@@ -4244,3 +4244,293 @@
   .ml-editor-footer { padding: 14px 14px 0; }
   .ml-input-wide { max-width: 100%; }
 }
+
+/* ===== TRACK DAY ===== */
+.td-page {
+  display: flex;
+  height: calc(100vh - 160px);
+  min-height: 500px;
+}
+
+/* Top bar inside content area */
+.td-topbar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 14px 24px 12px;
+  border-bottom: 1px solid var(--border);
+  background: var(--bg-secondary);
+  gap: 12px;
+  flex-shrink: 0;
+}
+
+.td-topbar-left { display: flex; align-items: baseline; gap: 10px; }
+.td-topbar-title { font-size: 1.1rem; font-weight: 700; color: var(--text-primary); }
+.td-topbar-date  { font-size: 0.8rem; color: var(--text-secondary); }
+.td-topbar-actions { display: flex; gap: 8px; flex-wrap: wrap; }
+
+/* API key bar */
+.td-apikey-bar {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 8px 24px;
+  background: rgba(0,0,0,0.2);
+  border-bottom: 1px solid var(--border);
+  flex-shrink: 0;
+  flex-wrap: wrap;
+}
+.td-apikey-bar.td-apikey-edit { padding: 10px 24px; }
+.td-apikey-status { font-size: 0.8rem; color: var(--text-secondary); display: flex; align-items: center; gap: 6px; }
+.td-apikey-dot { width: 8px; height: 8px; border-radius: 50%; background: var(--border); display: inline-block; }
+.td-apikey-dot.active { background: #10b981; }
+.td-apikey-btn { font-size: 0.78rem; padding: 4px 10px; background: var(--bg-card); border: 1px solid var(--border); border-radius: 5px; color: var(--text-secondary); cursor: pointer; }
+.td-apikey-btn:hover { color: var(--text-primary); }
+.td-apikey-input { max-width: 280px; font-size: 0.85rem; }
+.td-apikey-note { font-size: 0.72rem; color: var(--text-secondary); }
+
+/* Inner tab row */
+.td-tab-row {
+  display: flex;
+  border-bottom: 1px solid var(--border);
+  background: var(--bg-secondary);
+  flex-shrink: 0;
+}
+.td-inner-tab {
+  padding: 10px 22px;
+  background: none;
+  border: none;
+  border-bottom: 2px solid transparent;
+  color: var(--text-secondary);
+  font-size: 0.9rem;
+  font-weight: 500;
+  cursor: pointer;
+}
+.td-inner-tab:hover { color: var(--text-primary); }
+.td-inner-tab.active { color: var(--accent); border-bottom-color: var(--accent); }
+
+/* Scrollable main area */
+.td-scroll-area { flex: 1; overflow-y: auto; padding-bottom: 40px; }
+
+/* Event editor */
+.td-event-meta { padding: 16px 24px; border-bottom: 1px solid var(--border); }
+.td-geo-badge {
+  margin-top: 8px;
+  font-size: 0.8rem;
+  color: #10b981;
+  background: rgba(16, 185, 129, 0.1);
+  border: 1px solid rgba(16, 185, 129, 0.25);
+  border-radius: 5px;
+  padding: 4px 10px;
+  display: inline-block;
+}
+
+/* Sessions area */
+.td-sessions-area { padding: 0 0 24px; }
+.td-sessions-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 14px 24px 10px;
+  border-bottom: 1px solid var(--border);
+}
+.td-sessions-title { font-size: 0.85rem; font-weight: 700; color: var(--text-secondary); text-transform: uppercase; letter-spacing: 0.05em; }
+
+/* Session card (in editor) */
+.td-session-card {
+  border-bottom: 2px solid var(--accent);
+  margin: 16px 24px;
+  border-radius: 8px;
+  border: 1px solid var(--border);
+  overflow: hidden;
+}
+.td-session-card-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 10px 16px;
+  background: var(--bg-secondary);
+  border-bottom: 1px solid var(--border);
+}
+.td-session-card-title { font-weight: 700; color: var(--text-primary); font-size: 0.95rem; }
+.td-remove-session { padding: 4px 10px; font-size: 0.78rem; }
+
+/* Session editor internals */
+.td-session-editor { padding: 0; }
+.td-session-header { padding: 10px 16px 0; }
+.td-session-name-input {
+  background: none;
+  border: none;
+  border-bottom: 1px solid var(--border);
+  color: var(--text-primary);
+  font-size: 1rem;
+  font-weight: 600;
+  width: 100%;
+  padding: 4px 0 6px;
+  outline: none;
+}
+.td-session-name-input:focus { border-bottom-color: var(--accent); }
+.td-session-section { padding: 12px 16px; border-bottom: 1px solid var(--border); }
+.td-ss-label { font-size: 0.75rem; font-weight: 700; text-transform: uppercase; letter-spacing: 0.06em; color: var(--accent); margin-bottom: 10px; }
+
+/* Setup editor (inline 3-col) */
+.td-setup-editor { display: flex; gap: 24px; flex-wrap: wrap; }
+.td-setup-col { display: flex; flex-direction: column; gap: 6px; min-width: 160px; }
+.td-setup-group-label { font-size: 0.75rem; font-weight: 600; color: var(--text-secondary); }
+.td-setup-row { display: flex; align-items: center; gap: 8px; }
+.td-setup-corner { font-size: 0.8rem; font-weight: 700; color: var(--text-primary); width: 24px; flex-shrink: 0; }
+.td-select { font-size: 0.78rem; padding: 5px 8px; }
+.td-num { width: 70px; padding: 5px 8px; font-size: 0.85rem; }
+
+/* Driver feel buttons */
+.td-feel-row { display: flex; gap: 24px; flex-wrap: wrap; }
+.td-feel-group { display: flex; flex-direction: column; gap: 8px; }
+.td-feel-group-label { font-size: 0.78rem; font-weight: 600; color: var(--text-secondary); }
+.td-feel-buttons { display: flex; gap: 8px; flex-wrap: wrap; }
+.td-feel-buttons.three { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; }
+.td-feel-btn {
+  display: flex;
+  flex-direction: column;
+  padding: 8px 14px;
+  background: var(--bg-card);
+  border: 1px solid var(--border);
+  border-radius: 7px;
+  cursor: pointer;
+  text-align: left;
+  min-width: 130px;
+  transition: border-color 0.15s, background 0.15s;
+}
+.td-feel-btn:hover { border-color: var(--accent); }
+.td-feel-btn.active { border-color: var(--accent); background: rgba(59,130,246,0.12); }
+.td-feel-btn-label { font-size: 0.85rem; font-weight: 600; color: var(--text-primary); }
+.td-feel-btn-desc  { font-size: 0.72rem; color: var(--text-secondary); margin-top: 2px; }
+
+/* Add session bottom button */
+.td-add-session-bottom { margin: 8px 24px 0; display: block; }
+
+/* View mode (read-only session list) */
+.td-view-sessions { padding: 16px 24px; display: flex; flex-direction: column; gap: 12px; }
+.td-view-session-card {
+  background: var(--bg-card);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  overflow: hidden;
+}
+.td-view-session-title {
+  padding: 10px 14px;
+  background: var(--bg-secondary);
+  font-weight: 700;
+  color: var(--text-primary);
+  font-size: 0.9rem;
+  border-bottom: 1px solid var(--border);
+}
+.td-view-session-body { padding: 10px 14px; display: flex; flex-direction: column; gap: 8px; }
+.td-view-badge {
+  display: inline-block;
+  padding: 2px 8px;
+  border-radius: 4px;
+  font-size: 0.75rem;
+  font-weight: 600;
+  background: rgba(59,130,246,0.15);
+  color: var(--accent);
+  margin-right: 6px;
+}
+.td-view-badge.condition { background: rgba(239,68,68,0.12); color: #f87171; }
+.td-view-badge.phase     { background: rgba(168,85,247,0.12); color: #c084fc; }
+.td-view-psi { display: flex; align-items: center; gap: 10px; font-size: 0.8rem; }
+.td-view-psi-label { color: var(--text-secondary); font-weight: 600; min-width: 60px; }
+.td-view-psi-item { color: var(--text-primary); }
+.td-view-notes { font-size: 0.82rem; color: var(--text-secondary); line-height: 1.5; margin: 0; }
+
+/* Analysis panel */
+.td-analysis-panel { padding: 20px 24px; }
+.td-analyze-btn {
+  background: var(--accent);
+  color: #fff;
+  border: none;
+  border-radius: 8px;
+  padding: 12px 32px;
+  font-size: 1rem;
+  font-weight: 700;
+  cursor: pointer;
+  transition: background 0.15s, opacity 0.15s;
+  display: block;
+  width: 100%;
+  max-width: 340px;
+}
+.td-analyze-btn:hover:not(:disabled) { background: #2563eb; }
+.td-analyze-btn:disabled { opacity: 0.5; cursor: not-allowed; }
+.td-analyze-btn.running { background: #4b5563; animation: td-pulse 1.5s ease-in-out infinite; }
+@keyframes td-pulse { 0%,100% { opacity: 1; } 50% { opacity: 0.6; } }
+
+.td-analysis-note { font-size: 0.82rem; color: var(--text-secondary); margin-top: 8px; }
+.td-analysis-error {
+  margin-top: 12px;
+  background: rgba(239,68,68,0.1);
+  border: 1px solid rgba(239,68,68,0.3);
+  border-radius: 7px;
+  padding: 10px 14px;
+  font-size: 0.85rem;
+  color: #f87171;
+  line-height: 1.5;
+}
+
+/* Physics results */
+.td-physics-results { margin-top: 20px; display: flex; flex-direction: column; gap: 12px; }
+.td-results-heading {
+  font-size: 0.78rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.07em;
+  color: var(--text-secondary);
+  margin-bottom: 10px;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+.td-results-model { font-size: 0.7rem; background: rgba(99,102,241,0.15); color: #a78bfa; border-radius: 4px; padding: 2px 7px; text-transform: none; font-weight: 600; letter-spacing: 0; }
+
+.td-physics-card {
+  background: var(--bg-card);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 14px 16px;
+}
+.td-physics-title { font-size: 0.85rem; font-weight: 700; color: var(--text-primary); margin-bottom: 10px; }
+.td-physics-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; }
+.td-phys-item { display: flex; flex-direction: column; gap: 2px; }
+.td-phys-label { font-size: 0.7rem; font-weight: 600; color: var(--text-secondary); text-transform: uppercase; letter-spacing: 0.04em; }
+.td-phys-val { font-size: 0.9rem; font-weight: 700; color: var(--text-primary); }
+.td-phys-sub { font-size: 0.72rem; font-weight: 400; color: var(--text-secondary); }
+
+/* AI results */
+.td-ai-results { margin-top: 20px; }
+.td-ai-text {
+  background: var(--bg-card);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 16px 20px;
+  font-size: 0.875rem;
+  color: var(--text-primary);
+  line-height: 1.7;
+  white-space: pre-wrap;
+}
+
+/* Mobile */
+@media (max-width: 640px) {
+  .td-page { flex-direction: column; height: auto; }
+  .td-topbar { padding: 10px 14px; }
+  .td-apikey-bar { padding: 8px 14px; }
+  .td-tab-row .td-inner-tab { padding: 8px 14px; font-size: 0.82rem; }
+  .td-event-meta { padding: 12px 14px; }
+  .td-sessions-header { padding: 10px 14px; }
+  .td-session-card { margin: 12px 14px; }
+  .td-session-section { padding: 10px 12px; }
+  .td-setup-editor { gap: 12px; }
+  .td-feel-buttons.three { grid-template-columns: 1fr 1fr; }
+  .td-feel-btn { min-width: unset; }
+  .td-analysis-panel { padding: 14px; }
+  .td-physics-grid { grid-template-columns: repeat(2, 1fr); }
+  .td-add-session-bottom { margin: 8px 14px 0; }
+  .td-view-sessions { padding: 12px 14px; }
+}

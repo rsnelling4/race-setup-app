@@ -10,6 +10,7 @@ import Figure8Optimizer from './components/Figure8Optimizer';
 import SimulationMath from './components/SimulationMath';
 import SuggestedSetup from './components/SuggestedSetup';
 import { MeasurementLog, SuspensionGeometry } from './components/MeasurementLogger';
+import TrackDay from './components/TrackDay';
 import { analyzeFullCar } from './utils/tireAnalysis';
 import { DEFAULT_SETUP } from './utils/raceSimulation';
 import './App.css';
@@ -26,6 +27,7 @@ const TABS = [
   { id: 'f8optimize', label: 'F8 Optimizer' },
   { id: 'mathref',   label: 'Simulation Math' },
   { id: 'suggested', label: 'Suggested Setup' },
+  { id: 'trackday',     label: 'Track Day' },
   { id: 'measurements', label: 'Measurement Log' },
   { id: 'geometry',     label: 'Suspension Geometry' },
 ];
@@ -202,6 +204,7 @@ function App() {
         )}
         {activeTab === 'mathref' && <SimulationMath />}
         {activeTab === 'suggested' && <SuggestedSetup />}
+        {activeTab === 'trackday'     && <TrackDay />}
         {activeTab === 'measurements' && <MeasurementLog />}
         {activeTab === 'geometry'     && <SuspensionGeometry />}
       </main>
