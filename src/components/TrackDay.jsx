@@ -1,14 +1,14 @@
 import { useState, useEffect, useCallback } from 'react';
-import { analyzeSetup, DEFAULT_SETUP } from '../utils/raceSimulation';
+import { analyzeSetup } from '../utils/raceSimulation';
 import { handlingConditions, cornerPhases } from '../utils/tireAnalysis';
 import { REAR_SHOCKS, FRONT_STRUTS, shockLabel } from '../data/shockOptions';
 
-// ─── Storage keys ────────────────────────────────────────────────────────────
-const EVENTS_KEY  = 'race_track_day_events';
-const APIKEY_KEY  = 'race_claude_api_key';
-const GEO_KEY     = 'race_geometry_logs';
+// ─── Storage keys ─────────────────────────────────────────────────────────────
+const EVENTS_KEY = 'race_track_day_events';
+const APIKEY_KEY = 'race_claude_api_key';
+const GEO_KEY    = 'race_geometry_logs';
 
-// ─── Helpers ─────────────────────────────────────────────────────────────────
+// ─── Helpers ──────────────────────────────────────────────────────────────────
 function dc(o) { return JSON.parse(JSON.stringify(o)); }
 function load(key, fallback) { try { return JSON.parse(localStorage.getItem(key)) ?? fallback; } catch { return fallback; } }
 function save(key, val) { localStorage.setItem(key, JSON.stringify(val)); }
@@ -16,12 +16,11 @@ function save(key, val) { localStorage.setItem(key, JSON.stringify(val)); }
 // ─── Empty templates ──────────────────────────────────────────────────────────
 const EMPTY_SESSION = {
   id: null,
-  name: '',            // e.g. "Practice 1"
+  name: '',
+  carProfileId: null,   // ← per-session car profile
   ambient: '',
   inflationTemp: '',
-  // Setup used this session
-  setup: null,         // null = inherit from event car profile / default
-  // Post-session data
+  setup: null,
   hotPsi:    { LF: '', RF: '', LR: '', RR: '' },
   tireTemps: {
     LF: { inside: '', middle: '', outside: '' },
@@ -29,131 +28,124 @@ const EMPTY_SESSION = {
     LR: { inside: '', middle: '', outside: '' },
     RR: { inside: '', middle: '', outside: '' },
   },
-  // Driver feel
-  condition: '',       // 'loose' | 'tight'
-  phase:     '',       // 'entry' | 'middle' | 'exit'
-  lapNotes:  '',       // free text — lap times, observations
+  condition: '',
+  phase: '',
+  lapNotes: '',
 };
 
 const EMPTY_EVENT = {
   id: null,
-  name: '',            // e.g. "Wampum 4/26"
+  name: '',
   date: new Date().toISOString().slice(0, 10),
   track: '',
-  carProfileId: null,  // ref to geometry log id, null = use model default
   sessions: [],
 };
 
-// Setup blank for a session (deep clone of DEFAULT_SETUP fields relevant to setup)
 function blankSetup() {
   return dc({
-    shocks:   { LF: 4, RF: 4, LR: 2, RR: 2 },
-    springs:  { LF: 475, RF: 475, LR: 160, RR: 160 },
-    camber:   { LF: 2.75, RF: -2.25 },
-    caster:   { LF: 9.0, RF: 3.0 },
-    toe:      -0.25,
-    coldPsi:  { LF: 20, RF: 42, LR: 16, RR: 32 },
+    shocks:  { LF: 4, RF: 4, LR: 2, RR: 2 },
+    springs: { LF: 475, RF: 475, LR: 160, RR: 160 },
+    camber:  { LF: 2.75, RF: -2.25 },
+    caster:  { LF: 9.0, RF: 3.0 },
+    toe:     -0.25,
+    coldPsi: { LF: 20, RF: 42, LR: 16, RR: 32 },
   });
 }
 
-// ─── Convert MeasurementLogger session shockLabel strings → numeric ratings ──
+// ─── Helpers ──────────────────────────────────────────────────────────────────
 function shockLabelToRating(label, isFront) {
   const list = isFront ? FRONT_STRUTS : REAR_SHOCKS;
   const found = list.find(s => shockLabel(s) === label);
   return found ? found.rating : 4;
 }
 
-// ─── Build a raceSimulation-compatible setup object from a logged session ────
 function sessionToSimSetup(session) {
   const s = session.setup ?? blankSetup();
-  // If shocks are stored as label strings, convert them
   const shocks = {};
   for (const corner of ['LF', 'RF', 'LR', 'RR']) {
     const val = s.shocks[corner];
-    if (typeof val === 'string' && val.includes('|')) {
-      shocks[corner] = shockLabelToRating(val, corner === 'LF' || corner === 'RF');
-    } else {
-      shocks[corner] = Number(val) || 4;
-    }
+    shocks[corner] = (typeof val === 'string' && val.includes('|'))
+      ? shockLabelToRating(val, corner === 'LF' || corner === 'RF')
+      : Number(val) || 4;
   }
   return {
     shocks,
-    springs: {
-      LF: Number(s.springs?.LF) || 475,
-      RF: Number(s.springs?.RF) || 475,
-      LR: 160,
-      RR: 160,
-    },
+    springs: { LF: Number(s.springs?.LF) || 475, RF: Number(s.springs?.RF) || 475, LR: 160, RR: 160 },
     camber:  { LF: Number(s.camber?.LF) || 0, RF: Number(s.camber?.RF) || 0 },
     caster:  { LF: Number(s.caster?.LF) || 5, RF: Number(s.caster?.RF) || 5 },
     toe:     Number(s.toe) || -0.25,
     coldPsi: {
-      LF: Number(s.coldPsi?.LF) || 20,
-      RF: Number(s.coldPsi?.RF) || 42,
-      LR: Number(s.coldPsi?.LR) || 16,
-      RR: Number(s.coldPsi?.RR) || 32,
+      LF: Number(s.coldPsi?.LF) || 20, RF: Number(s.coldPsi?.RF) || 42,
+      LR: Number(s.coldPsi?.LR) || 16, RR: Number(s.coldPsi?.RR) || 32,
     },
   };
 }
 
-// ─── Format all event data into a Claude prompt ───────────────────────────────
-function buildPrompt(event, sessions, geoProfile) {
+function carLabel(session, geoProfiles) {
+  if (!session.carProfileId) return 'Model default (P71)';
+  const geo = geoProfiles.find(g => g.id === session.carProfileId);
+  return geo ? (geo.title || 'Unnamed car') : 'Model default (P71)';
+}
+
+// ─── Claude prompt ────────────────────────────────────────────────────────────
+function buildPrompt(event, selectedSessions, geoProfiles) {
   const lines = [
-    `You are a race car setup engineer analyzing data from a track day for a 2008 Ford Crown Victoria P71 on an oval/figure-8 track.`,
+    `You are a race car setup engineer analyzing track day data for 2008 Ford Crown Victoria P71 race cars on an oval/figure-8 track.`,
     ``,
     `EVENT: ${event.name}  |  Date: ${event.date}  |  Track: ${event.track || 'not specified'}`,
     ``,
   ];
 
-  if (geoProfile) {
-    lines.push(
-      `CAR GEOMETRY PROFILE: ${geoProfile.title}`,
-      `  Track width: front ${geoProfile.trackWidth?.front || '—'}"  rear ${geoProfile.trackWidth?.rear || '—'}"`,
-      `  Rear roll center (Watts pivot): ${geoProfile.rearRollCenter || '—'}"`,
-      `  Front SLA: LF lower BJ ${geoProfile.lowerBallJoint?.LF || '—'}"  RF ${geoProfile.lowerBallJoint?.RF || '—'}"`,
-      `             LF upper BJ ${geoProfile.upperBallJoint?.LF || '—'}"  RF ${geoProfile.upperBallJoint?.RF || '—'}"`,
-      `             LF arm pivot ${geoProfile.lowerArmPivot?.LF || '—'}"  RF ${geoProfile.lowerArmPivot?.RF || '—'}"`,
-      `             Wheel center height: ${geoProfile.wheelCenterHeight || '—'}"`,
-      `  Droop camber: LF ${geoProfile.droopCamber?.LF || '—'}°  RF ${geoProfile.droopCamber?.RF || '—'}°`,
-      `  Droop travel: LF ${geoProfile.droopTravel?.LF || '—'}"  RF ${geoProfile.droopTravel?.RF || '—'}"`,
-      `  Bump camber:  LF ${geoProfile.bumpCamber?.LF || '—'}°  RF ${geoProfile.bumpCamber?.RF || '—'}°`,
-      `  Caster camber gain (20° steer): LF ${geoProfile.steerCamber20?.LF || '—'}°  RF ${geoProfile.steerCamber20?.RF || '—'}°`,
-      ``,
-    );
-  } else {
-    lines.push(`CAR GEOMETRY: Using model defaults (no geometry profile selected)`, ``);
-  }
-
-  sessions.forEach((session, idx) => {
+  selectedSessions.forEach((session, idx) => {
+    const geo = session.carProfileId ? geoProfiles.find(g => g.id === session.carProfileId) : null;
+    const carName = carLabel(session, geoProfiles);
     const simSetup = sessionToSimSetup(session);
     const ambient = Number(session.ambient) || 65;
     const inflation = Number(session.inflationTemp) || 68;
     let physics = null;
-    try { physics = analyzeSetup(simSetup, ambient, inflation); } catch (e) { /* ignore */ }
+    try { physics = analyzeSetup(simSetup, ambient, inflation); } catch { /* ignore */ }
 
-    lines.push(`── SESSION ${idx + 1}: ${session.name || `Practice ${idx + 1}`} ──────────────────`);
+    lines.push(`${'─'.repeat(60)}`);
+    lines.push(`SESSION ${idx + 1}: ${session.name || `Practice ${idx + 1}`}  |  Car: ${carName}`);
     lines.push(`  Ambient: ${session.ambient || '—'}°F  |  Tires set at: ${session.inflationTemp || '—'}°F`);
     lines.push(``);
+
+    if (geo) {
+      lines.push(`  GEOMETRY (${geo.title}):`);
+      lines.push(`    Track width: front ${geo.trackWidth?.front || '—'}"  rear ${geo.trackWidth?.rear || '—'}"`);
+      lines.push(`    Rear roll center (Watts pivot): ${geo.rearRollCenter || '—'}"`);
+      lines.push(`    Front SLA: lower BJ LF ${geo.lowerBallJoint?.LF || '—'}"  RF ${geo.lowerBallJoint?.RF || '—'}"`);
+      lines.push(`               upper BJ LF ${geo.upperBallJoint?.LF || '—'}"  RF ${geo.upperBallJoint?.RF || '—'}"`);
+      lines.push(`               arm pivot LF ${geo.lowerArmPivot?.LF || '—'}"  RF ${geo.lowerArmPivot?.RF || '—'}"`);
+      lines.push(`               wheel center height ${geo.wheelCenterHeight || '—'}"`);
+      lines.push(`    Droop camber: LF ${geo.droopCamber?.LF || '—'}°  RF ${geo.droopCamber?.RF || '—'}°`);
+      lines.push(`    Droop travel: LF ${geo.droopTravel?.LF || '—'}"  RF ${geo.droopTravel?.RF || '—'}"`);
+      lines.push(`    Bump camber: LF ${geo.bumpCamber?.LF || '—'}°  RF ${geo.bumpCamber?.RF || '—'}°`);
+      lines.push(`    Caster camber gain (20° steer): LF ${geo.steerCamber20?.LF || '—'}°  RF ${geo.steerCamber20?.RF || '—'}°`);
+      lines.push(``);
+    } else {
+      lines.push(`  GEOMETRY: model defaults`);
+      lines.push(``);
+    }
+
     lines.push(`  SETUP:`);
-    lines.push(`    Camber:  LF ${simSetup.camber.LF}°  RF ${simSetup.camber.RF}°`);
-    lines.push(`    Caster:  LF ${simSetup.caster.LF}°  RF ${simSetup.caster.RF}°`);
-    lines.push(`    Toe: ${simSetup.toe}" front`);
-    lines.push(`    Springs: LF ${simSetup.springs.LF} lbs/in  RF ${simSetup.springs.RF} lbs/in`);
-    lines.push(`    Shocks:  LF ${simSetup.shocks.LF}  RF ${simSetup.shocks.RF}  LR ${simSetup.shocks.LR}  RR ${simSetup.shocks.RR}  (0=stiffest, 10=softest)`);
+    lines.push(`    Camber LF ${simSetup.camber.LF}°  RF ${simSetup.camber.RF}°`);
+    lines.push(`    Caster LF ${simSetup.caster.LF}°  RF ${simSetup.caster.RF}°`);
+    lines.push(`    Toe ${simSetup.toe}" front`);
+    lines.push(`    Springs LF ${simSetup.springs.LF} lbs/in  RF ${simSetup.springs.RF} lbs/in`);
+    lines.push(`    Shocks LF ${simSetup.shocks.LF}  RF ${simSetup.shocks.RF}  LR ${simSetup.shocks.LR}  RR ${simSetup.shocks.RR}  (0=stiffest 10=softest)`);
     lines.push(`    Cold PSI: LF ${simSetup.coldPsi.LF}  RF ${simSetup.coldPsi.RF}  LR ${simSetup.coldPsi.LR}  RR ${simSetup.coldPsi.RR}`);
     lines.push(``);
 
     const hp = session.hotPsi;
     if (Object.values(hp).some(v => v !== '')) {
-      lines.push(`  HOT PSI (after session):`);
-      lines.push(`    LF ${hp.LF || '—'}  RF ${hp.RF || '—'}  LR ${hp.LR || '—'}  RR ${hp.RR || '—'}`);
+      lines.push(`  HOT PSI: LF ${hp.LF || '—'}  RF ${hp.RF || '—'}  LR ${hp.LR || '—'}  RR ${hp.RR || '—'}`);
       lines.push(``);
     }
 
     const tt = session.tireTemps;
-    const hasTemps = Object.values(tt).some(t => t.inside || t.middle || t.outside);
-    if (hasTemps) {
-      lines.push(`  PYROMETER (°F — Inside / Middle / Outside):`);
+    if (Object.values(tt).some(t => t.inside || t.middle || t.outside)) {
+      lines.push(`  PYROMETER (°F: Inside / Middle / Outside):`);
       for (const pos of ['LF', 'RF', 'LR', 'RR']) {
         lines.push(`    ${pos}: ${tt[pos].inside || '—'} / ${tt[pos].middle || '—'} / ${tt[pos].outside || '—'}`);
       }
@@ -174,29 +166,32 @@ function buildPrompt(event, sessions, geoProfile) {
 
     if (physics) {
       const c = physics.corners;
-      lines.push(`  PHYSICS MODEL OUTPUT:`);
-      lines.push(`    Est. lap time: ${physics.lapTime?.toFixed(3)}s`);
-      lines.push(`    Front LLTD: ${(physics.ss?.frontLLTD * 100).toFixed(1)}%  (target 46%)`);
-      lines.push(`    RF: grip ${c?.RF?.grip?.toFixed(1)}%  hot PSI ${c?.RF?.hp?.toFixed(1)} (opt ${c?.RF?.optHotPsi?.toFixed(1)})  ground camber ${c?.RF?.groundCamber?.toFixed(2)}°`);
-      lines.push(`    LF: grip ${c?.LF?.grip?.toFixed(1)}%  hot PSI ${c?.LF?.hp?.toFixed(1)} (opt ${c?.LF?.optHotPsi?.toFixed(1)})  ground camber ${c?.LF?.groundCamber?.toFixed(2)}°`);
-      lines.push(`    RR: grip ${c?.RR?.grip?.toFixed(1)}%  hot PSI ${c?.RR?.hp?.toFixed(1)} (opt ${c?.RR?.optHotPsi?.toFixed(1)})`);
-      lines.push(`    LR: grip ${c?.LR?.grip?.toFixed(1)}%  hot PSI ${c?.LR?.hp?.toFixed(1)} (opt ${c?.LR?.optHotPsi?.toFixed(1)})`);
+      lines.push(`  PHYSICS MODEL:`);
+      lines.push(`    Est. lap ${physics.lapTime?.toFixed(3)}s  |  Front LLTD ${(physics.ss?.frontLLTD * 100).toFixed(1)}% (target 46%)`);
+      lines.push(`    RF grip ${c?.RF?.grip?.toFixed(1)}%  hot PSI ${c?.RF?.hp?.toFixed(1)} (opt ${c?.RF?.optHotPsi?.toFixed(1)})  ground camber ${c?.RF?.groundCamber?.toFixed(2)}°`);
+      lines.push(`    LF grip ${c?.LF?.grip?.toFixed(1)}%  hot PSI ${c?.LF?.hp?.toFixed(1)} (opt ${c?.LF?.optHotPsi?.toFixed(1)})  ground camber ${c?.LF?.groundCamber?.toFixed(2)}°`);
+      lines.push(`    RR grip ${c?.RR?.grip?.toFixed(1)}%  hot PSI ${c?.RR?.hp?.toFixed(1)} (opt ${c?.RR?.optHotPsi?.toFixed(1)})`);
+      lines.push(`    LR grip ${c?.LR?.grip?.toFixed(1)}%  hot PSI ${c?.LR?.hp?.toFixed(1)} (opt ${c?.LR?.optHotPsi?.toFixed(1)})`);
       lines.push(``);
     }
   });
 
-  lines.push(
-    `ANALYSIS REQUESTED:`,
-    `1. Compare sessions — what changed between sessions and was it an improvement?`,
-    `2. Identify the primary handling issue(s) based on driver feel + tire data.`,
-    `3. For each session, assess tire contact patch quality (camber, pressure spread vs optimal).`,
-    `4. Give ranked, specific recommendations for the NEXT session: what to change and why.`,
-    `   Focus on maximum contact patch and driver feel over lap time.`,
-    `   Prioritize changes that can be made at the track (PSI, toe) before shop changes (camber, caster, shocks).`,
-    `5. Call out any red flags in the tire temperature data (heat gradient, wear patterns).`,
-    ``,
-    `Be specific and numeric. Reference actual values from the data. Keep it concise — the crew chief is reading this at the track.`,
-  );
+  // Group by car for cross-session notes
+  const cars = [...new Set(selectedSessions.map(s => carLabel(s, geoProfiles)))];
+
+  lines.push(`${'─'.repeat(60)}`);
+  lines.push(`ANALYSIS REQUESTED:`);
+  if (cars.length > 1) {
+    lines.push(`NOTE: This analysis covers ${cars.length} different cars: ${cars.join(', ')}. Analyze each car's sessions together, then compare across cars only where useful.`);
+  }
+  lines.push(`1. For each car: compare sessions in order — what changed and did it help?`);
+  lines.push(`2. Identify the primary handling issue(s) per car based on driver feel + tire data.`);
+  lines.push(`3. Assess tire contact patch quality per session (camber spread, pressure vs optimal, temp gradients).`);
+  lines.push(`4. Give ranked specific recommendations for the NEXT session per car.`);
+  lines.push(`   Prioritize: PSI and toe first (trackside), then shocks/springs/alignment (shop).`);
+  lines.push(`   Focus on maximum contact patch and driver feel.`);
+  lines.push(`5. Flag any tire temperature red flags (excessive gradients, uneven wear patterns).`);
+  lines.push(`Be specific and numeric. Reference actual values. Keep it concise — crew chief is reading this at the track.`);
 
   return lines.join('\n');
 }
@@ -213,7 +208,7 @@ async function callClaude(apiKey, prompt) {
     },
     body: JSON.stringify({
       model: 'claude-sonnet-4-6',
-      max_tokens: 1500,
+      max_tokens: 2000,
       messages: [{ role: 'user', content: prompt }],
     }),
   });
@@ -225,21 +220,17 @@ async function callClaude(apiKey, prompt) {
   return data.content?.[0]?.text ?? '';
 }
 
-// ─── JS-only physics analysis (no API) ───────────────────────────────────────
 function runPhysicsAnalysis(sessions) {
   return sessions.map(session => {
     const simSetup = sessionToSimSetup(session);
     const ambient = Number(session.ambient) || 65;
     const inflation = Number(session.inflationTemp) || 68;
-    try {
-      return { sessionId: session.id, ...analyzeSetup(simSetup, ambient, inflation) };
-    } catch {
-      return null;
-    }
+    try { return { sessionId: session.id, ...analyzeSetup(simSetup, ambient, inflation) }; }
+    catch { return null; }
   }).filter(Boolean);
 }
 
-// ─── Sub-components ────────────────────────────────────────────────────────────
+// ─── Sub-components ───────────────────────────────────────────────────────────
 
 function Field({ label, hint, children }) {
   const [open, setOpen] = useState(false);
@@ -263,7 +254,6 @@ function NumIn({ value, onChange, placeholder, step = '1', min, max }) {
   );
 }
 
-// ─── Setup editor (shocks + springs + alignment + cold PSI) ──────────────────
 const FRONT_SPRING_OPTIONS = [
   { value: 700, label: '700 lbs/in — Heavy Duty' },
   { value: 475, label: '475 lbs/in — Police/Taxi' },
@@ -279,7 +269,6 @@ function SetupEditor({ setup, onChange }) {
     obj[keys[keys.length - 1]] = val;
     onChange(s);
   }
-
   function updateShock(corner, label) {
     const isFront = corner === 'LF' || corner === 'RF';
     const list = isFront ? FRONT_STRUTS : REAR_SHOCKS;
@@ -290,7 +279,6 @@ function SetupEditor({ setup, onChange }) {
     if (isFront && found.springRate) s.springs[corner] = found.springRate;
     onChange(s);
   }
-
   function selectedLabel(corner) {
     const list = (corner === 'LF' || corner === 'RF') ? FRONT_STRUTS : REAR_SHOCKS;
     const match = list.find(s => s.rating === setup.shocks[corner]);
@@ -309,9 +297,7 @@ function SetupEditor({ setup, onChange }) {
               <select className="ml-input ml-select td-select"
                 value={selectedLabel(corner)}
                 onChange={e => updateShock(corner, e.target.value)}>
-                {list.map(s => (
-                  <option key={s.part} value={shockLabel(s)}>{shockLabel(s)} — {s.use}</option>
-                ))}
+                {list.map(s => <option key={s.part} value={shockLabel(s)}>{shockLabel(s)} — {s.use}</option>)}
               </select>
             </div>
           );
@@ -346,7 +332,9 @@ function SetupEditor({ setup, onChange }) {
               value={setup.caster[c]} onChange={e => set(`caster.${c}`, parseFloat(e.target.value) || 0)} />
           </div>
         ))}
-        <div className="td-setup-group-label" style={{ marginTop: 12 }}>Toe (in) <span style={{ fontWeight: 400, color: 'var(--text-secondary)' }}>− = out</span></div>
+        <div className="td-setup-group-label" style={{ marginTop: 12 }}>
+          Toe (in) <span style={{ fontWeight: 400, color: 'var(--text-secondary)' }}>− = out</span>
+        </div>
         <div className="td-setup-row">
           <span className="td-setup-corner">F</span>
           <input type="number" step="0.0625" className="ml-input td-num"
@@ -368,16 +356,17 @@ function SetupEditor({ setup, onChange }) {
   );
 }
 
-// ─── Physics results card (per session) ──────────────────────────────────────
-function PhysicsCard({ analysis, session }) {
+function PhysicsCard({ analysis, session, geoProfiles }) {
   if (!analysis) return null;
   const c = analysis.corners;
   const lltd = analysis.ss?.frontLLTD ?? 0;
   const lltdOk = Math.abs(lltd - 0.46) < 0.03;
-
   return (
     <div className="td-physics-card">
-      <div className="td-physics-title">Physics Model — {session.name || 'Session'}</div>
+      <div className="td-physics-title">
+        {session.name || 'Session'}
+        <span className="td-physics-car">{carLabel(session, geoProfiles)}</span>
+      </div>
       <div className="td-physics-grid">
         <div className="td-phys-item">
           <span className="td-phys-label">Est. Lap</span>
@@ -404,9 +393,8 @@ function PhysicsCard({ analysis, session }) {
 }
 
 // ─── Session editor ───────────────────────────────────────────────────────────
-function SessionEditor({ session, index, onChange }) {
+function SessionEditor({ session, index, onChange, geoProfiles }) {
   const setup = session.setup ?? blankSetup();
-
   function set(field, val) { onChange({ ...session, [field]: val }); }
   function setN(parent, key, val) { onChange({ ...session, [parent]: { ...session[parent], [key]: val } }); }
   function setTemp(pos, zone, val) {
@@ -418,8 +406,25 @@ function SessionEditor({ session, index, onChange }) {
       <div className="td-session-header">
         <input className="td-session-name-input" type="text"
           placeholder={`Practice ${index + 1}`}
-          value={session.name}
-          onChange={e => set('name', e.target.value)} />
+          value={session.name} onChange={e => set('name', e.target.value)} />
+      </div>
+
+      {/* Car profile — per session */}
+      <div className="td-session-section">
+        <div className="td-ss-label">Car Profile</div>
+        <select className="ml-input ml-select"
+          value={session.carProfileId ?? ''}
+          onChange={e => set('carProfileId', e.target.value ? Number(e.target.value) : null)}>
+          <option value="">Model default (P71)</option>
+          {geoProfiles.map(g => (
+            <option key={g.id} value={g.id}>{g.title || 'Unnamed'} — {g.date}</option>
+          ))}
+        </select>
+        {session.carProfileId && (
+          <div className="td-geo-badge" style={{ marginTop: 6 }}>
+            {carLabel(session, geoProfiles)}
+          </div>
+        )}
       </div>
 
       {/* Environment */}
@@ -429,7 +434,7 @@ function SessionEditor({ session, index, onChange }) {
           <Field label="Ambient (°F)">
             <NumIn value={session.ambient} onChange={v => set('ambient', v)} placeholder="e.g. 75" />
           </Field>
-          <Field label="Tires set at (°F)" hint="Shop/garage temperature when cold pressures were set.">
+          <Field label="Tires set at (°F)" hint="Shop temperature when cold pressures were set.">
             <NumIn value={session.inflationTemp} onChange={v => set('inflationTemp', v)} placeholder="e.g. 68" />
           </Field>
         </div>
@@ -510,81 +515,96 @@ function SessionEditor({ session, index, onChange }) {
         <div className="td-ss-label">Lap Notes / Observations</div>
         <textarea className="ml-textarea" rows={3}
           placeholder="Lap times, what changed from last session, anything the driver noticed..."
-          value={session.lapNotes}
-          onChange={e => set('lapNotes', e.target.value)} />
+          value={session.lapNotes} onChange={e => set('lapNotes', e.target.value)} />
       </div>
     </div>
   );
 }
 
-// ─── API Key settings panel ───────────────────────────────────────────────────
+// ─── API Key panel ────────────────────────────────────────────────────────────
 function ApiKeyPanel({ apiKey, setApiKey }) {
   const [editing, setEditing] = useState(false);
   const [draft, setDraft] = useState('');
 
-  function save() {
+  function saveKey() {
     setApiKey(draft.trim());
     localStorage.setItem(APIKEY_KEY, draft.trim());
     setEditing(false);
   }
-
-  function clear() {
+  function clearKey() {
     setApiKey('');
     localStorage.removeItem(APIKEY_KEY);
     setEditing(false);
   }
 
-  if (!editing) {
-    return (
-      <div className="td-apikey-bar">
-        <span className="td-apikey-status">
-          {apiKey
-            ? <><span className="td-apikey-dot active" />Claude AI analysis enabled</>
-            : <><span className="td-apikey-dot" />Claude API key not set — using physics model only</>}
-        </span>
-        <button className="td-apikey-btn" onClick={() => { setDraft(apiKey); setEditing(true); }}>
-          {apiKey ? 'Change Key' : 'Add API Key'}
-        </button>
-      </div>
-    );
-  }
+  if (!editing) return (
+    <div className="td-apikey-bar">
+      <span className="td-apikey-status">
+        {apiKey
+          ? <><span className="td-apikey-dot active" />Claude AI analysis enabled</>
+          : <><span className="td-apikey-dot" />No API key — physics model only</>}
+      </span>
+      <button className="td-apikey-btn" onClick={() => { setDraft(apiKey); setEditing(true); }}>
+        {apiKey ? 'Change Key' : 'Add API Key'}
+      </button>
+    </div>
+  );
 
   return (
     <div className="td-apikey-bar td-apikey-edit">
-      <input className="ml-input td-apikey-input" type="password"
-        placeholder="sk-ant-..."
-        value={draft}
-        onChange={e => setDraft(e.target.value)}
-        onKeyDown={e => e.key === 'Enter' && save()} />
-      <button className="ml-save-btn" onClick={save}>Save</button>
-      {apiKey && <button className="ml-delete-btn" onClick={clear}>Remove</button>}
+      <input className="ml-input td-apikey-input" type="password" placeholder="sk-ant-..."
+        value={draft} onChange={e => setDraft(e.target.value)}
+        onKeyDown={e => e.key === 'Enter' && saveKey()} />
+      <button className="ml-save-btn" onClick={saveKey}>Save</button>
+      {apiKey && <button className="ml-delete-btn" onClick={clearKey}>Remove</button>}
       <button className="ml-cancel-btn" onClick={() => setEditing(false)}>Cancel</button>
       <span className="td-apikey-note">Stored in your browser only. Never sent anywhere except api.anthropic.com.</span>
     </div>
   );
 }
 
-// ─── Analysis results panel ───────────────────────────────────────────────────
-function AnalysisPanel({ event, sessions, geoProfile, apiKey }) {
-  const [status, setStatus]   = useState('idle'); // idle | running | done | error
-  const [aiText, setAiText]   = useState('');
-  const [errMsg, setErrMsg]   = useState('');
+// ─── Analysis panel ───────────────────────────────────────────────────────────
+function AnalysisPanel({ event, allSessions, geoProfiles, apiKey }) {
+  // Default: all sessions selected
+  const [selected, setSelected] = useState(() => new Set(allSessions.map(s => s.id)));
+  const [status, setStatus]     = useState('idle');
+  const [aiText, setAiText]     = useState('');
+  const [errMsg, setErrMsg]     = useState('');
   const [physicsResults, setPhysicsResults] = useState(null);
 
+  // Sync selection when sessions list changes
+  useEffect(() => {
+    setSelected(prev => {
+      const ids = new Set(allSessions.map(s => s.id));
+      return new Set([...prev].filter(id => ids.has(id)));
+    });
+  }, [allSessions]);
+
+  function toggleSession(id) {
+    setSelected(prev => {
+      const next = new Set(prev);
+      next.has(id) ? next.delete(id) : next.add(id);
+      return next;
+    });
+  }
+
+  function selectAll()  { setSelected(new Set(allSessions.map(s => s.id))); }
+  function selectNone() { setSelected(new Set()); }
+
+  const selectedSessions = allSessions.filter(s => selected.has(s.id));
+
   const analyze = useCallback(async () => {
+    if (selectedSessions.length === 0) return;
     setStatus('running');
     setAiText('');
     setErrMsg('');
 
-    // Always run physics
-    const phys = runPhysicsAnalysis(sessions);
+    const phys = runPhysicsAnalysis(selectedSessions);
     setPhysicsResults(phys);
 
-    // Try Claude if key present
     if (apiKey) {
       try {
-        const prompt = buildPrompt(event, sessions, geoProfile);
-        const text = await callClaude(apiKey, prompt);
+        const text = await callClaude(apiKey, buildPrompt(event, selectedSessions, geoProfiles));
         setAiText(text);
         setStatus('done');
       } catch (e) {
@@ -594,24 +614,54 @@ function AnalysisPanel({ event, sessions, geoProfile, apiKey }) {
     } else {
       setStatus('done');
     }
-  }, [event, sessions, geoProfile, apiKey]);
-
-  const canAnalyze = sessions.length > 0;
+  }, [event, selectedSessions, geoProfiles, apiKey]);
 
   return (
     <div className="td-analysis-panel">
+      {/* Session selector */}
+      {allSessions.length > 0 && (
+        <div className="td-session-selector">
+          <div className="td-selector-header">
+            <span className="td-ss-label" style={{ marginBottom: 0 }}>Sessions to analyze</span>
+            <div className="td-selector-controls">
+              <button className="td-sel-btn" onClick={selectAll}>All</button>
+              <button className="td-sel-btn" onClick={selectNone}>None</button>
+            </div>
+          </div>
+          <div className="td-selector-list">
+            {allSessions.map(session => (
+              <label key={session.id} className={`td-sel-item${selected.has(session.id) ? ' checked' : ''}`}>
+                <input type="checkbox"
+                  checked={selected.has(session.id)}
+                  onChange={() => toggleSession(session.id)} />
+                <div className="td-sel-item-info">
+                  <span className="td-sel-session-name">{session.name || 'Unnamed session'}</span>
+                  <span className="td-sel-car-name">{carLabel(session, geoProfiles)}</span>
+                </div>
+                {session.condition && (
+                  <span className="td-view-badge condition" style={{ marginLeft: 'auto', flexShrink: 0 }}>
+                    {handlingConditions.find(c => c.value === session.condition)?.label}
+                  </span>
+                )}
+              </label>
+            ))}
+          </div>
+        </div>
+      )}
+
       <button
         className={`td-analyze-btn${status === 'running' ? ' running' : ''}`}
         onClick={analyze}
-        disabled={!canAnalyze || status === 'running'}>
-        {status === 'running' ? 'Analyzing…' : 'Analyze Sessions'}
+        disabled={selectedSessions.length === 0 || status === 'running'}>
+        {status === 'running'
+          ? 'Analyzing…'
+          : `Analyze ${selectedSessions.length} Session${selectedSessions.length !== 1 ? 's' : ''}`}
       </button>
-      {!canAnalyze && <p className="td-analysis-note">Add at least one session to analyze.</p>}
+      {selectedSessions.length === 0 && <p className="td-analysis-note">Select at least one session above.</p>}
 
       {status === 'error' && (
         <div className="td-analysis-error">
-          <strong>Claude API error:</strong> {errMsg}
-          <br />Physics model results are shown below.
+          <strong>Claude API error:</strong> {errMsg}<br />Physics model results shown below.
         </div>
       )}
 
@@ -619,7 +669,7 @@ function AnalysisPanel({ event, sessions, geoProfile, apiKey }) {
         <div className="td-physics-results">
           <div className="td-results-heading">Physics Model Results</div>
           {physicsResults.map((res, i) => (
-            <PhysicsCard key={res.sessionId} analysis={res} session={sessions[i]} />
+            <PhysicsCard key={res.sessionId} analysis={res} session={selectedSessions[i]} geoProfiles={geoProfiles} />
           ))}
         </div>
       )}
@@ -642,37 +692,24 @@ function EventEditor({ event, onChange, geoProfiles }) {
   function set(field, val) { onChange({ ...event, [field]: val }); }
 
   function addSession() {
-    const newSession = {
-      ...dc(EMPTY_SESSION),
-      id: Date.now(),
-      name: `Practice ${event.sessions.length + 1}`,
-      setup: blankSetup(),
-    };
+    const newSession = { ...dc(EMPTY_SESSION), id: Date.now(), name: `Practice ${event.sessions.length + 1}`, setup: blankSetup() };
     onChange({ ...event, sessions: [...event.sessions, newSession] });
   }
-
   function updateSession(idx, updated) {
     const sessions = [...event.sessions];
     sessions[idx] = updated;
     onChange({ ...event, sessions });
   }
-
   function removeSession(idx) {
     onChange({ ...event, sessions: event.sessions.filter((_, i) => i !== idx) });
   }
 
-  const selectedGeo = event.carProfileId
-    ? geoProfiles.find(g => g.id === event.carProfileId) || null
-    : null;
-
   return (
     <div className="td-event-editor">
-      {/* Event header */}
       <div className="td-event-meta">
         <div className="ml-row">
           <Field label="Event Name">
-            <input className="ml-input ml-input-wide" type="text"
-              placeholder="e.g. Wampum 4/26"
+            <input className="ml-input ml-input-wide" type="text" placeholder="e.g. Wampum 4/26"
               value={event.name} onChange={e => set('name', e.target.value)} />
           </Field>
           <Field label="Date">
@@ -680,74 +717,49 @@ function EventEditor({ event, onChange, geoProfiles }) {
               value={event.date} onChange={e => set('date', e.target.value)} />
           </Field>
           <Field label="Track">
-            <input className="ml-input" type="text"
-              placeholder="e.g. Wampum Speedway"
+            <input className="ml-input" type="text" placeholder="e.g. Wampum Speedway"
               value={event.track} onChange={e => set('track', e.target.value)} />
           </Field>
         </div>
-        <div className="ml-row" style={{ marginTop: 12 }}>
-          <Field label="Car Profile (Suspension Geometry)"
-            hint="Select a car from your Suspension Geometry profiles. If none selected, the model default P71 geometry is used.">
-            <select className="ml-input ml-select"
-              value={event.carProfileId ?? ''}
-              onChange={e => set('carProfileId', e.target.value ? Number(e.target.value) : null)}>
-              <option value="">Model default (P71)</option>
-              {geoProfiles.map(g => (
-                <option key={g.id} value={g.id}>{g.title || 'Unnamed'} — {g.date}</option>
-              ))}
-            </select>
-          </Field>
-        </div>
-        {selectedGeo && (
-          <div className="td-geo-badge">
-            Using geometry profile: <strong>{selectedGeo.title}</strong>
-          </div>
-        )}
       </div>
 
-      {/* Sessions */}
       <div className="td-sessions-area">
         <div className="td-sessions-header">
           <span className="td-sessions-title">Practice Sessions</span>
           <button className="ml-new-btn" onClick={addSession}>+ Add Session</button>
         </div>
-
         {event.sessions.length === 0 && (
           <div className="ml-empty" style={{ padding: '24px' }}>
             No sessions yet — tap "+ Add Session" to log your first practice.
           </div>
         )}
-
         {event.sessions.map((session, idx) => (
           <div key={session.id} className="td-session-card">
             <div className="td-session-card-header">
-              <span className="td-session-card-title">
-                {session.name || `Practice ${idx + 1}`}
-              </span>
-              <button className="ml-delete-btn td-remove-session"
-                onClick={() => removeSession(idx)}>Remove</button>
+              <div className="td-session-card-title-group">
+                <span className="td-session-card-title">{session.name || `Practice ${idx + 1}`}</span>
+                <span className="td-session-card-car">{carLabel(session, geoProfiles)}</span>
+              </div>
+              <button className="ml-delete-btn td-remove-session" onClick={() => removeSession(idx)}>Remove</button>
             </div>
-            <SessionEditor session={session} index={idx} onChange={u => updateSession(idx, u)} />
+            <SessionEditor session={session} index={idx} onChange={u => updateSession(idx, u)} geoProfiles={geoProfiles} />
           </div>
         ))}
-
         {event.sessions.length > 0 && (
-          <button className="ml-new-btn td-add-session-bottom" onClick={addSession}>
-            + Add Session
-          </button>
+          <button className="ml-new-btn td-add-session-bottom" onClick={addSession}>+ Add Session</button>
         )}
       </div>
     </div>
   );
 }
 
-// ─── Main component ────────────────────────────────────────────────────────────
+// ─── Main component ───────────────────────────────────────────────────────────
 export default function TrackDay() {
-  const [events, setEvents]   = useState(() => load(EVENTS_KEY, []));
-  const [apiKey, setApiKey]   = useState(() => localStorage.getItem(APIKEY_KEY) || '');
+  const [events, setEvents]     = useState(() => load(EVENTS_KEY, []));
+  const [apiKey, setApiKey]     = useState(() => localStorage.getItem(APIKEY_KEY) || '');
   const [selectedIdx, setSelectedIdx] = useState(null);
-  const [editing, setEditing] = useState(null);
-  const [tab, setTab]         = useState('edit'); // 'edit' | 'analyze'
+  const [editing, setEditing]   = useState(null);
+  const [tab, setTab]           = useState('edit');
   const [deleteConfirm, setDeleteConfirm] = useState(null);
 
   const geoProfiles = load(GEO_KEY, []);
@@ -759,13 +771,11 @@ export default function TrackDay() {
     setSelectedIdx(null);
     setTab('edit');
   }
-
   function editEvent(idx) {
     setEditing(dc(events[idx]));
     setSelectedIdx(idx);
     setTab('edit');
   }
-
   function saveEvent() {
     if (!editing) return;
     const updated = [...events];
@@ -778,7 +788,6 @@ export default function TrackDay() {
     setEvents(updated);
     setEditing(null);
   }
-
   function deleteEvent(idx) {
     setEvents(events.filter((_, i) => i !== idx));
     setSelectedIdx(null);
@@ -787,40 +796,30 @@ export default function TrackDay() {
   }
 
   const activeEvent = editing ?? (selectedIdx !== null ? events[selectedIdx] : null);
-  const geoForActive = activeEvent?.carProfileId
-    ? geoProfiles.find(g => g.id === activeEvent.carProfileId) || null
-    : null;
 
   return (
     <div className="td-page">
-      {/* Sidebar */}
       <div className="ml-sidebar">
         <div className="ml-sidebar-header">
           <span className="ml-sidebar-title">Events</span>
           <button className="ml-new-btn" onClick={newEvent}>+ New</button>
         </div>
-        {events.length === 0 && (
-          <div className="ml-empty">No events yet.<br />Tap "+ New" to log a track day.</div>
-        )}
+        {events.length === 0 && <div className="ml-empty">No events yet.<br />Tap "+ New" to start.</div>}
         {events.map((ev, idx) => (
-          <button key={ev.id}
-            className={`ml-car-item${selectedIdx === idx ? ' active' : ''}`}
-            onClick={() => editEvent(idx)}>
+          <button key={ev.id} className={`ml-car-item${selectedIdx === idx ? ' active' : ''}`} onClick={() => editEvent(idx)}>
             <span className="ml-car-name">{ev.name || 'Unnamed Event'}</span>
-            <span className="ml-car-date">{ev.date}{ev.sessions.length > 0 ? ` · ${ev.sessions.length} session${ev.sessions.length > 1 ? 's' : ''}` : ''}</span>
+            <span className="ml-car-date">
+              {ev.date}{ev.sessions.length > 0 ? ` · ${ev.sessions.length} session${ev.sessions.length > 1 ? 's' : ''}` : ''}
+            </span>
           </button>
         ))}
       </div>
 
-      {/* Main */}
       <div className="ml-content">
-        {!activeEvent && (
-          <div className="ml-splash"><p>Select an event or tap "+ New" to log a track day.</p></div>
-        )}
+        {!activeEvent && <div className="ml-splash"><p>Select an event or tap "+ New" to log a track day.</p></div>}
 
         {activeEvent && (
           <>
-            {/* Top bar */}
             <div className="td-topbar">
               <div className="td-topbar-left">
                 <span className="td-topbar-title">{activeEvent.name || 'New Event'}</span>
@@ -842,17 +841,13 @@ export default function TrackDay() {
                     )}
                   </>
                 ) : (
-                  <>
-                    <button className="ml-edit-btn" onClick={() => editEvent(selectedIdx)}>Edit</button>
-                  </>
+                  <button className="ml-edit-btn" onClick={() => editEvent(selectedIdx)}>Edit</button>
                 )}
               </div>
             </div>
 
-            {/* API key bar */}
             <ApiKeyPanel apiKey={apiKey} setApiKey={setApiKey} />
 
-            {/* Tab switcher */}
             <div className="td-tab-row">
               <button className={`td-inner-tab${tab === 'edit' ? ' active' : ''}`} onClick={() => setTab('edit')}>
                 {editing ? 'Edit Sessions' : 'Sessions'}
@@ -876,31 +871,32 @@ export default function TrackDay() {
               <div className="td-scroll-area td-view-sessions">
                 {activeEvent.sessions.length === 0 ? (
                   <div className="ml-empty" style={{ padding: '32px' }}>No sessions logged. Click Edit to add sessions.</div>
-                ) : (
-                  activeEvent.sessions.map((s, i) => (
-                    <div key={s.id} className="td-view-session-card">
-                      <div className="td-view-session-title">{s.name || `Practice ${i + 1}`}</div>
-                      <div className="td-view-session-body">
-                        {s.condition && <span className="td-view-badge condition">{handlingConditions.find(c => c.value === s.condition)?.label}</span>}
-                        {s.phase && <span className="td-view-badge phase">{cornerPhases.find(p => p.value === s.phase)?.label}</span>}
-                        {s.ambient && <span className="td-view-badge">🌡 {s.ambient}°F</span>}
-                        <div className="td-view-psi">
-                          <span className="td-view-psi-label">Cold PSI</span>
-                          {['LF', 'RF', 'LR', 'RR'].map(pos => (
-                            <span key={pos} className="td-view-psi-item">{pos} {s.setup?.coldPsi?.[pos] ?? '—'}</span>
-                          ))}
-                        </div>
-                        <div className="td-view-psi">
-                          <span className="td-view-psi-label">Hot PSI</span>
-                          {['LF', 'RF', 'LR', 'RR'].map(pos => (
-                            <span key={pos} className="td-view-psi-item">{pos} {s.hotPsi?.[pos] || '—'}</span>
-                          ))}
-                        </div>
-                        {s.lapNotes && <p className="td-view-notes">{s.lapNotes}</p>}
-                      </div>
+                ) : activeEvent.sessions.map((s, i) => (
+                  <div key={s.id} className="td-view-session-card">
+                    <div className="td-view-session-title">
+                      {s.name || `Practice ${i + 1}`}
+                      <span className="td-view-session-car">{carLabel(s, geoProfiles)}</span>
                     </div>
-                  ))
-                )}
+                    <div className="td-view-session-body">
+                      {s.condition && <span className="td-view-badge condition">{handlingConditions.find(c => c.value === s.condition)?.label}</span>}
+                      {s.phase && <span className="td-view-badge phase">{cornerPhases.find(p => p.value === s.phase)?.label}</span>}
+                      {s.ambient && <span className="td-view-badge">{s.ambient}°F</span>}
+                      <div className="td-view-psi">
+                        <span className="td-view-psi-label">Cold PSI</span>
+                        {['LF', 'RF', 'LR', 'RR'].map(pos => (
+                          <span key={pos} className="td-view-psi-item">{pos} {s.setup?.coldPsi?.[pos] ?? '—'}</span>
+                        ))}
+                      </div>
+                      <div className="td-view-psi">
+                        <span className="td-view-psi-label">Hot PSI</span>
+                        {['LF', 'RF', 'LR', 'RR'].map(pos => (
+                          <span key={pos} className="td-view-psi-item">{pos} {s.hotPsi?.[pos] || '—'}</span>
+                        ))}
+                      </div>
+                      {s.lapNotes && <p className="td-view-notes">{s.lapNotes}</p>}
+                    </div>
+                  </div>
+                ))}
               </div>
             )}
 
@@ -908,8 +904,8 @@ export default function TrackDay() {
               <div className="td-scroll-area">
                 <AnalysisPanel
                   event={activeEvent}
-                  sessions={editing ? editing.sessions : activeEvent.sessions}
-                  geoProfile={geoForActive}
+                  allSessions={editing ? editing.sessions : activeEvent.sessions}
+                  geoProfiles={geoProfiles}
                   apiKey={apiKey}
                 />
               </div>
