@@ -4101,6 +4101,7 @@
 }
 .ml-input:focus { outline: none; border-color: var(--accent); }
 .ml-input-wide { max-width: 320px; }
+.ml-select { appearance: none; cursor: pointer; }
 
 .ml-textarea {
   background: var(--bg-card);

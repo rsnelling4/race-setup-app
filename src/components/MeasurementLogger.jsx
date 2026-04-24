@@ -1,65 +1,64 @@
 import { useState, useEffect } from 'react';
+import { REAR_SHOCKS, FRONT_STRUTS, shockLabel } from '../data/shockOptions';
 
-const STORAGE_KEY = 'race_measurement_logs';
+const SESSION_KEY = 'race_session_logs';
+const GEO_KEY     = 'race_geometry_logs';
 
-const EMPTY_CAR = {
+// ─── Empty templates ────────────────────────────────────────────────────────
+
+const EMPTY_SESSION = {
+  id: null,
   title: '',
   date: new Date().toISOString().slice(0, 10),
   notes: '',
-  // Session environment
   ambient: '',
   inflationTemp: '',
-  // Alignment
   camber: { LF: '', RF: '' },
   caster: { LF: '', RF: '' },
   toe: '',
-  // Hardware
   springRate: { LF: '', RF: '' },
-  shockNotes: { LF: '', RF: '', LR: '', RR: '' },
-  // Pressures
+  shocks: { LF: '', RF: '', LR: '', RR: '' },   // shockLabel strings
   coldPsi: { LF: '', RF: '', LR: '', RR: '' },
-  hotPsi: { LF: '', RF: '', LR: '', RR: '' },
-  // Pyrometer
+  hotPsi:  { LF: '', RF: '', LR: '', RR: '' },
   tireTemps: {
     LF: { inside: '', middle: '', outside: '' },
     RF: { inside: '', middle: '', outside: '' },
     LR: { inside: '', middle: '', outside: '' },
     RR: { inside: '', middle: '', outside: '' },
   },
-  // Suspension geometry (calibration — measurement-guide.md)
-  trackWidth: { front: '', rear: '' },
-  rearRollCenter: '',
-  lowerBallJoint: { LF: '', RF: '' },
-  upperBallJoint: { LF: '', RF: '' },
-  lowerArmPivot: { LF: '', RF: '' },
-  wheelCenterHeight: '',
-  droopCamber: { LF: '', RF: '' },
-  droopTravel: { LF: '', RF: '' },
-  bumpCamber: { LF: '', RF: '' },
-  bumpTravel: { LF: '', RF: '' },
-  steerCamber20: { LF: '', RF: '' },
-  rideLowering: '',
-  cgNotes: '',
 };
 
-function deepCopy(o) { return JSON.parse(JSON.stringify(o)); }
+const EMPTY_GEO = {
+  id: null,
+  title: '',
+  date: new Date().toISOString().slice(0, 10),
+  notes: '',
+  trackWidth:      { front: '', rear: '' },
+  rearRollCenter:  '',
+  lowerBallJoint:  { LF: '', RF: '' },
+  upperBallJoint:  { LF: '', RF: '' },
+  lowerArmPivot:   { LF: '', RF: '' },
+  wheelCenterHeight: '',
+  droopCamber:     { LF: '', RF: '' },
+  droopTravel:     { LF: '', RF: '' },
+  bumpCamber:      { LF: '', RF: '' },
+  bumpTravel:      { LF: '', RF: '' },
+  steerCamber20:   { LF: '', RF: '' },
+  rideLowering:    '',
+  cgNotes:         '',
+};
 
-function loadCars() {
-  try {
-    const raw = localStorage.getItem(STORAGE_KEY);
-    return raw ? JSON.parse(raw) : [];
-  } catch {
-    return [];
-  }
-}
+// ─── Persistence ─────────────────────────────────────────────────────────────
 
-function saveCars(cars) {
-  localStorage.setItem(STORAGE_KEY, JSON.stringify(cars));
-}
+function load(key)      { try { return JSON.parse(localStorage.getItem(key)) || []; } catch { return []; } }
+function save(key, arr) { localStorage.setItem(key, JSON.stringify(arr)); }
+function dc(o)          { return JSON.parse(JSON.stringify(o)); }
 
-function v(val) { return val || '—'; }
+// ─── Format for model ─────────────────────────────────────────────────────────
 
-function formatForModel(car) {
+function v(val) { return (val !== '' && val !== undefined && val !== null) ? val : '—'; }
+
+function formatSession(car) {
   const lines = [
     `=== ${car.title || 'Unnamed Car'} — ${car.date} ===`,
     '',
@@ -72,13 +71,13 @@ function formatForModel(car) {
     `Toe (front): ${v(car.toe)}" (negative = toe-out)`,
     '',
     '--- Springs ---',
-    `Front Spring Rate: LF ${v(car.springRate.LF)} lbs/in   RF ${v(car.springRate.RF)} lbs/in`,
+    `LF ${v(car.springRate.LF)} lbs/in   RF ${v(car.springRate.RF)} lbs/in`,
     '',
     '--- Shocks / Struts ---',
-    `LF: ${v(car.shockNotes.LF)}`,
-    `RF: ${v(car.shockNotes.RF)}`,
-    `LR: ${v(car.shockNotes.LR)}`,
-    `RR: ${v(car.shockNotes.RR)}`,
+    `LF: ${v(car.shocks.LF)}`,
+    `RF: ${v(car.shocks.RF)}`,
+    `LR: ${v(car.shocks.LR)}`,
+    `RR: ${v(car.shocks.RR)}`,
     '',
     '--- Cold Tire Pressures (PSI) ---',
     `LF ${v(car.coldPsi.LF)}   RF ${v(car.coldPsi.RF)}`,
@@ -94,50 +93,42 @@ function formatForModel(car) {
     `LR: ${v(car.tireTemps.LR.inside)} / ${v(car.tireTemps.LR.middle)} / ${v(car.tireTemps.LR.outside)}`,
     `RR: ${v(car.tireTemps.RR.inside)} / ${v(car.tireTemps.RR.middle)} / ${v(car.tireTemps.RR.outside)}`,
   ];
-
-  // Only include geometry section if any value is filled
-  const geo = car;
-  const hasGeo = [
-    geo.trackWidth?.front, geo.trackWidth?.rear, geo.rearRollCenter,
-    geo.lowerBallJoint?.LF, geo.upperBallJoint?.LF, geo.lowerArmPivot?.LF,
-    geo.wheelCenterHeight, geo.droopCamber?.LF, geo.bumpCamber?.LF,
-    geo.steerCamber20?.LF, geo.rideLowering,
-  ].some(x => x !== '' && x !== undefined);
-
-  if (hasGeo) {
-    lines.push(
-      '',
-      '--- Suspension Geometry (Calibration) ---',
-      `Track width (front): ${v(car.trackWidth.front)}" rear: ${v(car.trackWidth.rear)}"`,
-      `Rear roll center height (Watts pivot): ${v(car.rearRollCenter)}"`,
-      '',
-      'Front SLA ball joint heights from floor:',
-      `  LF lower BJ: ${v(car.lowerBallJoint.LF)}"   RF lower BJ: ${v(car.lowerBallJoint.RF)}"`,
-      `  LF upper BJ: ${v(car.upperBallJoint.LF)}"   RF upper BJ: ${v(car.upperBallJoint.RF)}"`,
-      `  LF lower arm pivot: ${v(car.lowerArmPivot.LF)}"   RF lower arm pivot: ${v(car.lowerArmPivot.RF)}"`,
-      `  Front wheel center height: ${v(car.wheelCenterHeight)}"`,
-      '',
-      'Droop camber (wheels hanging freely at full droop):',
-      `  LF: ${v(car.droopCamber.LF)}°   RF: ${v(car.droopCamber.RF)}°`,
-      `  LF droop travel: ${v(car.droopTravel.LF)}"   RF droop travel: ${v(car.droopTravel.RF)}"`,
-      '',
-      'Bump camber (wheel pushed to full bump):',
-      `  LF: ${v(car.bumpCamber.LF)}°   RF: ${v(car.bumpCamber.RF)}°`,
-      `  LF bump travel: ${v(car.bumpTravel.LF)}"   RF bump travel: ${v(car.bumpTravel.RF)}"`,
-      '',
-      'Caster camber gain (at 20° right steer):',
-      `  LF camber: ${v(car.steerCamber20.LF)}°   RF camber: ${v(car.steerCamber20.RF)}°`,
-      '',
-      `Ride height lowering from stock: ${v(car.rideLowering)}"`,
-    );
-    if (car.cgNotes.trim()) lines.push(`CG / ballast notes: ${car.cgNotes.trim()}`);
-  }
-
-  if (car.notes.trim()) {
-    lines.push('', '--- Notes ---', car.notes.trim());
-  }
+  if (car.notes.trim()) lines.push('', '--- Notes ---', car.notes.trim());
   return lines.join('\n');
 }
+
+function formatGeo(car) {
+  const lines = [
+    `=== ${car.title || 'Unnamed Car'} — Suspension Geometry — ${car.date} ===`,
+    '',
+    `Track width (front): ${v(car.trackWidth.front)}"   rear: ${v(car.trackWidth.rear)}"`,
+    `Rear roll center height (Watts pivot): ${v(car.rearRollCenter)}"`,
+    '',
+    'Front SLA ball joint heights from floor:',
+    `  LF lower BJ: ${v(car.lowerBallJoint.LF)}"   RF lower BJ: ${v(car.lowerBallJoint.RF)}"`,
+    `  LF upper BJ: ${v(car.upperBallJoint.LF)}"   RF upper BJ: ${v(car.upperBallJoint.RF)}"`,
+    `  LF lower arm pivot: ${v(car.lowerArmPivot.LF)}"   RF lower arm pivot: ${v(car.lowerArmPivot.RF)}"`,
+    `  Front wheel center height: ${v(car.wheelCenterHeight)}"`,
+    '',
+    'Droop camber (wheels hanging freely at full droop):',
+    `  LF: ${v(car.droopCamber.LF)}°   RF: ${v(car.droopCamber.RF)}°`,
+    `  LF droop travel: ${v(car.droopTravel.LF)}"   RF droop travel: ${v(car.droopTravel.RF)}"`,
+    '',
+    'Bump camber (wheel pushed to full bump):',
+    `  LF: ${v(car.bumpCamber.LF)}°   RF: ${v(car.bumpCamber.RF)}°`,
+    `  LF bump travel: ${v(car.bumpTravel.LF)}"   RF bump travel: ${v(car.bumpTravel.RF)}"`,
+    '',
+    'Caster camber gain (at 20° right steer):',
+    `  LF camber: ${v(car.steerCamber20.LF)}°   RF camber: ${v(car.steerCamber20.RF)}°`,
+    '',
+    `Ride height lowering from stock: ${v(car.rideLowering)}"`,
+  ];
+  if (car.cgNotes.trim())  lines.push(`CG / ballast notes: ${car.cgNotes.trim()}`);
+  if (car.notes.trim())    lines.push('', '--- Notes ---', car.notes.trim());
+  return lines.join('\n');
+}
+
+// ─── Shared sub-components ────────────────────────────────────────────────────
 
 function Field({ label, hint, children }) {
   const [open, setOpen] = useState(false);
@@ -145,9 +136,7 @@ function Field({ label, hint, children }) {
     <div className="ml-field">
       <div className="ml-field-label">
         {label}
-        {hint && (
-          <button className="ml-hint-btn" onClick={() => setOpen(o => !o)} title="How to measure">?</button>
-        )}
+        {hint && <button className="ml-hint-btn" onClick={() => setOpen(o => !o)}>?</button>}
       </div>
       {hint && open && <div className="ml-hint">{hint}</div>}
       {children}
@@ -155,483 +144,553 @@ function Field({ label, hint, children }) {
   );
 }
 
-function NumberIn({ value, onChange, placeholder, step = '0.1', min, max }) {
+function NumIn({ value, onChange, placeholder, step = '0.1', min, max }) {
   return (
-    <input
-      type="number"
-      className="ml-input"
-      value={value}
-      onChange={e => onChange(e.target.value)}
-      placeholder={placeholder || '—'}
-      step={step}
-      min={min}
-      max={max}
-    />
+    <input type="number" className="ml-input"
+      value={value} onChange={e => onChange(e.target.value)}
+      placeholder={placeholder || '—'} step={step} min={min} max={max} />
   );
 }
 
-export default function MeasurementLogger() {
-  const [cars, setCars] = useState(loadCars);
+// ─── Generic list editor (shared by both session and geo lists) ───────────────
+
+function ListEditor({ items, setItems, emptyTemplate, renderEditor, renderView, formatFn, label }) {
   const [selectedIdx, setSelectedIdx] = useState(null);
-  const [editing, setEditing] = useState(null);
-  const [copied, setCopied] = useState(false);
+  const [editing, setEditing]         = useState(null);
+  const [copied, setCopied]           = useState(false);
   const [deleteConfirm, setDeleteConfirm] = useState(null);
 
-  useEffect(() => { saveCars(cars); }, [cars]);
-
-  function newCar() {
-    const fresh = { ...deepCopy(EMPTY_CAR), id: Date.now(), date: new Date().toISOString().slice(0, 10) };
-    setEditing(fresh);
+  function newItem() {
+    setEditing({ ...dc(emptyTemplate), id: Date.now(), date: new Date().toISOString().slice(0, 10) });
     setSelectedIdx(null);
   }
 
-  function editCar(idx) {
-    // Merge saved car with EMPTY_CAR to fill in any missing fields added later
-    const merged = { ...deepCopy(EMPTY_CAR), ...deepCopy(cars[idx]) };
-    // Deep-merge nested objects
-    for (const key of Object.keys(EMPTY_CAR)) {
-      if (typeof EMPTY_CAR[key] === 'object' && EMPTY_CAR[key] !== null && !Array.isArray(EMPTY_CAR[key])) {
-        merged[key] = { ...EMPTY_CAR[key], ...(cars[idx][key] || {}) };
-        if (key === 'tireTemps') {
-          for (const pos of ['LF', 'RF', 'LR', 'RR']) {
-            merged.tireTemps[pos] = { ...EMPTY_CAR.tireTemps[pos], ...(cars[idx].tireTemps?.[pos] || {}) };
-          }
-        }
+  function editItem(idx) {
+    const merged = { ...dc(emptyTemplate), ...dc(items[idx]) };
+    // deep-merge nested objects
+    for (const key of Object.keys(emptyTemplate)) {
+      if (emptyTemplate[key] && typeof emptyTemplate[key] === 'object' && !Array.isArray(emptyTemplate[key])) {
+        merged[key] = { ...emptyTemplate[key], ...(items[idx][key] || {}) };
+      }
+    }
+    if (emptyTemplate.tireTemps) {
+      for (const pos of ['LF', 'RF', 'LR', 'RR']) {
+        merged.tireTemps[pos] = { ...emptyTemplate.tireTemps[pos], ...(items[idx].tireTemps?.[pos] || {}) };
       }
     }
     setEditing(merged);
     setSelectedIdx(idx);
   }
 
-  function saveCar() {
+  function saveItem() {
     if (!editing) return;
-    const updated = [...cars];
+    const updated = [...items];
     if (selectedIdx !== null) {
       updated[selectedIdx] = editing;
+      setSelectedIdx(selectedIdx);
     } else {
       updated.push(editing);
       setSelectedIdx(updated.length - 1);
     }
-    setCars(updated);
+    setItems(updated);
     setEditing(null);
   }
 
-  function cancelEdit() { setEditing(null); }
-
-  function deleteCar(idx) {
-    setCars(cars.filter((_, i) => i !== idx));
+  function deleteItem(idx) {
+    setItems(items.filter((_, i) => i !== idx));
     setSelectedIdx(null);
     setDeleteConfirm(null);
     setEditing(null);
   }
 
-  function copyToClipboard(car) {
-    navigator.clipboard.writeText(formatForModel(car)).then(() => {
+  function copyToClipboard(item) {
+    navigator.clipboard.writeText(formatFn(item)).then(() => {
       setCopied(true);
       setTimeout(() => setCopied(false), 2000);
     });
   }
 
-  function set(field, value) {
-    setEditing(e => ({ ...e, [field]: value }));
-  }
-
-  function setNested(parent, key, value) {
-    setEditing(e => ({ ...e, [parent]: { ...e[parent], [key]: value } }));
-  }
-
-  function setTireTemp(pos, zone, value) {
-    setEditing(e => ({
-      ...e,
-      tireTemps: { ...e.tireTemps, [pos]: { ...e.tireTemps[pos], [zone]: value } },
-    }));
-  }
-
-  const viewCar = selectedIdx !== null && !editing ? cars[selectedIdx] : null;
+  const viewItem = selectedIdx !== null && !editing ? items[selectedIdx] : null;
 
   return (
     <div className="ml-page">
       {/* Sidebar */}
       <div className="ml-sidebar">
         <div className="ml-sidebar-header">
-          <span className="ml-sidebar-title">Cars</span>
-          <button className="ml-new-btn" onClick={newCar}>+ New</button>
+          <span className="ml-sidebar-title">{label}</span>
+          <button className="ml-new-btn" onClick={newItem}>+ New</button>
         </div>
-        {cars.length === 0 && (
-          <div className="ml-empty">No cars saved yet.<br />Tap "+ New" to start.</div>
+        {items.length === 0 && (
+          <div className="ml-empty">Nothing saved yet.<br />Tap "+ New" to start.</div>
         )}
-        {cars.map((car, idx) => (
-          <button
-            key={car.id}
-            className={`ml-car-item${selectedIdx === idx ? ' active' : ''}`}
-            onClick={() => editCar(idx)}
-          >
-            <span className="ml-car-name">{car.title || 'Unnamed Car'}</span>
-            <span className="ml-car-date">{car.date}</span>
+        {items.map((item, idx) => (
+          <button key={item.id} className={`ml-car-item${selectedIdx === idx ? ' active' : ''}`}
+            onClick={() => editItem(idx)}>
+            <span className="ml-car-name">{item.title || 'Unnamed'}</span>
+            <span className="ml-car-date">{item.date}</span>
           </button>
         ))}
       </div>
 
-      {/* Main content */}
+      {/* Content */}
       <div className="ml-content">
-        {!editing && !viewCar && (
-          <div className="ml-splash">
-            <p>Select a car to edit, or tap "+ New" to log measurements for a new car.</p>
-          </div>
+        {!editing && !viewItem && (
+          <div className="ml-splash"><p>Select an entry or tap "+ New".</p></div>
         )}
 
-        {/* ---- EDITOR ---- */}
         {editing && (
           <div className="ml-editor">
             <div className="ml-editor-header">
-              <div className="ml-section-title">{selectedIdx !== null ? 'Edit' : 'New'} Car</div>
+              <div className="ml-section-title">{selectedIdx !== null ? 'Edit' : 'New'}</div>
               <div className="ml-editor-actions">
-                <button className="ml-save-btn" onClick={saveCar}>Save</button>
-                <button className="ml-cancel-btn" onClick={cancelEdit}>Cancel</button>
+                <button className="ml-save-btn" onClick={saveItem}>Save</button>
+                <button className="ml-cancel-btn" onClick={() => setEditing(null)}>Cancel</button>
                 {selectedIdx !== null && (
                   deleteConfirm === selectedIdx
                     ? <>
                         <span className="ml-delete-confirm-text">Delete?</span>
-                        <button className="ml-delete-confirm-btn" onClick={() => deleteCar(selectedIdx)}>Yes</button>
+                        <button className="ml-delete-confirm-btn" onClick={() => deleteItem(selectedIdx)}>Yes</button>
                         <button className="ml-cancel-btn" onClick={() => setDeleteConfirm(null)}>No</button>
                       </>
                     : <button className="ml-delete-btn" onClick={() => setDeleteConfirm(selectedIdx)}>Delete</button>
                 )}
               </div>
             </div>
-
-            {/* Identity */}
-            <div className="ml-section">
-              <div className="ml-row">
-                <Field label="Car Name / Title">
-                  <input className="ml-input ml-input-wide" type="text"
-                    placeholder="e.g. Pete's Car"
-                    value={editing.title} onChange={e => set('title', e.target.value)} />
-                </Field>
-                <Field label="Date">
-                  <input className="ml-input" type="date"
-                    value={editing.date} onChange={e => set('date', e.target.value)} />
-                </Field>
-              </div>
-            </div>
-
-            {/* Environment */}
-            <div className="ml-section">
-              <h3 className="ml-section-heading">Environment</h3>
-              <div className="ml-row">
-                <Field label="Ambient Temp (°F)"
-                  hint="Outside air temperature at the time of session. Use a thermometer or phone weather app.">
-                  <NumberIn value={editing.ambient} onChange={v => set('ambient', v)} placeholder="e.g. 75" step="1" />
-                </Field>
-                <Field label="Tires Set At (°F)"
-                  hint="Temperature where cold pressures were set (usually the shop). The model uses this to back-calculate ideal cold PSI from optimal hot PSI.">
-                  <NumberIn value={editing.inflationTemp} onChange={v => set('inflationTemp', v)} placeholder="e.g. 68" step="1" />
-                </Field>
-              </div>
-            </div>
-
-            {/* Alignment */}
-            <div className="ml-section">
-              <h3 className="ml-section-heading">Alignment</h3>
-              <div className="ml-row">
-                <Field label="Camber LF (°)"
-                  hint="Tilt of tire top relative to vertical. Measured by alignment machine or phone inclinometer against a flat plate held flush on the wheel face. Negative = top tilts inward. Positive = top tilts outward.">
-                  <NumberIn value={editing.camber.LF} onChange={v => setNested('camber', 'LF', v)} placeholder="e.g. 2.75" />
-                </Field>
-                <Field label="Camber RF (°)"
-                  hint="Same as LF. RF typically more negative on oval — it's the outside tire in left turns.">
-                  <NumberIn value={editing.camber.RF} onChange={v => setNested('camber', 'RF', v)} placeholder="e.g. -2.25" />
-                </Field>
-              </div>
-              <div className="ml-row">
-                <Field label="Caster LF (°)"
-                  hint="Kingpin tilt from side view. Alignment machine: turn wheel 20° in, zero gauge, turn 20° out, read caster. Higher = more camber gain in turns + heavier steering. Typical P71 range 3–9°.">
-                  <NumberIn value={editing.caster.LF} onChange={v => setNested('caster', 'LF', v)} placeholder="e.g. 9.0" />
-                </Field>
-                <Field label="Caster RF (°)"
-                  hint="Same procedure as LF. RF caster controls how much the right front gains negative camber when turning left — the key outside tire for oval.">
-                  <NumberIn value={editing.caster.RF} onChange={v => setNested('caster', 'RF', v)} placeholder="e.g. 3.0" />
-                </Field>
-              </div>
-              <div className="ml-row">
-                <Field label="Front Toe (inches)"
-                  hint="Total toe across both fronts. Measure at hub height front-of-tire and rear-of-tire. Toe = rear gap minus front gap. Negative = toe-out (fronts point slightly apart). e.g. -0.25 = quarter inch toe-out.">
-                  <NumberIn value={editing.toe} onChange={v => set('toe', v)} placeholder="e.g. -0.25" step="0.0625" />
-                </Field>
-              </div>
-            </div>
-
-            {/* Springs */}
-            <div className="ml-section">
-              <h3 className="ml-section-heading">Spring Rates</h3>
-              <div className="ml-row">
-                <Field label="LF Spring Rate (lbs/in)"
-                  hint="Check the strut box or part number. FCS 1336349 (P71 Police/Taxi) = 475 lbs/in. Aftermarket heavy-duty = 700 lbs/in. Rear P71 coil is fixed at 160 lbs/in.">
-                  <NumberIn value={editing.springRate.LF} onChange={v => setNested('springRate', 'LF', v)} placeholder="e.g. 475" step="1" />
-                </Field>
-                <Field label="RF Spring Rate (lbs/in)"
-                  hint="Same as LF — list separately in case they differ.">
-                  <NumberIn value={editing.springRate.RF} onChange={v => setNested('springRate', 'RF', v)} placeholder="e.g. 475" step="1" />
-                </Field>
-              </div>
-            </div>
-
-            {/* Shocks */}
-            <div className="ml-section">
-              <h3 className="ml-section-heading">Shocks / Struts</h3>
-              <p className="ml-section-note">Enter part number or name. e.g. "FCS 1336349" or "KYB SR4140 (rating 6)"</p>
-              {['LF', 'RF', 'LR', 'RR'].map(pos => (
-                <Field key={pos} label={`${pos} Shock`}>
-                  <input className="ml-input ml-input-wide" type="text"
-                    placeholder="e.g. FCS 1336349"
-                    value={editing.shockNotes[pos]}
-                    onChange={e => setNested('shockNotes', pos, e.target.value)} />
-                </Field>
-              ))}
-            </div>
-
-            {/* Cold PSI */}
-            <div className="ml-section">
-              <h3 className="ml-section-heading">Cold Tire Pressures (PSI)</h3>
-              <p className="ml-section-note">Measured cold before session, at the inflation temperature above.</p>
-              <div className="ml-tire-grid">
-                {['LF', 'RF', 'LR', 'RR'].map(pos => (
-                  <Field key={pos} label={pos}
-                    hint="Use a quality gauge with car sitting still and tires cold (not driven in 2+ hours).">
-                    <NumberIn value={editing.coldPsi[pos]} onChange={v => setNested('coldPsi', pos, v)}
-                      placeholder="PSI" step="1" min="5" max="60" />
-                  </Field>
-                ))}
-              </div>
-            </div>
-
-            {/* Hot PSI */}
-            <div className="ml-section">
-              <h3 className="ml-section-heading">Hot Tire Pressures (PSI)</h3>
-              <p className="ml-section-note">Measured immediately after coming off track — get the gauge on within 2 minutes.</p>
-              <div className="ml-tire-grid">
-                {['LF', 'RF', 'LR', 'RR'].map(pos => (
-                  <Field key={pos} label={pos}
-                    hint="Pull straight to the paddock. Check within 1–2 min of getting off track. Let air out if over target — don't add to a hot tire.">
-                    <NumberIn value={editing.hotPsi[pos]} onChange={v => setNested('hotPsi', pos, v)}
-                      placeholder="PSI" step="1" min="5" max="80" />
-                  </Field>
-                ))}
-              </div>
-            </div>
-
-            {/* Pyrometer */}
-            <div className="ml-section">
-              <h3 className="ml-section-heading">Pyrometer Readings (°F)</h3>
-              <p className="ml-section-note">
-                Take immediately after session — same stop as hot pressures. Probe the tread surface, not sidewall.
-                Inside = edge closest to engine. Outside = edge furthest from engine.
-              </p>
-              <div className="ml-pyro-grid">
-                <div className="ml-pyro-header">
-                  <span></span><span>Inside</span><span>Middle</span><span>Outside</span>
-                </div>
-                {['LF', 'RF', 'LR', 'RR'].map(pos => (
-                  <div className="ml-pyro-row" key={pos}>
-                    <span className="ml-pyro-pos">{pos}</span>
-                    {['inside', 'middle', 'outside'].map(zone => (
-                      <NumberIn key={zone}
-                        value={editing.tireTemps[pos][zone]}
-                        onChange={v => setTireTemp(pos, zone, v)}
-                        placeholder="°F" step="1" min="60" max="300" />
-                    ))}
-                  </div>
-                ))}
-              </div>
-            </div>
-
-            {/* ---- SUSPENSION GEOMETRY ---- */}
-            <div className="ml-section">
-              <h3 className="ml-section-heading">Suspension Geometry — Model Calibration</h3>
-              <p className="ml-section-note">
-                One-time measurements per car. Used to calibrate track width, roll center heights, and camber gain coefficients in the physics model.
-                Leave blank if not yet measured — fill in at the shop and copy to model later.
-              </p>
-
-              {/* Track width */}
-              <h4 className="ml-sub-heading">Track Width</h4>
-              <div className="ml-row">
-                <Field label="Front track width (inches)"
-                  hint="Park on flat ground, wheels straight. Mark the center of the tread contact patch on the ground for each front tire (chalk or masking tape). Measure between the two marks. Repeat for rear.">
-                  <NumberIn value={editing.trackWidth.front} onChange={v => setNested('trackWidth', 'front', v)} placeholder="e.g. 64" step="0.125" />
-                </Field>
-                <Field label="Rear track width (inches)"
-                  hint="Same method as front. Mark center of rear tread contact patches, measure between marks.">
-                  <NumberIn value={editing.trackWidth.rear} onChange={v => setNested('trackWidth', 'rear', v)} placeholder="e.g. 65.125" step="0.125" />
-                </Field>
-              </div>
-
-              {/* Rear roll center */}
-              <h4 className="ml-sub-heading">Rear Roll Center</h4>
-              <Field label="Watts link center pivot height from floor (inches)"
-                hint="Car at ride height with driver weight (or ~200 lbs on seat). Find the large center pivot bolt on the Watts link — it sits on a bracket on top of the rear axle housing, connecting the two horizontal arms. Measure from the center of that pivot bolt straight down to the floor.">
-                <NumberIn value={editing.rearRollCenter} onChange={v => set('rearRollCenter', v)} placeholder="e.g. 14.5" step="0.125" />
-              </Field>
-
-              {/* Front SLA heights */}
-              <h4 className="ml-sub-heading">Front SLA Ball Joint Heights from Floor</h4>
-              <p className="ml-section-note">Car at ride height on flat ground. Measure to the center of each ball joint bolt.</p>
-              <div className="ml-row">
-                <Field label="LF lower ball joint (inches)"
-                  hint="Lower control arm outer end — where the spindle attaches. Measure from center of ball joint stud to floor.">
-                  <NumberIn value={editing.lowerBallJoint.LF} onChange={v => setNested('lowerBallJoint', 'LF', v)} placeholder="e.g. 7.75" step="0.125" />
-                </Field>
-                <Field label="RF lower ball joint (inches)"
-                  hint="Same as LF — right front lower control arm outer pivot.">
-                  <NumberIn value={editing.lowerBallJoint.RF} onChange={v => setNested('lowerBallJoint', 'RF', v)} placeholder="e.g. 6.75" step="0.125" />
-                </Field>
-              </div>
-              <div className="ml-row">
-                <Field label="LF upper ball joint (inches)"
-                  hint="Upper control arm outer end. Same method — measure center of ball joint stud to floor.">
-                  <NumberIn value={editing.upperBallJoint.LF} onChange={v => setNested('upperBallJoint', 'LF', v)} placeholder="e.g. 18.5" step="0.125" />
-                </Field>
-                <Field label="RF upper ball joint (inches)"
-                  hint="Right front upper control arm outer pivot — center of stud to floor.">
-                  <NumberIn value={editing.upperBallJoint.RF} onChange={v => setNested('upperBallJoint', 'RF', v)} placeholder="e.g. 17.625" step="0.125" />
-                </Field>
-              </div>
-              <div className="ml-row">
-                <Field label="LF lower arm inner pivot (inches)"
-                  hint="The inner end of the lower control arm — where it bolts to the subframe. If there are two bolts, average their heights. Measure pivot center to floor.">
-                  <NumberIn value={editing.lowerArmPivot.LF} onChange={v => setNested('lowerArmPivot', 'LF', v)} placeholder="e.g. 10.0" step="0.125" />
-                </Field>
-                <Field label="RF lower arm inner pivot (inches)"
-                  hint="Same as LF — right front lower arm subframe bolt center to floor.">
-                  <NumberIn value={editing.lowerArmPivot.RF} onChange={v => setNested('lowerArmPivot', 'RF', v)} placeholder="e.g. 9.375" step="0.125" />
-                </Field>
-              </div>
-              <Field label="Front wheel center height (inches)"
-                hint="Measure from the center of the front hub/axle straight down to the floor. Should be approximately equal to tire radius (~13.5–14&quot; for 235/55R17).">
-                <NumberIn value={editing.wheelCenterHeight} onChange={v => set('wheelCenterHeight', v)} placeholder="e.g. 13.0" step="0.125" />
-              </Field>
-
-              {/* Droop camber */}
-              <h4 className="ml-sub-heading">Droop Camber (Wheels Hanging at Full Droop)</h4>
-              <p className="ml-section-note">
-                Support car under frame rails on jack stands — NOT under control arms. Front wheels must hang freely.
-                Hold a flat plate (cardboard or aluminum) flush against the wheel face, hold phone inclinometer flat against the plate.
-              </p>
-              <div className="ml-row">
-                <Field label="LF camber at full droop (°)"
-                  hint="With LF wheel hanging freely at full droop, read camber via phone inclinometer pressed against a flat plate on the wheel face. Negative = top tilts inward.">
-                  <NumberIn value={editing.droopCamber.LF} onChange={v => setNested('droopCamber', 'LF', v)} placeholder="e.g. 1.75" />
-                </Field>
-                <Field label="RF camber at full droop (°)"
-                  hint="Same method — RF wheel hanging freely.">
-                  <NumberIn value={editing.droopCamber.RF} onChange={v => setNested('droopCamber', 'RF', v)} placeholder="e.g. -1.5" />
-                </Field>
-              </div>
-              <div className="ml-row">
-                <Field label="LF droop travel (inches)"
-                  hint="While on jack stands, measure from wheel center to a fixed chassis reference (fender lip works). Then lower to ride height and measure same distance. The difference is droop travel.">
-                  <NumberIn value={editing.droopTravel.LF} onChange={v => setNested('droopTravel', 'LF', v)} placeholder="e.g. 0.5" step="0.125" />
-                </Field>
-                <Field label="RF droop travel (inches)"
-                  hint="Same method — ride height measurement minus full droop measurement.">
-                  <NumberIn value={editing.droopTravel.RF} onChange={v => setNested('droopTravel', 'RF', v)} placeholder="e.g. 0.875" step="0.125" />
-                </Field>
-              </div>
-
-              {/* Bump camber */}
-              <h4 className="ml-sub-heading">Bump Camber (Wheel Pushed to Full Bump)</h4>
-              <p className="ml-section-note">
-                Car on jack stands. Use floor jack under the lower control arm to push wheel into full bump until bumpstop contacts or motion stops.
-              </p>
-              <div className="ml-row">
-                <Field label="LF camber at full bump (°)"
-                  hint="Jack under lower control arm until bumpstop is compressed. Measure camber with phone on flat plate against wheel face.">
-                  <NumberIn value={editing.bumpCamber.LF} onChange={v => setNested('bumpCamber', 'LF', v)} placeholder="e.g. -3.0" />
-                </Field>
-                <Field label="RF camber at full bump (°)"
-                  hint="Same method — right front wheel pushed to full bump.">
-                  <NumberIn value={editing.bumpCamber.RF} onChange={v => setNested('bumpCamber', 'RF', v)} placeholder="e.g. -4.5" />
-                </Field>
-              </div>
-              <div className="ml-row">
-                <Field label="LF bump travel (inches)"
-                  hint="Using same chassis reference point as droop — measure at ride height then at full bump. The difference is bump travel.">
-                  <NumberIn value={editing.bumpTravel.LF} onChange={v => setNested('bumpTravel', 'LF', v)} placeholder="e.g. 2.0" step="0.125" />
-                </Field>
-                <Field label="RF bump travel (inches)"
-                  hint="Same method for right front.">
-                  <NumberIn value={editing.bumpTravel.RF} onChange={v => setNested('bumpTravel', 'RF', v)} placeholder="e.g. 2.0" step="0.125" />
-                </Field>
-              </div>
-
-              {/* Caster camber gain */}
-              <h4 className="ml-sub-heading">Caster Camber Gain (at 20° Right Steer)</h4>
-              <p className="ml-section-note">
-                Car at ride height on flat ground. Turn steering wheel right until front tires are at ~20° steer — use an angle finder on the tire sidewall to confirm. Then measure camber on each front wheel.
-              </p>
-              <div className="ml-row">
-                <Field label="LF camber at 20° right steer (°)"
-                  hint="Confirm straight-ahead static camber first (should match your alignment spec). Then turn 20° right and read LF camber the same way — phone on flat plate against wheel face.">
-                  <NumberIn value={editing.steerCamber20.LF} onChange={v => setNested('steerCamber20', 'LF', v)} placeholder="e.g. 1.5" />
-                </Field>
-                <Field label="RF camber at 20° right steer (°)"
-                  hint="Same turn — 20° right steer — measure RF camber. RF is the outside tire turning right; it should gain negative camber.">
-                  <NumberIn value={editing.steerCamber20.RF} onChange={v => setNested('steerCamber20', 'RF', v)} placeholder="e.g. -4.0" />
-                </Field>
-              </div>
-
-              {/* CG */}
-              <h4 className="ml-sub-heading">CG Height / Ballast</h4>
-              <div className="ml-row">
-                <Field label="Ride height lowering from stock (inches)"
-                  hint="If the car is lowered with cut springs, aftermarket springs, etc. — estimate how many inches lower than stock. Zero if stock height. For every 1 inch lowered, CG drops ~0.65 inches.">
-                  <NumberIn value={editing.rideLowering} onChange={v => set('rideLowering', v)} placeholder="0 if stock" step="0.25" />
-                </Field>
-              </div>
-              <Field label="CG / ballast notes">
-                <input className="ml-input ml-input-wide" type="text"
-                  placeholder="e.g. Roll cage installed, battery moved to trunk"
-                  value={editing.cgNotes}
-                  onChange={e => set('cgNotes', e.target.value)} />
-              </Field>
-            </div>
-
-            {/* Notes */}
-            <div className="ml-section">
-              <h3 className="ml-section-heading">Session Notes</h3>
-              <Field label="Notes / Observations">
-                <textarea className="ml-textarea"
-                  placeholder="Handling notes, what felt tight/loose, changes made during session, lap times, track conditions..."
-                  value={editing.notes} onChange={e => set('notes', e.target.value)} rows={4} />
-              </Field>
-            </div>
-
+            {renderEditor(editing, setEditing, saveItem)}
             <div className="ml-editor-footer">
-              <button className="ml-save-btn ml-save-btn-lg" onClick={saveCar}>Save Car</button>
-              <button className="ml-cancel-btn" onClick={cancelEdit}>Cancel</button>
+              <button className="ml-save-btn ml-save-btn-lg" onClick={saveItem}>Save</button>
+              <button className="ml-cancel-btn" onClick={() => setEditing(null)}>Cancel</button>
             </div>
           </div>
         )}
 
-        {/* ---- VIEW ---- */}
-        {viewCar && !editing && (
+        {viewItem && !editing && (
           <div className="ml-view">
             <div className="ml-view-header">
               <div>
-                <h2 className="ml-view-title">{viewCar.title || 'Unnamed Car'}</h2>
-                <span className="ml-view-date">{viewCar.date}</span>
+                <h2 className="ml-view-title">{viewItem.title || 'Unnamed'}</h2>
+                <span className="ml-view-date">{viewItem.date}</span>
               </div>
               <div className="ml-view-actions">
-                <button className="ml-edit-btn" onClick={() => editCar(selectedIdx)}>Edit</button>
-                <button className={`ml-copy-btn${copied ? ' copied' : ''}`} onClick={() => copyToClipboard(viewCar)}>
+                <button className="ml-edit-btn" onClick={() => editItem(selectedIdx)}>Edit</button>
+                <button className={`ml-copy-btn${copied ? ' copied' : ''}`} onClick={() => copyToClipboard(viewItem)}>
                   {copied ? 'Copied!' : 'Copy for Model'}
                 </button>
               </div>
             </div>
-            <pre className="ml-preview">{formatForModel(viewCar)}</pre>
+            {renderView ? renderView(viewItem) : <pre className="ml-preview">{formatFn(viewItem)}</pre>}
           </div>
         )}
       </div>
     </div>
+  );
+}
+
+// ─── Session editor ───────────────────────────────────────────────────────────
+
+function SessionEditor({ editing, setEditing }) {
+  function set(field, value)              { setEditing(e => ({ ...e, [field]: value })); }
+  function setN(parent, key, value)       { setEditing(e => ({ ...e, [parent]: { ...e[parent], [key]: value } })); }
+  function setTemp(pos, zone, value)      { setEditing(e => ({ ...e, tireTemps: { ...e.tireTemps, [pos]: { ...e.tireTemps[pos], [zone]: value } } })); }
+
+  const shockOptions = (corner) => {
+    const list = (corner === 'LF' || corner === 'RF') ? FRONT_STRUTS : REAR_SHOCKS;
+    return list;
+  };
+
+  return (
+    <>
+      {/* Identity */}
+      <div className="ml-section">
+        <div className="ml-row">
+          <Field label="Car Name / Title">
+            <input className="ml-input ml-input-wide" type="text" placeholder="e.g. Pete's Car"
+              value={editing.title} onChange={e => set('title', e.target.value)} />
+          </Field>
+          <Field label="Date">
+            <input className="ml-input" type="date" value={editing.date} onChange={e => set('date', e.target.value)} />
+          </Field>
+        </div>
+      </div>
+
+      {/* Environment */}
+      <div className="ml-section">
+        <h3 className="ml-section-heading">Environment</h3>
+        <div className="ml-row">
+          <Field label="Ambient Temp (°F)" hint="Outside air temperature at time of session. Phone weather app works.">
+            <NumIn value={editing.ambient} onChange={v => set('ambient', v)} placeholder="e.g. 75" step="1" />
+          </Field>
+          <Field label="Tires Set At (°F)" hint="Temperature where you set cold pressures (usually the shop). Model uses this to back-calculate ideal cold PSI.">
+            <NumIn value={editing.inflationTemp} onChange={v => set('inflationTemp', v)} placeholder="e.g. 68" step="1" />
+          </Field>
+        </div>
+      </div>
+
+      {/* Alignment */}
+      <div className="ml-section">
+        <h3 className="ml-section-heading">Alignment</h3>
+        <div className="ml-row">
+          <Field label="Camber LF (°)" hint="Tilt of tire top relative to vertical. Negative = top tilts inward. Measured by alignment machine or phone inclinometer on a flat plate held flush against the wheel face.">
+            <NumIn value={editing.camber.LF} onChange={v => setN('camber', 'LF', v)} placeholder="e.g. 2.75" />
+          </Field>
+          <Field label="Camber RF (°)" hint="Same as LF. RF typically more negative on oval — it is the outside tire in left turns.">
+            <NumIn value={editing.camber.RF} onChange={v => setN('camber', 'RF', v)} placeholder="e.g. -2.25" />
+          </Field>
+        </div>
+        <div className="ml-row">
+          <Field label="Caster LF (°)" hint="Kingpin tilt from side view. Alignment machine: turn wheel 20° in, zero gauge, turn 20° out, read caster. Higher = more camber gain in turns. Typical P71 range 3–9°.">
+            <NumIn value={editing.caster.LF} onChange={v => setN('caster', 'LF', v)} placeholder="e.g. 9.0" />
+          </Field>
+          <Field label="Caster RF (°)" hint="RF caster controls how much the outside front gains negative camber turning left — the critical oval tire. Higher RF caster = more dynamic camber on that wheel.">
+            <NumIn value={editing.caster.RF} onChange={v => setN('caster', 'RF', v)} placeholder="e.g. 3.0" />
+          </Field>
+        </div>
+        <div className="ml-row">
+          <Field label="Front Toe (inches)" hint="Total toe across both fronts at hub height. Rear gap minus front gap. Negative = toe-out. e.g. -0.25 = quarter inch toe-out.">
+            <NumIn value={editing.toe} onChange={v => set('toe', v)} placeholder="e.g. -0.25" step="0.0625" />
+          </Field>
+        </div>
+      </div>
+
+      {/* Shocks / Springs */}
+      <div className="ml-section">
+        <h3 className="ml-section-heading">Shocks / Struts</h3>
+        <p className="ml-section-note">Front selections auto-fill spring rate when the strut includes a spring.</p>
+        {['LF', 'RF', 'LR', 'RR'].map(corner => {
+          const list = shockOptions(corner);
+          const isFront = corner === 'LF' || corner === 'RF';
+          return (
+            <div key={corner} className="ml-field">
+              <div className="ml-field-label">{corner} {isFront ? 'Strut' : 'Shock'}</div>
+              <select className="ml-input ml-select"
+                value={editing.shocks[corner]}
+                onChange={e => {
+                  const label = e.target.value;
+                  setEditing(prev => {
+                    const updated = { ...prev, shocks: { ...prev.shocks, [corner]: label } };
+                    if (isFront) {
+                      const found = FRONT_STRUTS.find(s => shockLabel(s) === label);
+                      if (found?.springRate) {
+                        updated.springRate = { ...prev.springRate, [corner]: String(found.springRate) };
+                      }
+                    }
+                    return updated;
+                  });
+                }}>
+                <option value="">— Select —</option>
+                {list.map(s => (
+                  <option key={s.part} value={shockLabel(s)}>
+                    {shockLabel(s)} — {s.use}
+                  </option>
+                ))}
+              </select>
+            </div>
+          );
+        })}
+      </div>
+
+      {/* Spring rates */}
+      <div className="ml-section">
+        <h3 className="ml-section-heading">Front Spring Rates</h3>
+        <p className="ml-section-note">Auto-filled from strut selection above if applicable. Override if needed.</p>
+        <div className="ml-row">
+          <Field label="LF (lbs/in)">
+            <select className="ml-input ml-select"
+              value={editing.springRate.LF}
+              onChange={e => setN('springRate', 'LF', e.target.value)}>
+              <option value="">— Select —</option>
+              <option value="700">700 lbs/in — Heavy Duty</option>
+              <option value="475">475 lbs/in — Police/Taxi</option>
+              <option value="440">440 lbs/in — Base/LX</option>
+            </select>
+          </Field>
+          <Field label="RF (lbs/in)">
+            <select className="ml-input ml-select"
+              value={editing.springRate.RF}
+              onChange={e => setN('springRate', 'RF', e.target.value)}>
+              <option value="">— Select —</option>
+              <option value="700">700 lbs/in — Heavy Duty</option>
+              <option value="475">475 lbs/in — Police/Taxi</option>
+              <option value="440">440 lbs/in — Base/LX</option>
+            </select>
+          </Field>
+        </div>
+      </div>
+
+      {/* Cold PSI */}
+      <div className="ml-section">
+        <h3 className="ml-section-heading">Cold Tire Pressures (PSI)</h3>
+        <p className="ml-section-note">Measured cold before session, at the inflation temperature above.</p>
+        <div className="ml-tire-grid">
+          {['LF', 'RF', 'LR', 'RR'].map(pos => (
+            <Field key={pos} label={pos} hint="Quality gauge, car sitting still, tires cold (not driven in 2+ hours).">
+              <NumIn value={editing.coldPsi[pos]} onChange={v => setN('coldPsi', pos, v)} placeholder="PSI" step="1" min="5" max="60" />
+            </Field>
+          ))}
+        </div>
+      </div>
+
+      {/* Hot PSI */}
+      <div className="ml-section">
+        <h3 className="ml-section-heading">Hot Tire Pressures (PSI)</h3>
+        <p className="ml-section-note">Measured immediately after coming off track — get the gauge on within 2 minutes.</p>
+        <div className="ml-tire-grid">
+          {['LF', 'RF', 'LR', 'RR'].map(pos => (
+            <Field key={pos} label={pos} hint="Pull straight to paddock. Check within 1–2 min of getting off track.">
+              <NumIn value={editing.hotPsi[pos]} onChange={v => setN('hotPsi', pos, v)} placeholder="PSI" step="1" min="5" max="80" />
+            </Field>
+          ))}
+        </div>
+      </div>
+
+      {/* Pyrometer */}
+      <div className="ml-section">
+        <h3 className="ml-section-heading">Pyrometer Readings (°F)</h3>
+        <p className="ml-section-note">
+          Take immediately after session — same stop as hot pressures. Probe the tread surface, not sidewall.
+          Inside = edge closest to engine. Outside = edge furthest from engine.
+        </p>
+        <div className="ml-pyro-grid">
+          <div className="ml-pyro-header">
+            <span></span><span>Inside</span><span>Middle</span><span>Outside</span>
+          </div>
+          {['LF', 'RF', 'LR', 'RR'].map(pos => (
+            <div className="ml-pyro-row" key={pos}>
+              <span className="ml-pyro-pos">{pos}</span>
+              {['inside', 'middle', 'outside'].map(zone => (
+                <NumIn key={zone} value={editing.tireTemps[pos][zone]}
+                  onChange={v => setTemp(pos, zone, v)} placeholder="°F" step="1" min="60" max="300" />
+              ))}
+            </div>
+          ))}
+        </div>
+      </div>
+
+      {/* Notes */}
+      <div className="ml-section">
+        <h3 className="ml-section-heading">Session Notes</h3>
+        <Field label="Notes / Observations">
+          <textarea className="ml-textarea" rows={4}
+            placeholder="Handling notes, tight/loose feel, changes made, lap times, track conditions..."
+            value={editing.notes} onChange={e => set('notes', e.target.value)} />
+        </Field>
+      </div>
+    </>
+  );
+}
+
+// ─── Geometry editor ──────────────────────────────────────────────────────────
+
+function GeoEditor({ editing, setEditing }) {
+  function set(field, value)        { setEditing(e => ({ ...e, [field]: value })); }
+  function setN(parent, key, value) { setEditing(e => ({ ...e, [parent]: { ...e[parent], [key]: value } })); }
+
+  return (
+    <>
+      {/* Identity */}
+      <div className="ml-section">
+        <div className="ml-row">
+          <Field label="Car Name / Title">
+            <input className="ml-input ml-input-wide" type="text" placeholder="e.g. Pete's Car"
+              value={editing.title} onChange={e => set('title', e.target.value)} />
+          </Field>
+          <Field label="Date">
+            <input className="ml-input" type="date" value={editing.date} onChange={e => set('date', e.target.value)} />
+          </Field>
+        </div>
+      </div>
+
+      {/* Track Width */}
+      <div className="ml-section">
+        <h3 className="ml-section-heading">Track Width</h3>
+        <div className="ml-row">
+          <Field label="Front track width (inches)"
+            hint="Park on flat ground, wheels straight ahead. Mark the center of the tread contact patch on the ground (chalk or tape) for each front tire. Measure between the two marks.">
+            <NumIn value={editing.trackWidth.front} onChange={v => setN('trackWidth', 'front', v)} placeholder="e.g. 64" step="0.125" />
+          </Field>
+          <Field label="Rear track width (inches)"
+            hint="Same method as front — mark center of rear contact patches and measure between marks.">
+            <NumIn value={editing.trackWidth.rear} onChange={v => setN('trackWidth', 'rear', v)} placeholder="e.g. 65.125" step="0.125" />
+          </Field>
+        </div>
+      </div>
+
+      {/* Rear Roll Center */}
+      <div className="ml-section">
+        <h3 className="ml-section-heading">Rear Roll Center</h3>
+        <Field label="Watts link center pivot height from floor (inches)"
+          hint="Car at ride height with driver weight (~200 lbs on seat). Find the large center pivot bolt on the Watts link — it sits on a bracket centered on top of the rear axle housing, connecting the two horizontal arms. Measure from the bolt centerline straight down to the floor.">
+          <NumIn value={editing.rearRollCenter} onChange={v => set('rearRollCenter', v)} placeholder="e.g. 14.5" step="0.125" />
+        </Field>
+      </div>
+
+      {/* Front SLA */}
+      <div className="ml-section">
+        <h3 className="ml-section-heading">Front SLA Ball Joint Heights</h3>
+        <p className="ml-section-note">Car at ride height on flat ground. Measure to the center of each ball joint stud.</p>
+        <div className="ml-row">
+          <Field label="LF lower ball joint (inches)"
+            hint="Lower control arm outer end — where the spindle attaches. Measure from the ball joint stud center to the floor.">
+            <NumIn value={editing.lowerBallJoint.LF} onChange={v => setN('lowerBallJoint', 'LF', v)} placeholder="e.g. 7.75" step="0.125" />
+          </Field>
+          <Field label="RF lower ball joint (inches)" hint="Same as LF — right front lower control arm outer pivot.">
+            <NumIn value={editing.lowerBallJoint.RF} onChange={v => setN('lowerBallJoint', 'RF', v)} placeholder="e.g. 6.75" step="0.125" />
+          </Field>
+        </div>
+        <div className="ml-row">
+          <Field label="LF upper ball joint (inches)" hint="Upper control arm outer end. Measure ball joint stud center to floor.">
+            <NumIn value={editing.upperBallJoint.LF} onChange={v => setN('upperBallJoint', 'LF', v)} placeholder="e.g. 18.5" step="0.125" />
+          </Field>
+          <Field label="RF upper ball joint (inches)" hint="Right front upper control arm outer pivot — stud center to floor.">
+            <NumIn value={editing.upperBallJoint.RF} onChange={v => setN('upperBallJoint', 'RF', v)} placeholder="e.g. 17.625" step="0.125" />
+          </Field>
+        </div>
+        <div className="ml-row">
+          <Field label="LF lower arm inner pivot (inches)"
+            hint="Inner end of the lower control arm where it bolts to the subframe. If two bolts, average their heights. Measure pivot center to floor.">
+            <NumIn value={editing.lowerArmPivot.LF} onChange={v => setN('lowerArmPivot', 'LF', v)} placeholder="e.g. 10.0" step="0.125" />
+          </Field>
+          <Field label="RF lower arm inner pivot (inches)" hint="Same as LF — right front lower arm subframe bolt center to floor.">
+            <NumIn value={editing.lowerArmPivot.RF} onChange={v => setN('lowerArmPivot', 'RF', v)} placeholder="e.g. 9.375" step="0.125" />
+          </Field>
+        </div>
+        <Field label="Front wheel center height (inches)"
+          hint="Measure from the center of the front hub/axle straight down to the floor. Should be approximately the tire radius (~13.5&quot; for 235/55R17).">
+          <NumIn value={editing.wheelCenterHeight} onChange={v => set('wheelCenterHeight', v)} placeholder="e.g. 13.0" step="0.125" />
+        </Field>
+      </div>
+
+      {/* Droop */}
+      <div className="ml-section">
+        <h3 className="ml-section-heading">Droop Camber</h3>
+        <p className="ml-section-note">
+          Support car under frame rails on jack stands — NOT under control arms. Front wheels must hang freely at full droop.
+          Hold a flat plate flush against the wheel face and read camber with a phone inclinometer.
+        </p>
+        <div className="ml-row">
+          <Field label="LF camber at full droop (°)" hint="LF wheel hanging freely — read camber via phone on flat plate against wheel face. Negative = top tilts inward.">
+            <NumIn value={editing.droopCamber.LF} onChange={v => setN('droopCamber', 'LF', v)} placeholder="e.g. 1.75" />
+          </Field>
+          <Field label="RF camber at full droop (°)" hint="Same method — RF wheel hanging freely.">
+            <NumIn value={editing.droopCamber.RF} onChange={v => setN('droopCamber', 'RF', v)} placeholder="e.g. -1.5" />
+          </Field>
+        </div>
+        <div className="ml-row">
+          <Field label="LF droop travel (inches)"
+            hint="Measure wheel center to a fixed chassis reference (fender lip) while on jack stands. Then lower to ride height and re-measure. The difference is droop travel.">
+            <NumIn value={editing.droopTravel.LF} onChange={v => setN('droopTravel', 'LF', v)} placeholder="e.g. 0.5" step="0.125" />
+          </Field>
+          <Field label="RF droop travel (inches)" hint="Same method for right front.">
+            <NumIn value={editing.droopTravel.RF} onChange={v => setN('droopTravel', 'RF', v)} placeholder="e.g. 0.875" step="0.125" />
+          </Field>
+        </div>
+      </div>
+
+      {/* Bump */}
+      <div className="ml-section">
+        <h3 className="ml-section-heading">Bump Camber</h3>
+        <p className="ml-section-note">
+          Car on jack stands. Use a floor jack under the lower control arm to push the wheel into full bump until the bumpstop contacts or motion stops.
+        </p>
+        <div className="ml-row">
+          <Field label="LF camber at full bump (°)" hint="Jack under lower control arm until bumpstop compresses. Measure camber with phone on flat plate against wheel face.">
+            <NumIn value={editing.bumpCamber.LF} onChange={v => setN('bumpCamber', 'LF', v)} placeholder="e.g. -3.0" />
+          </Field>
+          <Field label="RF camber at full bump (°)" hint="Same method — right front wheel pushed to full bump.">
+            <NumIn value={editing.bumpCamber.RF} onChange={v => setN('bumpCamber', 'RF', v)} placeholder="e.g. -4.5" />
+          </Field>
+        </div>
+        <div className="ml-row">
+          <Field label="LF bump travel (inches)" hint="Using same chassis reference as droop — measure at ride height then at full bump. Difference is bump travel.">
+            <NumIn value={editing.bumpTravel.LF} onChange={v => setN('bumpTravel', 'LF', v)} placeholder="e.g. 2.0" step="0.125" />
+          </Field>
+          <Field label="RF bump travel (inches)" hint="Same method for right front.">
+            <NumIn value={editing.bumpTravel.RF} onChange={v => setN('bumpTravel', 'RF', v)} placeholder="e.g. 2.0" step="0.125" />
+          </Field>
+        </div>
+      </div>
+
+      {/* Caster camber gain */}
+      <div className="ml-section">
+        <h3 className="ml-section-heading">Caster Camber Gain</h3>
+        <p className="ml-section-note">
+          Car at ride height on flat ground. Turn steering wheel right until front tires are at ~20° steer — use an angle finder on the tire sidewall to confirm. Then measure camber on each front wheel.
+        </p>
+        <div className="ml-row">
+          <Field label="LF camber at 20° right steer (°)"
+            hint="Confirm straight-ahead static camber first. Then turn 20° right and read LF camber — phone on flat plate against wheel face.">
+            <NumIn value={editing.steerCamber20.LF} onChange={v => setN('steerCamber20', 'LF', v)} placeholder="e.g. 1.5" />
+          </Field>
+          <Field label="RF camber at 20° right steer (°)"
+            hint="Same turn — RF is the outside tire turning right; it should gain negative camber.">
+            <NumIn value={editing.steerCamber20.RF} onChange={v => setN('steerCamber20', 'RF', v)} placeholder="e.g. -4.0" />
+          </Field>
+        </div>
+      </div>
+
+      {/* CG */}
+      <div className="ml-section">
+        <h3 className="ml-section-heading">CG Height / Ballast</h3>
+        <div className="ml-row">
+          <Field label="Ride height lowering from stock (inches)"
+            hint="If lowered with cut or aftermarket springs — estimate inches lower than stock. Zero if stock. Each inch lowered drops CG ~0.65 inches.">
+            <NumIn value={editing.rideLowering} onChange={v => set('rideLowering', v)} placeholder="0 if stock" step="0.25" />
+          </Field>
+        </div>
+        <Field label="CG / ballast notes">
+          <input className="ml-input ml-input-wide" type="text"
+            placeholder="e.g. Roll cage installed, battery moved to trunk"
+            value={editing.cgNotes} onChange={e => set('cgNotes', e.target.value)} />
+        </Field>
+      </div>
+
+      {/* Notes */}
+      <div className="ml-section">
+        <h3 className="ml-section-heading">Notes</h3>
+        <Field label="Additional notes">
+          <textarea className="ml-textarea" rows={3}
+            placeholder="Any observations about the measurements, conditions, tools used..."
+            value={editing.notes} onChange={e => set('notes', e.target.value)} />
+        </Field>
+      </div>
+    </>
+  );
+}
+
+// ─── Top-level tabs ───────────────────────────────────────────────────────────
+
+export function MeasurementLog() {
+  const [sessions, setSessions] = useState(() => load(SESSION_KEY));
+  useEffect(() => save(SESSION_KEY, sessions), [sessions]);
+
+  return (
+    <ListEditor
+      items={sessions}
+      setItems={setSessions}
+      emptyTemplate={EMPTY_SESSION}
+      formatFn={formatSession}
+      label="Sessions"
+      renderEditor={(editing, setEditing) => (
+        <SessionEditor editing={editing} setEditing={setEditing} />
+      )}
+    />
+  );
+}
+
+export function SuspensionGeometry() {
+  const [geoList, setGeoList] = useState(() => load(GEO_KEY));
+  useEffect(() => save(GEO_KEY, geoList), [geoList]);
+
+  return (
+    <ListEditor
+      items={geoList}
+      setItems={setGeoList}
+      emptyTemplate={EMPTY_GEO}
+      formatFn={formatGeo}
+      label="Cars"
+      renderEditor={(editing, setEditing) => (
+        <GeoEditor editing={editing} setEditing={setEditing} />
+      )}
+    />
   );
 }
