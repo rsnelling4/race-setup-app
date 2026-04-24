@@ -11,8 +11,10 @@ import SimulationMath from './components/SimulationMath';
 import SuggestedSetup from './components/SuggestedSetup';
 import { MeasurementLog, SuspensionGeometry } from './components/MeasurementLogger';
 import TrackDay from './components/TrackDay';
+import Settings from './components/Settings';
 import { analyzeFullCar } from './utils/tireAnalysis';
 import { DEFAULT_SETUP } from './utils/raceSimulation';
+import { SyncProvider } from './utils/SyncContext';
 import './App.css';
 
 function deepClone(o) { return JSON.parse(JSON.stringify(o)); }
@@ -30,6 +32,7 @@ const TABS = [
   { id: 'trackday',     label: 'Track Day' },
   { id: 'measurements', label: 'Measurement Log' },
   { id: 'geometry',     label: 'Suspension Geometry' },
+  { id: 'settings',     label: 'Settings' },
 ];
 
 function App() {
@@ -207,6 +210,7 @@ function App() {
         {activeTab === 'trackday'     && <TrackDay />}
         {activeTab === 'measurements' && <MeasurementLog />}
         {activeTab === 'geometry'     && <SuspensionGeometry />}
+        {activeTab === 'settings'     && <Settings />}
       </main>
 
       <footer className="app-footer">
@@ -216,4 +220,10 @@ function App() {
   );
 }
 
-export default App;
+export default function AppWithSync() {
+  return (
+    <SyncProvider>
+      <App />
+    </SyncProvider>
+  );
+}

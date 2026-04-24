@@ -2,16 +2,13 @@ import { useState, useEffect, useCallback } from 'react';
 import { analyzeSetup } from '../utils/raceSimulation';
 import { handlingConditions, cornerPhases } from '../utils/tireAnalysis';
 import { REAR_SHOCKS, FRONT_STRUTS, shockLabel } from '../data/shockOptions';
+import { useSync } from '../utils/SyncContext';
 
 // ─── Storage keys ─────────────────────────────────────────────────────────────
-const EVENTS_KEY = 'race_track_day_events';
 const APIKEY_KEY = 'race_claude_api_key';
-const GEO_KEY    = 'race_geometry_logs';
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 function dc(o) { return JSON.parse(JSON.stringify(o)); }
-function load(key, fallback) { try { return JSON.parse(localStorage.getItem(key)) ?? fallback; } catch { return fallback; } }
-function save(key, val) { localStorage.setItem(key, JSON.stringify(val)); }
 
 // ─── Empty templates ──────────────────────────────────────────────────────────
 const EMPTY_SESSION = {
@@ -755,16 +752,12 @@ function EventEditor({ event, onChange, geoProfiles }) {
 
 // ─── Main component ───────────────────────────────────────────────────────────
 export default function TrackDay() {
-  const [events, setEvents]     = useState(() => load(EVENTS_KEY, []));
+  const { events, setEvents, geometry: geoProfiles } = useSync();
   const [apiKey, setApiKey]     = useState(() => localStorage.getItem(APIKEY_KEY) || '');
   const [selectedIdx, setSelectedIdx] = useState(null);
   const [editing, setEditing]   = useState(null);
   const [tab, setTab]           = useState('edit');
   const [deleteConfirm, setDeleteConfirm] = useState(null);
-
-  const geoProfiles = load(GEO_KEY, []);
-
-  useEffect(() => { save(EVENTS_KEY, events); }, [events]);
 
   function newEvent() {
     setEditing({ ...dc(EMPTY_EVENT), id: Date.now(), date: new Date().toISOString().slice(0, 10) });

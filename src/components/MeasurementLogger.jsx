@@ -1,8 +1,6 @@
-import { useState, useEffect } from 'react';
+import { useState } from 'react';
 import { REAR_SHOCKS, FRONT_STRUTS, shockLabel } from '../data/shockOptions';
-
-const SESSION_KEY = 'race_session_logs';
-const GEO_KEY     = 'race_geometry_logs';
+import { useSync } from '../utils/SyncContext';
 
 // ─── Empty templates ────────────────────────────────────────────────────────
 
@@ -50,9 +48,7 @@ const EMPTY_GEO = {
 
 // ─── Persistence ─────────────────────────────────────────────────────────────
 
-function load(key)      { try { return JSON.parse(localStorage.getItem(key)) || []; } catch { return []; } }
-function save(key, arr) { localStorage.setItem(key, JSON.stringify(arr)); }
-function dc(o)          { return JSON.parse(JSON.stringify(o)); }
+function dc(o) { return JSON.parse(JSON.stringify(o)); }
 
 // ─── Format for model ─────────────────────────────────────────────────────────
 
@@ -660,8 +656,7 @@ function GeoEditor({ editing, setEditing }) {
 // ─── Top-level tabs ───────────────────────────────────────────────────────────
 
 export function MeasurementLog() {
-  const [sessions, setSessions] = useState(() => load(SESSION_KEY));
-  useEffect(() => save(SESSION_KEY, sessions), [sessions]);
+  const { sessions, setSessions } = useSync();
 
   return (
     <ListEditor
@@ -678,8 +673,7 @@ export function MeasurementLog() {
 }
 
 export function SuspensionGeometry() {
-  const [geoList, setGeoList] = useState(() => load(GEO_KEY));
-  useEffect(() => save(GEO_KEY, geoList), [geoList]);
+  const { geometry: geoList, setGeometry: setGeoList } = useSync();
 
   return (
     <ListEditor
