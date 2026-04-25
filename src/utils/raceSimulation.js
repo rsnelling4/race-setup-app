@@ -1154,6 +1154,10 @@ export function analyzeSetup(setup, ambientTemp = 65, inflationTemp = COLD_PSI_T
         ? idealGroundCamber - swCamber - cornerRoll
         : idealGroundCamber - swCamber + cornerRoll;
       optStaticCamber = Math.round((effectiveIdeal - casterGain - bodyRollCamber - kpiCamber) * 4) / 4;
+      // RF (outside front) must always be negative static camber — clamp at 0.
+      // A positive result means the model geometry is at an extreme but the physical answer
+      // is still "as much negative camber as the hardware allows", not positive.
+      if (outside) optStaticCamber = Math.min(optStaticCamber, 0.0);
       // Check against P71 hardware alignment range with camber bolt installed.
       // Camber bolts are assumed always present — they replace one or both front strut pinch bolts
       // and extend the adjustable range to approximately ±4° on either side.
