@@ -45,7 +45,7 @@ function blankSetup() {
     camber:  { LF: 2.75, RF: -2.25 },
     caster:  { LF: 9.0, RF: 3.0 },
     toe:     -0.25,
-    coldPsi: { LF: 16, RF: 31, LR: 13, RR: 29 },
+    coldPsi: { LF: 20, RF: 38, LR: 16, RR: 35 },
   });
 }
 
@@ -72,8 +72,8 @@ function sessionToSimSetup(session) {
     caster:  { LF: Number(s.caster?.LF) || 5, RF: Number(s.caster?.RF) || 5 },
     toe:     Number(s.toe) || -0.25,
     coldPsi: {
-      LF: Number(s.coldPsi?.LF) || 16, RF: Number(s.coldPsi?.RF) || 31,
-      LR: Number(s.coldPsi?.LR) || 13, RR: Number(s.coldPsi?.RR) || 29,
+      LF: Number(s.coldPsi?.LF) || 20, RF: Number(s.coldPsi?.RF) || 38,
+      LR: Number(s.coldPsi?.LR) || 16, RR: Number(s.coldPsi?.RR) || 35,
     },
   };
 }
@@ -91,14 +91,14 @@ function buildPrompt(event, selectedSessions, geoProfiles) {
     ``,
     `EMPIRICAL CALIBRATION RULES — override any pure load-proportional math:`,
     `  Tire: Ironman iMove Gen3 AS 235/55R17 103V XL. Car weight: 3700 lbs.`,
-    `  OVAL hot PSI targets (empirically validated): RF 38, RR 35, LF 19, LR 16.`,
-    `  These are NOT the physics-optimal values. The load-proportional model predicts RF ~42-48 / RR ~32`,
-    `  but running that large a right-side spread (10+ PSI) causes severe push/understeer.`,
-    `  Keeping the right-side spread to ~3 PSI (RF 38 / RR 35) allows the RF to stay compliant`,
-    `  and prevents front-tire dominance. This is confirmed across multiple race sessions.`,
-    `  LR MINIMUM: never recommend below 16 PSI hot on the left rear. Hard floor — tire integrity.`,
+    `  COLD PSI targets (set in garage): LF 20, RF 38, LR 16, RR 35.`,
+    `  Pressure rise from cold to hot: left side +2 PSI, right side +4 to +6 PSI (avg +5).`,
+    `  HOT PSI targets (empirically validated): LF ~22, RF ~43, LR ~18, RR ~40.`,
+    `  Right-side spread is kept to ~3 PSI hot (RF 43 / RR 40) to prevent push/understeer.`,
+    `  A larger spread (10+ PSI right-side) causes severe push — RF runs too stiff, front dominates.`,
+    `  LR MINIMUM: never recommend below 18 PSI hot (= 16 PSI cold) on the left rear. Hard floor.`,
     `  The physics model's "opt" PSI values in the data below are load-proportional baselines only.`,
-    `  Use the empirical targets above as your pressure reference, not the "opt" values.`,
+    `  Use the empirical hot targets above as your pressure reference, not the "opt" values.`,
     ``,
     `EVENT: ${event.name}  |  Date: ${event.date}  |  Track: ${event.track || 'not specified'}`,
     ``,

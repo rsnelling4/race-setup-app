@@ -52,8 +52,9 @@ TRACK.cornerArc = Math.PI * TRACK.cornerRadius;
 TRACK.totalLength = 2 * TRACK.straightLength + 2 * TRACK.cornerArc;
 
 // Per-corner minimum hot PSI floors — empirically calibrated.
-// LR floor 16: never run left rear below 15 PSI hot (target 16+).
-const MIN_HOT_PSI = { LF: 12, RF: 20, LR: 16, RR: 18 };
+// Cold PSI targets: LF 20, RF 38, LR 16, RR 35. Left side rises ~2 PSI, right side ~4-6 PSI hot.
+// LR floor 18 PSI hot (= 16 cold + 2 rise) — never run left rear below this.
+const MIN_HOT_PSI = { LF: 14, RF: 22, LR: 18, RR: 20 };
 
 // TIME-AVERAGED LATERAL G — used for tire load, pressure target, and camber calculations.
 //
@@ -904,7 +905,7 @@ export const DEFAULT_SETUP = {
   camber: { LF: 2.75, RF: -2.25 }, // measured 2026-04-22
   caster: { LF: 9.0, RF: 3.0 },    // current alignment (2026-04-22 post strut swap)
   toe: -0.25,
-  coldPsi: { LF: 16, RF: 31, LR: 13, RR: 29 },
+  coldPsi: { LF: 20, RF: 38, LR: 16, RR: 35 },
 };
 
 // ============ RECOMMENDED SETUP ============
@@ -925,7 +926,7 @@ export const RECOMMENDED_SETUP = {
   camber: { LF: 2.5, RF: -3.25 },
   caster: { LF: 3.0, RF: 5.5 },
   toe: -0.25,
-  coldPsi: { LF: 16, RF: 31, LR: 13, RR: 29 },
+  coldPsi: { LF: 20, RF: 38, LR: 16, RR: 35 },
 };
 
 // ============ PETE SETUP ============
@@ -936,7 +937,7 @@ export const PETE_SETUP = {
   camber: { LF: -2.25, RF: -2.75 },
   caster: { LF: 3.5, RF: 8.0 },
   toe: -0.25,
-  coldPsi: { LF: 16, RF: 31, LR: 13, RR: 29 },
+  coldPsi: { LF: 20, RF: 38, LR: 16, RR: 35 },
 };
 
 // ============ DYLAN SETUP ============
@@ -947,7 +948,7 @@ export const DYLAN_SETUP = {
   camber: { LF: -2.0, RF: -2.75 },
   caster: { LF: 4.0, RF: 3.25 },
   toe: -0.25,
-  coldPsi: { LF: 16, RF: 31, LR: 13, RR: 29 },
+  coldPsi: { LF: 20, RF: 38, LR: 16, RR: 35 },
 };
 
 // ============ JOSH SETUP ============
@@ -958,7 +959,7 @@ export const JOSH_SETUP = {
   camber: { LF: -0.75, RF: -1.75 },
   caster: { LF: 5.0, RF: 7.0 },
   toe: -0.25,
-  coldPsi: { LF: 16, RF: 31, LR: 13, RR: 29 },
+  coldPsi: { LF: 20, RF: 38, LR: 16, RR: 35 },
 };
 
 // ============ JOEY SETUP ============
@@ -969,7 +970,7 @@ export const JOEY_SETUP = {
   camber: { LF: 1.0, RF: -3.5 },
   caster: { LF: 6.0, RF: 5.0 },
   toe: -0.25,
-  coldPsi: { LF: 16, RF: 31, LR: 13, RR: 29 },
+  coldPsi: { LF: 20, RF: 38, LR: 16, RR: 35 },
 };
 
 // ============ FIGURE 8 DEFAULT SETUP ============
