@@ -4569,7 +4569,95 @@
   font-size: 0.875rem;
   color: var(--text-primary);
   line-height: 1.7;
-  white-space: pre-wrap;
+}
+.td-ai-text p { margin: 0 0 4px; }
+
+/* Tire analysis card */
+.td-tire-analysis-card {
+  background: var(--bg-card);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 14px 16px;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.td-tire-strips { display: flex; flex-direction: column; gap: 8px; }
+
+.td-tire-strip {
+  padding: 8px 10px;
+  border-radius: 6px;
+  background: var(--bg-secondary, rgba(255,255,255,0.03));
+  font-size: 0.82rem;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+.td-tire-strip-header {
+  display: flex;
+  align-items: baseline;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+.td-tire-pos { font-weight: 700; font-size: 0.85rem; min-width: 28px; }
+.td-tire-temps { color: var(--text-primary); font-variant-numeric: tabular-nums; }
+.td-tire-avg { color: var(--text-secondary); font-size: 0.78rem; margin-left: 4px; }
+.td-tire-hot-psi { margin-left: auto; color: var(--text-secondary); font-size: 0.78rem; }
+
+.td-tire-rec {
+  font-size: 0.8rem;
+  color: var(--text-secondary);
+  line-height: 1.5;
+  padding-left: 4px;
+}
+
+/* Balance section */
+.td-tire-balance {
+  border-top: 1px solid var(--border);
+  padding-top: 8px;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+.td-balance-label { font-size: 0.7rem; font-weight: 700; text-transform: uppercase; letter-spacing: 0.06em; color: var(--text-secondary); margin-bottom: 2px; }
+.td-balance-deltas { display: flex; gap: 14px; flex-wrap: wrap; margin-bottom: 4px; }
+.td-delta { font-size: 0.8rem; color: var(--text-secondary); font-variant-numeric: tabular-nums; }
+.td-delta.warn { color: var(--yellow, #ecc94b); font-weight: 600; }
+
+/* Handling recommendation */
+.td-handling-rec {
+  border-top: 1px solid var(--border);
+  padding-top: 8px;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+.td-handling-title { font-size: 0.85rem; font-weight: 700; color: var(--text-primary); }
+.td-handling-desc { font-size: 0.8rem; color: var(--text-secondary); line-height: 1.5; }
+.td-handling-changes { display: flex; flex-direction: column; gap: 6px; }
+.td-change-row {
+  display: grid;
+  grid-template-columns: 160px 1fr;
+  gap: 6px 10px;
+  font-size: 0.8rem;
+  line-height: 1.45;
+  align-items: start;
+}
+.td-change-component { font-weight: 600; color: var(--text-primary); grid-row: 1; grid-column: 1; }
+.td-change-action { color: #a78bfa; font-weight: 600; grid-row: 1; grid-column: 2; }
+.td-change-effect { color: var(--text-secondary); grid-row: 2; grid-column: 2; }
+
+/* Per-tire detail table */
+.td-pertire-table { margin-top: 4px; display: flex; flex-direction: column; gap: 3px; }
+.td-pertire-label { font-size: 0.7rem; font-weight: 700; text-transform: uppercase; letter-spacing: 0.06em; color: var(--text-secondary); }
+.td-pertire-group { display: flex; flex-wrap: wrap; gap: 4px 10px; font-size: 0.78rem; color: var(--text-secondary); align-items: baseline; }
+.td-pertire-cat { font-weight: 600; color: var(--text-primary); }
+.td-pertire-item { white-space: nowrap; }
+
+@media (max-width: 640px) {
+  .td-change-row { grid-template-columns: 1fr; }
+  .td-change-component, .td-change-action, .td-change-effect { grid-column: 1; }
 }
 
 /* Mobile */

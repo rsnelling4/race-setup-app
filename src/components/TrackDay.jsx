@@ -1,6 +1,6 @@
 import { useState, useEffect, useCallback } from 'react';
 import { analyzeSetup } from '../utils/raceSimulation';
-import { handlingConditions, cornerPhases } from '../utils/tireAnalysis';
+import { handlingConditions, cornerPhases, analyzeFullCar, getHandlingRecommendations, formatPosition } from '../utils/tireAnalysis';
 import { REAR_SHOCKS, FRONT_STRUTS, shockLabel } from '../data/shockOptions';
 import { useSync } from '../utils/SyncContext';
 
@@ -389,6 +389,167 @@ function PhysicsCard({ analysis, session, geoProfiles }) {
   );
 }
 
+// ─── Severity badge helpers ───────────────────────────────────────────────────
+const SEV_COLOR = { critical: 'var(--red, #f56565)', warning: 'var(--yellow, #ecc94b)', good: 'var(--green, #68d391)' };
+const SEV_ICON  = { critical: '✕', warning: '!', good: '✓' };
+
+function SevBadge({ severity }) {
+  return (
+    <span style={{ color: SEV_COLOR[severity] || SEV_COLOR.good, fontWeight: 700, marginRight: 6, fontSize: '0.85em' }}>
+      [{SEV_ICON[severity] || '✓'}]
+    </span>
+  );
+}
+
+// ─── Markdown-ish renderer (bold + line breaks only) ──────────────────────────
+function SimpleMarkdown({ text }) {
+  if (!text) return null;
+  return (
+    <div className="td-ai-text">
+      {text.split('\n').map((line, i) => {
+        const parts = line.split(/(\*\*[^*]+\*\*)/g).map((chunk, j) =>
+          chunk.startsWith('**') && chunk.endsWith('**')
+            ? <strong key={j}>{chunk.slice(2, -2)}</strong>
+            : chunk
+        );
+        return line.trim() === '' ? <br key={i} /> : <p key={i} style={{ margin: '0 0 4px' }}>{parts}</p>;
+      })}
+    </div>
+  );
+}
+
+// ─── Per-tire temp strip ──────────────────────────────────────────────────────
+function TireStrip({ pos, data, result }) {
+  if (!result) return null;
+  const sev = result.severity;
+  return (
+    <div className="td-tire-strip" style={{ borderLeft: `3px solid ${SEV_COLOR[sev] || SEV_COLOR.good}` }}>
+      <div className="td-tire-strip-header">
+        <span className="td-tire-pos">{pos}</span>
+        <span className="td-tire-temps">
+          {data.inside}°&nbsp;/&nbsp;{data.middle}°&nbsp;/&nbsp;{data.outside}°
+          <span className="td-tire-avg"> avg {result.avg}°F</span>
+        </span>
+        {result.hotPsi !== null && (
+          <span className="td-tire-hot-psi">hot {result.hotPsi} PSI (opt {result.optimalHotPsi})</span>
+        )}
+      </div>
+      {result.recommendations.map((rec, i) => (
+        <div key={i} className="td-tire-rec">
+          <SevBadge severity={rec.severity} />{rec.message}
+        </div>
+      ))}
+    </div>
+  );
+}
+
+// ─── Full tire analysis card (per session) ────────────────────────────────────
+function TireAnalysisCard({ session, geoProfiles }) {
+  const tt = session.tireTemps;
+  const hp = session.hotPsi;
+  const setup = session.setup;
+
+  const hasTemps = tt && Object.values(tt).some(t => t.inside && t.middle && t.outside);
+  if (!hasTemps) return null;
+
+  // Build the input structure analyzeFullCar expects
+  const tiresInput = {};
+  for (const pos of ['LF', 'RF', 'LR', 'RR']) {
+    tiresInput[pos] = {
+      inside:   tt[pos]?.inside  || '',
+      middle:   tt[pos]?.middle  || '',
+      outside:  tt[pos]?.outside || '',
+      pressure: setup?.coldPsi?.[pos] || hp?.[pos] || null,
+    };
+  }
+
+  const analysis = analyzeFullCar(tiresInput);
+  const handling = (session.condition && session.phase)
+    ? getHandlingRecommendations(session.condition, session.phase)
+    : null;
+
+  const condLabel = handlingConditions.find(c => c.value === session.condition)?.label || '';
+  const phaseLabel = cornerPhases.find(p => p.value === session.phase)?.label || '';
+
+  return (
+    <div className="td-tire-analysis-card">
+      <div className="td-physics-title">
+        {session.name || 'Session'} — Tire Analysis
+        <span className="td-physics-car">{carLabel(session, geoProfiles)}</span>
+      </div>
+
+      {/* Per-tire breakdown */}
+      <div className="td-tire-strips">
+        {['RF', 'LF', 'RR', 'LR'].map(pos => (
+          <TireStrip key={pos} pos={pos} data={tiresInput[pos]} result={analysis.tires[pos]} />
+        ))}
+      </div>
+
+      {/* Overall balance */}
+      {analysis.overall?.length > 0 && (
+        <div className="td-tire-balance">
+          <div className="td-balance-label">Overall Balance</div>
+          {analysis.deltas && (
+            <div className="td-balance-deltas">
+              <span className={`td-delta ${Math.abs(analysis.deltas.frontRear) > 20 ? 'warn' : ''}`}>
+                F/R: {analysis.deltas.frontRear > 0 ? '+' : ''}{analysis.deltas.frontRear}°F
+              </span>
+              <span className={`td-delta ${analysis.deltas.leftRight > 15 ? 'warn' : ''}`}>
+                L/R: {analysis.deltas.leftRight > 0 ? '+' : ''}{analysis.deltas.leftRight}°F
+              </span>
+              <span className={`td-delta ${Math.abs(analysis.deltas.diagonal) > 15 ? 'warn' : ''}`}>
+                Diag: {analysis.deltas.diagonal > 0 ? '+' : ''}{analysis.deltas.diagonal}°F
+              </span>
+            </div>
+          )}
+          {analysis.overall.map((rec, i) => (
+            <div key={i} className="td-tire-rec">
+              <SevBadge severity={rec.severity} />{rec.message}
+            </div>
+          ))}
+        </div>
+      )}
+
+      {/* Handling diagnosis */}
+      {handling && (
+        <div className="td-handling-rec">
+          <div className="td-handling-title">{handling.title}</div>
+          <div className="td-handling-desc">{handling.description}</div>
+          <div className="td-handling-changes">
+            {handling.changes.map((ch, i) => (
+              <div key={i} className="td-change-row">
+                <span className="td-change-component">{ch.component}</span>
+                <span className="td-change-action">{ch.adjustment}</span>
+                <span className="td-change-effect">{ch.effect}</span>
+              </div>
+            ))}
+          </div>
+          {handling.perTire && (
+            <div className="td-pertire-table">
+              <div className="td-pertire-label">Per-Tire Detail</div>
+              {Object.entries(handling.perTire).map(([category, corners]) => (
+                <div key={category} className="td-pertire-group">
+                  <span className="td-pertire-cat">{category}:</span>
+                  {typeof corners === 'object' && Object.entries(corners).map(([corner, action]) => (
+                    <span key={corner} className="td-pertire-item">{corner}: <strong>{action}</strong></span>
+                  ))}
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
+      )}
+
+      {/* Prompt to add driver feel if missing temps but no condition */}
+      {!session.condition && (
+        <div className="td-tire-rec" style={{ marginTop: 8, color: 'var(--text-secondary)' }}>
+          Add "Driver Feel" in the session editor to get handling recommendations.
+        </div>
+      )}
+    </div>
+  );
+}
+
 // ─── Session editor ───────────────────────────────────────────────────────────
 function SessionEditor({ session, index, onChange, geoProfiles }) {
   const setup = session.setup ?? blankSetup();
@@ -671,13 +832,22 @@ function AnalysisPanel({ event, allSessions, geoProfiles, apiKey }) {
         </div>
       )}
 
+      {selectedSessions.some(s => Object.values(s.tireTemps || {}).some(t => t.inside && t.middle && t.outside)) && (
+        <div className="td-physics-results">
+          <div className="td-results-heading">Tire Temperature Analysis</div>
+          {selectedSessions.map(session => (
+            <TireAnalysisCard key={session.id} session={session} geoProfiles={geoProfiles} />
+          ))}
+        </div>
+      )}
+
       {aiText && (
         <div className="td-ai-results">
           <div className="td-results-heading">
             Claude Analysis
             <span className="td-results-model">claude-sonnet-4-6</span>
           </div>
-          <div className="td-ai-text">{aiText}</div>
+          <SimpleMarkdown text={aiText} />
         </div>
       )}
     </div>
