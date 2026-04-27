@@ -89,6 +89,17 @@ function buildPrompt(event, selectedSessions, geoProfiles) {
   const lines = [
     `You are a race car setup engineer analyzing track day data for 2008 Ford Crown Victoria P71 race cars on an oval/figure-8 track.`,
     ``,
+    `EMPIRICAL CALIBRATION RULES — override any pure load-proportional math:`,
+    `  Tire: Ironman iMove Gen3 AS 235/55R17 103V XL. Car weight: 3700 lbs.`,
+    `  OVAL hot PSI targets (empirically validated): RF 38, RR 35, LF 19, LR 16.`,
+    `  These are NOT the physics-optimal values. The load-proportional model predicts RF ~42-48 / RR ~32`,
+    `  but running that large a right-side spread (10+ PSI) causes severe push/understeer.`,
+    `  Keeping the right-side spread to ~3 PSI (RF 38 / RR 35) allows the RF to stay compliant`,
+    `  and prevents front-tire dominance. This is confirmed across multiple race sessions.`,
+    `  LR MINIMUM: never recommend below 16 PSI hot on the left rear. Hard floor — tire integrity.`,
+    `  The physics model's "opt" PSI values in the data below are load-proportional baselines only.`,
+    `  Use the empirical targets above as your pressure reference, not the "opt" values.`,
+    ``,
     `EVENT: ${event.name}  |  Date: ${event.date}  |  Track: ${event.track || 'not specified'}`,
     ``,
   ];
