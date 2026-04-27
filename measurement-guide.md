@@ -170,7 +170,12 @@ The front roll center on an SLA (short-long arm) suspension is found geometrical
 
 ## Measurement 6: Caster Camber Gain Validation
 
-**What it feeds:** Coefficients `RF: 0.18°/° caster, LF: 0.10°/° caster` — both estimated. These affect how much camber change we predict when steering into the corner.
+**What it feeds:** Caster-camber gain coefficients used by the simulation models. Two separate sets are used:
+
+- **Oval (left-turn only):** `RF: 0.667°/° caster, LF: 0.167°/° caster` — measured on-track 2026-04-22. These are the real cornering values for a left-hand oval where RF is always outside and LF is always inside.
+- **Figure 8 (averaged across both turn directions):** `RF/LF: 0.18°/° caster (outside) and 0.10°/° caster (inside)` — averaged across left and right turns since each tire alternates roles every lap.
+
+These affect how much dynamic camber change the model predicts when steering into the corner.
 
 Your current alignment: LF 7° caster, RF 3° caster.
 
