@@ -45,7 +45,7 @@ function blankSetup() {
     camber:  { LF: 2.75, RF: -2.25 },
     caster:  { LF: 9.0, RF: 3.0 },
     toe:     -0.25,
-    coldPsi: { LF: 20, RF: 42, LR: 16, RR: 32 },
+    coldPsi: { LF: 18, RF: 38, LR: 14, RR: 29 },
   });
 }
 
@@ -72,8 +72,8 @@ function sessionToSimSetup(session) {
     caster:  { LF: Number(s.caster?.LF) || 5, RF: Number(s.caster?.RF) || 5 },
     toe:     Number(s.toe) || -0.25,
     coldPsi: {
-      LF: Number(s.coldPsi?.LF) || 20, RF: Number(s.coldPsi?.RF) || 42,
-      LR: Number(s.coldPsi?.LR) || 16, RR: Number(s.coldPsi?.RR) || 32,
+      LF: Number(s.coldPsi?.LF) || 18, RF: Number(s.coldPsi?.RF) || 38,
+      LR: Number(s.coldPsi?.LR) || 14, RR: Number(s.coldPsi?.RR) || 29,
     },
   };
 }

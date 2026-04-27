@@ -90,7 +90,7 @@ const TIPS = {
   frontShock: 'Average stiffness rating of front struts. For figure 8, symmetric front shock settings are preferred since the car rolls equally in both directions.',
   rearShock: 'Average stiffness rating of rear shocks. Controls body roll, which averages to near-zero in figure 8 but stiffer rears still help stability through the crossing.',
   frontLLTD: 'Lateral Load Transfer Distribution — front axle share of total cornering weight transfer. Target ~46% (green zone 41–51%). In figure 8, this applies equally to both turn directions. Outside this range costs ~1–3% grip.',
-  frontGripShare: 'Front axle share of total grip. Target is 55% — matching the car\'s front weight bias (4100 lbs × 55% front). Even though figure 8 loads symmetrically left/right, the car is still nose-heavy and the performance model penalizes deviation from 55%.',
+  frontGripShare: 'Front axle share of total grip. Target is 55% — matching the car\'s front weight bias (3700 lbs × 55% front). Even though figure 8 loads symmetrically left/right, the car is still nose-heavy and the performance model penalizes deviation from 55%.',
   bodyRoll: 'Estimated chassis lean at 1G. In figure 8 the car rolls left and right alternately — average is ~0°, but peak roll each way still affects tire geometry through corners.',
   balanceScore: 'Front/rear grip balance. 100% = equal front and rear grip contribution (50/50 target for figure 8). Imbalance causes push or loose handling.',
   toeCurrent: 'Current toe setting. For figure 8, toe-out sharpens turn-in for both left and right corners — same principle as oval but benefits both directions.',

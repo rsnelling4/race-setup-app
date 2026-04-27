@@ -5,14 +5,14 @@
 // Optimal HOT tire pressures for Crown Vic P71 on a left-turn oval.
 // Derived from: optPsi = 30 × (cornerLoad / avgLoad)
 //   at OVAL_CORNER_G = 0.407G, springLLTD = 0.50 (baseline 475F/160R springs),
-//   frontBias = 0.57, vehicle weight = 4100 lbs, track width 64" (measured).
+//   frontBias = 0.57, vehicle weight = 3700 lbs, track width 64" (measured).
 //   Includes ARB load transfer: P71 29.5mm front bar, k_roll = 39,277 lb-ft/rad.
 //   Rear RCH = 14.5" (measured: Watts pivot from floor). CG height 23" (cage-adjusted).
-//   RF cornerLoad ≈ 1615 lbs → 47 PSI hot
-//   LF cornerLoad ≈  722 lbs → 21 PSI hot
-//   RR cornerLoad ≈ 1202 lbs → 35 PSI hot
-//   LR cornerLoad ≈  561 lbs → 16 PSI hot
-const OVAL_OPTIMAL_HOT_PSI = { LF: 21, RF: 47, LR: 16, RR: 35 };
+//   RF cornerLoad ≈ 1457 lbs → 42 PSI hot
+//   LF cornerLoad ≈  652 lbs → 19 PSI hot
+//   RR cornerLoad ≈ 1085 lbs → 32 PSI hot
+//   LR cornerLoad ≈  506 lbs → 14 PSI hot
+const OVAL_OPTIMAL_HOT_PSI = { LF: 19, RF: 42, LR: 14, RR: 32 };
 const COLD_REF_TEMP = 68;    // °F — temperature when cold PSI is set (garage inflate)
 const RANKINE = 459.67;      // °F → °R conversion offset
 

@@ -6,7 +6,7 @@ import NumericInput from './NumericInput';
 const CORNERS = ['LF', 'RF', 'LR', 'RR'];
 
 // Recommended F8 setup — grid-search optimized (34,884 combos @ 75°F, best lap 23.145s).
-// Updated 2026-04-01 with full physics model: 4100 lbs, RCH 3", SLA jounce 0.355°/°,
+// Updated 2026-04-01 with full physics model: 3700 lbs, RCH 3", SLA jounce 0.355°/°,
 // KPI 9.5°, sidewall compliance, ground-frame camber. Symmetric caster mandatory for F8.
 const RECOMMENDED_F8_SETUP = {
   shocks: { LF: 1, RF: 1, LR: 2, RR: 1 },
@@ -414,7 +414,7 @@ export default function Figure8Simulation({ setup, setSetup, ambient, setAmbient
       <div className="sim-context-cards">
         <div className="sim-context-card">
           <h4>Vehicle</h4>
-          <p>2008 Crown Vic P71 — 4100 lbs, 4.6L V8 (~300 HP), 3.73 gears, stripped + cage</p>
+          <p>2008 Crown Vic P71 — 3700 lbs, 4.6L V8 (~300 HP), 3.73 gears, stripped + cage</p>
         </div>
         <div className="sim-context-card">
           <h4>Track</h4>
