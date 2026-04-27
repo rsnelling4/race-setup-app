@@ -14,8 +14,11 @@
 //   RF: 38 PSI hot  (physics predicted 42 — reduced 4 PSI for right-side balance)
 //   LF: 19 PSI hot  (unchanged — lightly loaded inside tire, linear model holds)
 //   RR: 35 PSI hot  (physics predicted 32 — raised 3 PSI to tighten right-side spread)
-//   LR: 14 PSI hot  (unchanged — lightly loaded inside rear)
-const OVAL_OPTIMAL_HOT_PSI = { LF: 19, RF: 38, LR: 14, RR: 35 };
+//   LR: 16 PSI hot  (floor 16 — do not run below 15 PSI hot on left rear)
+const OVAL_OPTIMAL_HOT_PSI = { LF: 19, RF: 38, LR: 16, RR: 35 };
+// Minimum hot PSI floors — never recommend below these regardless of load calculation.
+// LR floor: 16 PSI — empirical minimum for tire integrity on left rear.
+const OVAL_MIN_HOT_PSI = { LF: 12, RF: 20, LR: 16, RR: 18 };
 const COLD_REF_TEMP = 68;    // °F — temperature when cold PSI is set (garage inflate)
 const RANKINE = 459.67;      // °F → °R conversion offset
 
@@ -65,8 +68,10 @@ export function analyzeTire(inside, middle, outside, position, currentPressure =
   if (currentPressure) {
     hotPsi = currentPressure * (avg + RANKINE) / (COLD_REF_TEMP + RANKINE);
     psiError = hotPsi - optimalHotPsi;
-    // Back-calculate the cold PSI that would hit optimal hot at this tire temperature
-    recommendedColdPsi = optimalHotPsi * (COLD_REF_TEMP + RANKINE) / (avg + RANKINE);
+    // Back-calculate cold PSI to hit optimal hot, then enforce minimum hot PSI floor.
+    const minHot = OVAL_MIN_HOT_PSI[position] ?? 10;
+    const targetHot = Math.max(optimalHotPsi, minHot);
+    recommendedColdPsi = targetHot * (COLD_REF_TEMP + RANKINE) / (avg + RANKINE);
     recommendedPressure = Math.round(recommendedColdPsi * 2) / 2; // nearest 0.5 PSI
   }
 
