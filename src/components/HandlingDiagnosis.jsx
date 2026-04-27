@@ -114,7 +114,7 @@ function buildRecommendations(condition, phase, analysis, setup) {
   const { corners, ss, lapTime } = analysis;
   const isLoose = condition === 'loose';
   const isTight = condition === 'tight';
-  const lltd = ss?.frontLLTD ?? 0.47;
+  const lltd = ss?.frontLLTD ?? 0.46;
   const recs = [];
 
   // ── PRESSURE recommendations ────────────────────────────────────────────────
@@ -557,8 +557,8 @@ export default function HandlingDiagnosis({ setup, setSetup, ambient, setAmbient
             </div>
             <div className="hd-analysis-card">
               <div className="hd-ac-label">Front LLTD</div>
-              <div className="hd-ac-value" style={{ color: Math.abs((analysis.ss?.frontLLTD ?? 0.47) - 0.46) < 0.03 ? 'var(--green)' : 'var(--yellow)' }}>
-                {((analysis.ss?.frontLLTD ?? 0.47) * 100).toFixed(1)}%
+              <div className="hd-ac-value" style={{ color: Math.abs((analysis.ss?.frontLLTD ?? 0.46) - 0.46) < 0.03 ? 'var(--green)' : 'var(--yellow)' }}>
+                {((analysis.ss?.frontLLTD ?? 0.46) * 100).toFixed(1)}%
                 <span className="hd-ac-sub"> target 46%</span>
               </div>
             </div>

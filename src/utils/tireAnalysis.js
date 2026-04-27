@@ -15,10 +15,10 @@
 //   LF: 19 PSI hot  (unchanged — lightly loaded inside tire, linear model holds)
 //   RR: 35 PSI hot  (physics predicted 32 — raised 3 PSI to tighten right-side spread)
 //   LR: 16 PSI hot  (floor 16 — do not run below 15 PSI hot on left rear)
-const OVAL_OPTIMAL_HOT_PSI = { LF: 19, RF: 38, LR: 16, RR: 35 };
+export const OVAL_OPTIMAL_HOT_PSI = { LF: 19, RF: 38, LR: 16, RR: 35 };
 // Minimum hot PSI floors — never recommend below these regardless of load calculation.
 // LR floor: 16 PSI — empirical minimum for tire integrity on left rear.
-const OVAL_MIN_HOT_PSI = { LF: 12, RF: 20, LR: 16, RR: 18 };
+export const OVAL_MIN_HOT_PSI = { LF: 12, RF: 20, LR: 16, RR: 18 };
 const COLD_REF_TEMP = 68;    // °F — temperature when cold PSI is set (garage inflate)
 const RANKINE = 459.67;      // °F → °R conversion offset
 
@@ -477,6 +477,7 @@ export function formatPosition(pos) {
  *   Lower RR PSI  → toward optimal → more RR contact → rear planted → TIGHT
  *   Higher LR PSI → toward optimal → more inside rear grip → TIGHT from middle out
  *   Lower LR PSI  → away from optimal → less inside rear grip → LOOSE from middle out
+ *   NOTE: LR minimum is 16 PSI hot — do not reduce LR below this floor.
  *   Higher LF PSI → toward optimal → slightly more front grip → mild LOOSE
  *   Lower LF PSI  → less front grip → mild TIGHT
  */
@@ -493,7 +494,7 @@ const perTireRecommendations = {
   tight_entry: {
     "Tire Pressures": {
       LF: "Increase PSI",
-      LR: "Decrease PSI",
+      LR: "Decrease PSI (min 16 PSI hot)",
       RF: "Increase PSI",   // higher RF = more RF grip = front turns = loosens push
       RR: "Increase PSI",   // higher RR = RR planted = balanced rear = lets front work
     },
@@ -522,7 +523,7 @@ const perTireRecommendations = {
   tight_middle: {
     "Tire Pressures": {
       LF: "Increase PSI",
-      LR: "Decrease PSI",
+      LR: "Decrease PSI (min 16 PSI hot)",
       RF: "Increase PSI",   // higher RF = more grip = front turns in mid-corner
       RR: "Increase PSI",
     },
@@ -551,7 +552,7 @@ const perTireRecommendations = {
   tight_exit: {
     "Tire Pressures": {
       LF: "Increase PSI",
-      LR: "Decrease PSI",
+      LR: "Decrease PSI (min 16 PSI hot)",
       RF: "Increase PSI",   // higher RF = RF holds grip under throttle = less push on exit
       RR: "Increase PSI",
     },

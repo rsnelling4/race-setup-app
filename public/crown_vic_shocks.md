@@ -30,21 +30,13 @@ In summary, while the internal valving sets the true stiffness, the stroke lengt
 | Manufacturer | Part Number | Type | Intended Use | Compressed Length (in) | Extended Length (in) | Stroke (in) | Stiffer 0<---->10 Softer |
 | :--- | :--- | :--- | :--- | :--- | :--- | :--- | :--- |
 | Monroe | 5993 | OESpectrum (Twin-Tube) | Base Model / LX | 12.5 | 21.25 | 8.75 | 10 |
-|Mustang Monroe | 210108 | Restore (Twin-Tube) | Economy | 12.21 | 20.04 | 7.84 | 10 |
 | Monroe | 210149 | Restore | Base Model / LX | 12.28 | 20.04 | 7.76 | 9 |
-|Mustang PRT | 173898 | Shock Absorber (Twin-Tube) | Base Model / LX | 12.21 | 20.04 | 7.84 | 9 |
 | Motorcraft | ASH24539 06+ | Shock Absorber (Twin-Tube) | Standard Duty | 12.4 | 20.1 | 7.7 | 8 |
 | FCS | 341967 | Shock Absorber (Twin-Tube) | Base Model / LX | 12.56 | 20.2 | 7.64 | 8 |
 | Duralast | TS33-31962B | Shock Absorber (Twin-Tube) | Base Model | 12.56 | 20.16 | 7.6 | 8 |
-|Mustang FCS | 341587 | Shock Absorber (Twin-Tube) | GT Base / Original Ride | 12.2 | 20.08 | 7.88 | 8 |
-|Mustang Monroe | 5783 | OESpectrum (Twin-Tube) | Original Ride Quality | 12.5 | 20.00 | 7.5 | 8 |
-|Mustang Gabriel | 69593 | Ultra (Twin-Tube) | Convertible / Original Ride | 12.56 | 20.07 | 7.51 | 7 |
-|Mustang Gabriel | 69592 | Ultra (Twin-Tube) | Coupe / Original Ride | 12.56 | 20.07 | 7.51 | 7 |
-|Mustang KYB | 349026 | Excel-G (Twin-Tube) | GT Model / Original Ride | 12.2 | 20.03 | 7.83 | 7 |
 | Gabriel | 69575 | Ultra (Twin-Tube) | Base Model / LX | 12.4 | 20.16 | 7.76 | 7 |
 | KYB | 555601 | Gas-a-Just (Monotube) | Performance Upgrade | 12.92 | 20.09 | 7.17 | 5 |
 | FCS | DT551380 | Monotube Gas Charged| Base Model | 12.99 | 20.0 | 7.01 | 5 |
-|Mustang KYB | 554355 | Gas-A-Just (Monotube) | Increased Handling | 12.79 | 20.03 | 7.24 | 4 |
 | Motorcraft | ASH12277 03-05| Shock Absorber (Twin-Tube) | Heavy Duty / Handling | 12.5 | 20.26 | 7.76 | 4 |
 | PRT | 194510 | Shock Absorber (Twin-Tube) | Police / Taxi | 12.28 | 20.04 | 7.76 | 4 |
 | Duralast | TS33-32752B | Shock Absorber (Twin-Tube) | Police / Taxi | 12.4 | 20.31 | 7.91 | 3 |
@@ -59,11 +51,7 @@ In summary, while the internal valving sets the true stiffness, the stroke lengt
 | :--- | :--- | :--- | :--- | :--- | :--- | :--- | :--- |
 | FCS | 1336343 | Strut Assembly (Twin-Tube) | Base Model / LX | 12.01 | 15.59 | 3.58 | 9 |
 | PRT | 714075 | Strut Assembly (Twin-Tube) | Base Model / LX | 12.09 | 15.55 | 3.47 | 9 |
-|Mustang PRT | 474462 | Strut Assembly (Twin-Tube) | Economy | 15.32 | 21.58 | 8.2 | 9 |
 | Monroe | 171346 | Quick-Strut (Twin-Tube) | Base Model / LX | 12.25 | 15.52 | 3.27 | 8 |
-|Mustang Gabriel | G56817 | Ultra (Twin-Tube) | Original Ride Quality | 10.9 | 16.59 | 5.69 | 7 |
-|Mustang Monroe | 72138 | OESpectrum (Twin-Tube) | Original Ride Quality | 16.09 | 21.63 | 5.54 | 7 |
-|Mustang KYB | 235920 | Excel-G (Twin-Tube) | GT Model / Original Ride | 15.55 | 24.45 | 8.9 | 7 |
 | KYB | SR4140 | Strut-Plus (Monotube) | Base Model / LX | 12.4 | 15.51 | 3.11 | 6 |
 | KYB | 551600 | Strut (Monotube) | Base Model / LX | 12.4 | 15.51 | 3.11 | 6 |
 | FCS | 1336349 | Strut Assembly (Twin-Tube) | Police / Taxi | 11.85 | 15.94 | 4.09 | 4 |

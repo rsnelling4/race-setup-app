@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { simulateRaceF8, DEFAULT_SETUP_F8, F8_BASELINE_SETUP } from '../utils/raceSimulation';
+import { simulateRaceF8, DEFAULT_SETUP_F8, F8_BASELINE_SETUP, VEH } from '../utils/raceSimulation';
 import { REAR_SHOCKS, FRONT_STRUTS, shockLabel } from '../data/shockOptions';
 import NumericInput from './NumericInput';
 
@@ -414,7 +414,7 @@ export default function Figure8Simulation({ setup, setSetup, ambient, setAmbient
       <div className="sim-context-cards">
         <div className="sim-context-card">
           <h4>Vehicle</h4>
-          <p>2008 Crown Vic P71 — 3700 lbs, 4.6L V8 (~300 HP), 3.73 gears, stripped + cage</p>
+          <p>2008 Crown Vic P71 — {VEH.weight} lbs, 4.6L V8 (~300 HP), 3.73 gears, stripped + cage</p>
         </div>
         <div className="sim-context-card">
           <h4>Track</h4>

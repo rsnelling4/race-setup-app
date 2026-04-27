@@ -74,14 +74,14 @@ const TIPS = {
   load: 'Estimated average tire load across both left and right turns at 1G. Figure 8 loading is nearly symmetric — all four corners see similar average loads.',
   estTemp: 'Steady-state equilibrium temperature predicted by the thermal model at race pace. Based on averaged left/right work factors — figure 8 temps are more balanced than oval.',
   tempFactor: 'Grip multiplier from tire temperature. Optimal window 100–185°F for these Ironman XL all-season tires.',
-  camberSection: 'Figure 8 camber is unique: each front tire alternates as outside (needs negative) and inside (needs near-zero) every lap. The ideal is the average of both demands: approximately −2.75°.',
+  camberSection: 'Figure 8 camber is unique: each front tire alternates as outside (needs negative) and inside (needs near-zero) every lap. The ideal is the average of both demands: approximately −2.25° (avg of outside −4.5° and inside 0°).',
   staticCamber: 'Your static alignment setting in degrees. Negative = top of tire tilted inward. For figure 8, both fronts should be set near the same value.',
   casterGain: 'Average dynamic camber contribution from caster across both turn directions. Caster adds negative camber when outside (one turn) but slightly reduces it when inside (other turn) — the net average is small: caster × −0.04°/degree.',
   effectiveCamber: 'Average effective camber across both turn directions. Static setting plus average caster contribution. This is the average camber the tire sees across a full lap.',
   idealCamber: 'Average effective camber target: −2.25° (avg of outside ideal −4.5° and inside ideal 0°). In each turn the outside role needs −4.5° for maximum grip under cornering load; the inside role needs 0° (flat contact patch — body roll droop lays it flat). Optimal static = avg(−4.5+caster×0.667, 0−caster×0.167). Measured coefficients 2026-04-22. The camber score is the true average of both per-turn grip factors.',
   rearCamber: 'Rear solid axle tilts with body roll. In a figure 8 the car rolls left and right equally, so average dynamic rear camber is approximately zero — near-ideal for the rear axle.',
   solidAxle: 'The rear axle is solid — both wheels tilt together with body roll. In figure 8, body roll averages to near-zero across both turn directions, so rear dynamic camber stays close to optimal.',
-  camberScore: 'Grip multiplier from camber alignment. 100% = effective camber matches the model ideal of −2.75° for this tire. Each degree of deviation costs roughly 1.2% grip.',
+  camberScore: 'Grip multiplier from camber alignment. 100% = effective camber matches the model ideal of −2.25° for this tire. Each degree of deviation costs roughly 1.2% grip.',
   pressureSection: 'Tire pressure affects contact patch shape. Figure 8 loading is symmetric — LF/RF see equal average loads, as do LR/RR. Equal pressures side-to-side are appropriate.',
   coldHot: 'Cold PSI is what you set when inflating the tires. Hot PSI is calculated via ideal gas law using the "Tires Set At" temperature as the cold reference. At 200°F tires set at 85°F: 34 cold → ~40.9 PSI hot. Setting tires on a hot day means less pressure rise during racing.',
   optimalHot: 'Load-optimal hot pressure for this corner. Since figure 8 loads are symmetric, LF≈RF and LR≈RR should have equal optimal pressures.',
@@ -311,7 +311,7 @@ function CornerCard({ c, data, setup }) {
   } = data;
 
   const camberOk = camberDev < 0.5;
-  const presOk = Math.abs(psiDev) < 3;
+  const presOk = Math.abs(psiDev) < 2;
   const recCold = Math.round(recColdPsi * 2) / 2;
 
   return (
@@ -753,8 +753,8 @@ export default function Figure8Optimizer({ setup, setSetup, ambient, setAmbient,
 
       <div className="sim-disclaimer">
         <strong>Model note:</strong> Figure 8 analysis averages left and right turn loads — symmetric setup
-        (equal camber, equal pressures side-to-side) is expected to be optimal. Camber ideal is −2.75°
-        for both fronts (average of outside −4.5° and inside −1.0° demands). Always verify with real pyrometer data.
+        (equal camber, equal pressures side-to-side) is expected to be optimal. Camber ideal is −2.25°
+        for both fronts (average of outside −4.5° and inside 0° demands). Always verify with real pyrometer data.
       </div>
     </div>
   );
