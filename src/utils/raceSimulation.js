@@ -900,7 +900,7 @@ export const DEFAULT_SETUP = {
   camber: { LF: 2.75, RF: -2.25 }, // measured 2026-04-22
   caster: { LF: 9.0, RF: 3.0 },    // current alignment (2026-04-22 post strut swap)
   toe: -0.25,
-  coldPsi: { LF: 18, RF: 38, LR: 14, RR: 29 },
+  coldPsi: { LF: 16, RF: 31, LR: 12, RR: 29 },
 };
 
 // ============ RECOMMENDED SETUP ============
@@ -921,7 +921,7 @@ export const RECOMMENDED_SETUP = {
   camber: { LF: 2.5, RF: -3.25 },
   caster: { LF: 3.0, RF: 5.5 },
   toe: -0.25,
-  coldPsi: { LF: 18, RF: 38, LR: 14, RR: 29 },
+  coldPsi: { LF: 16, RF: 31, LR: 12, RR: 29 },
 };
 
 // ============ PETE SETUP ============
@@ -932,7 +932,7 @@ export const PETE_SETUP = {
   camber: { LF: -2.25, RF: -2.75 },
   caster: { LF: 3.5, RF: 8.0 },
   toe: -0.25,
-  coldPsi: { LF: 18, RF: 38, LR: 14, RR: 29 },
+  coldPsi: { LF: 16, RF: 31, LR: 12, RR: 29 },
 };
 
 // ============ DYLAN SETUP ============
@@ -943,7 +943,7 @@ export const DYLAN_SETUP = {
   camber: { LF: -2.0, RF: -2.75 },
   caster: { LF: 4.0, RF: 3.25 },
   toe: -0.25,
-  coldPsi: { LF: 18, RF: 38, LR: 14, RR: 29 },
+  coldPsi: { LF: 16, RF: 31, LR: 12, RR: 29 },
 };
 
 // ============ JOSH SETUP ============
@@ -954,7 +954,7 @@ export const JOSH_SETUP = {
   camber: { LF: -0.75, RF: -1.75 },
   caster: { LF: 5.0, RF: 7.0 },
   toe: -0.25,
-  coldPsi: { LF: 18, RF: 38, LR: 14, RR: 29 },
+  coldPsi: { LF: 16, RF: 31, LR: 12, RR: 29 },
 };
 
 // ============ JOEY SETUP ============
@@ -965,7 +965,7 @@ export const JOEY_SETUP = {
   camber: { LF: 1.0, RF: -3.5 },
   caster: { LF: 6.0, RF: 5.0 },
   toe: -0.25,
-  coldPsi: { LF: 18, RF: 38, LR: 14, RR: 29 },
+  coldPsi: { LF: 16, RF: 31, LR: 12, RR: 29 },
 };
 
 // ============ FIGURE 8 DEFAULT SETUP ============

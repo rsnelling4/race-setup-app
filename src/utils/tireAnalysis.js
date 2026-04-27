@@ -3,16 +3,19 @@
 
 // ============ PHYSICS-BASED PRESSURE CONSTANTS ============
 // Optimal HOT tire pressures for Crown Vic P71 on a left-turn oval.
-// Derived from: optPsi = 30 × (cornerLoad / avgLoad)
-//   at OVAL_CORNER_G = 0.407G, springLLTD = 0.50 (baseline 475F/160R springs),
-//   frontBias = 0.57, vehicle weight = 3700 lbs, track width 64" (measured).
-//   Includes ARB load transfer: P71 29.5mm front bar, k_roll = 39,277 lb-ft/rad.
-//   Rear RCH = 14.5" (measured: Watts pivot from floor). CG height 23" (cage-adjusted).
-//   RF cornerLoad ≈ 1457 lbs → 42 PSI hot
-//   LF cornerLoad ≈  652 lbs → 19 PSI hot
-//   RR cornerLoad ≈ 1085 lbs → 32 PSI hot
-//   LR cornerLoad ≈  506 lbs → 14 PSI hot
-const OVAL_OPTIMAL_HOT_PSI = { LF: 19, RF: 42, LR: 14, RR: 32 };
+// Empirically calibrated targets — physics model (load-proportional) predicted RF 42 / RR 32,
+// but real-world testing shows that spread creates understeer/push: the RF runs too stiff
+// relative to the RR, the front contact patch dominates, and the rear can't keep up.
+// Bringing the right-side pressures closer together (RF 38 / RR 35) loosens the car to
+// the desired balance. This reflects tire grip degression — a heavily loaded tire gives back
+// proportionally less grip per pound of load increase than a linear model predicts, so
+// the RF needs less pressure (more compliance) and the RR needs more (more support) than
+// pure load ratios would indicate.
+//   RF: 38 PSI hot  (physics predicted 42 — reduced 4 PSI for right-side balance)
+//   LF: 19 PSI hot  (unchanged — lightly loaded inside tire, linear model holds)
+//   RR: 35 PSI hot  (physics predicted 32 — raised 3 PSI to tighten right-side spread)
+//   LR: 14 PSI hot  (unchanged — lightly loaded inside rear)
+const OVAL_OPTIMAL_HOT_PSI = { LF: 19, RF: 38, LR: 14, RR: 35 };
 const COLD_REF_TEMP = 68;    // °F — temperature when cold PSI is set (garage inflate)
 const RANKINE = 459.67;      // °F → °R conversion offset
 
