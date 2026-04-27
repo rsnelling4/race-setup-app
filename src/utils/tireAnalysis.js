@@ -686,7 +686,7 @@ export function getHandlingRecommendations(condition, phase) {
         { component: 'RF Shock (Compression)', adjustment: 'Stiffen RF compression', effect: 'Increases front roll resistance — more front LLTD keeps the front as the limiting factor, stabilizing the rear on turn-in' },
         { component: 'LR Shock (Rebound)', adjustment: 'Soften LR rebound', effect: 'Left rear extends freely as the car rolls left, allowing the rear axle to stay planted on entry' },
         { component: 'RR Shock (Compression)', adjustment: 'Soften RR compression', effect: 'Reduces rear LLTD — the RR stays more loaded rather than transferring all load off the rear' },
-        { component: 'Tire Pressure', adjustment: 'Lower RF 1-2 PSI · Lower RR 1-2 PSI · Raise LR 1-2 PSI', effect: 'Lower RF reduces front-end rotation (less front grip = front doesn\'t bite as hard on turn-in). Lower RR moves it toward optimal hot pressure — more RR contact = rear planted. Raise LR adds inside rear grip to stabilize the axle on entry.' },
+        { component: 'Tire Pressure', adjustment: 'Move RF toward 38 PSI hot · Move RR toward 35 PSI hot · Raise LR toward 16 PSI hot', effect: 'RF target 38 hot: if over, lower cold PSI; if under, raise it. RR target 35 hot: move toward 35 for maximum RR contact patch = rear planted on entry. LR minimum 16 PSI hot — raise if under, never go below.' },
       ]
     },
     loose_middle: {
@@ -696,14 +696,14 @@ export function getHandlingRecommendations(condition, phase) {
         { component: 'RF Shock (Compression)', adjustment: 'Stiffen RF compression', effect: 'Increases front roll stiffness — shifts the handling balance so the front reaches its grip limit before the rear' },
         { component: 'RR Shock (Compression)', adjustment: 'Soften RR compression', effect: 'Reduces rear LLTD — the rear stays more evenly loaded rather than shedding load to the inside (LR), giving the RR more sustained grip' },
         { component: 'LR Shock (Rebound)', adjustment: 'Soften LR rebound', effect: 'Allows the left rear to unload naturally, reducing rear roll resistance imbalance in sustained cornering' },
-        { component: 'Tire Pressure', adjustment: 'Lower RF 1-2 PSI · Lower RR 1-2 PSI · Raise LR 1-2 PSI', effect: 'Lower RF reduces front grip so the front doesn\'t over-rotate mid-corner. Lower RR toward optimal = more RR contact = rear holds through the apex. Raise LR adds inside rear bite for a more stable mid-corner platform.' },
+        { component: 'Tire Pressure', adjustment: 'Move RF toward 38 PSI hot · Move RR toward 35 PSI hot · Raise LR toward 16 PSI hot', effect: 'RF target 38 hot: if over, lower cold PSI; if under, raise it. RR target 35 hot: moving toward 35 maximizes RR contact patch = rear holds through the apex. LR minimum 16 PSI hot — never go below.' },
       ]
     },
     loose_exit: {
       title: 'Loose on Exit (Oversteer on throttle application)',
       description: 'The rear steps out when applying throttle. Weight transfers rearward faster than rear grip can build.',
       changes: [
-        { component: 'Tire Pressure', adjustment: 'Lower RF 1 PSI · Lower RR 1-2 PSI · Raise LR 1-2 PSI', effect: 'Lower RF reduces front-end pull so the rear isn\'t dragged around on throttle. Lower RR toward its optimal hot pressure — more RR contact patch = rear plants under acceleration. Raise LR adds drive-side bite for smoother power application.' },
+        { component: 'Tire Pressure', adjustment: 'Move RF toward 38 PSI hot · Move RR toward 35 PSI hot · Raise LR toward 16 PSI hot', effect: 'RF target 38 hot: if over, lower cold PSI; if under, raise it. RR target 35 hot: maximizes RR contact = rear plants under acceleration. LR minimum 16 PSI hot — raise if under, never go below.' },
         { component: 'RR Shock (Compression)', adjustment: 'Soften RR compression', effect: 'Allows the RR to absorb the weight transfer more smoothly when throttle is applied, maintaining contact' },
         { component: 'RR Shock (Rebound)', adjustment: 'Stiffen RR rebound', effect: 'Keeps the RR compressed and planted as power loads the rear, preventing the tire from bouncing off the track' },
         { component: 'RF/LF Shock (Rebound)', adjustment: 'Stiffen front rebound', effect: 'Slows how fast the front unloads under acceleration — keeps the front engaged so the car tracks straight rather than rotating' },
@@ -727,14 +727,14 @@ export function getHandlingRecommendations(condition, phase) {
         { component: 'RF Shock (Compression)', adjustment: 'Soften RF compression', effect: 'Reduces front roll stiffness — lowers front LLTD so the RF stays more evenly loaded through sustained cornering' },
         { component: 'RR Shock (Compression)', adjustment: 'Stiffen RR compression', effect: 'Increases rear LLTD — the rear reaches its grip limit before the front, which rotates the car more freely' },
         { component: 'RF Camber', adjustment: 'Add 0.25° negative camber to RF', effect: 'Improves RF contact patch through the corner, helping the front grip in sustained lateral load' },
-        { component: 'Tire Pressure', adjustment: 'Raise RF 1-2 PSI · Raise LF 1 PSI · Raise RR 1 PSI', effect: 'Raise RF toward its optimal hot pressure — more RF contact patch = front bites mid-corner. Raise LF adds inside front grip. Raise RR moves it slightly above optimal = less RR grip = rear reaches its limit sooner, encouraging the car to rotate.' },
+        { component: 'Tire Pressure', adjustment: 'Move RF toward 38 PSI hot · Move LF toward 19 PSI hot · Move RR toward 35 PSI hot', effect: 'RF target 38 hot: if RF is over 38, lower it — over-pressure on RF stiffens the contact patch and causes push. If RF is under 38, raise it for more bite. RR target 35 hot: move toward 35 so RR reaches grip limit sooner, encouraging rotation. LF target 19 hot: balance inside front grip.' },
       ]
     },
     tight_exit: {
       title: 'Tight on Exit (Understeer on acceleration)',
       description: 'The car pushes wide when applying throttle. The front unloads too fast as weight transfers rearward.',
       changes: [
-        { component: 'Tire Pressure', adjustment: 'Raise RF 1-2 PSI · Raise LF 1 PSI · Raise RR 1 PSI', effect: 'Raise RF toward optimal = more RF grip = front bites longer under throttle load. Raise LF adds inside front grip. Raise RR takes it slightly past optimal = less RR grip = rear starts to rotate, which un-sticks the nose.' },
+        { component: 'Tire Pressure', adjustment: 'Move RF toward 38 PSI hot · Move LF toward 19 PSI hot · Move RR toward 35 PSI hot', effect: 'RF target 38 hot: if RF is over 38, lower it — over-pressure stiffens the contact patch and causes the front to push under throttle. RR target 35 hot: move toward 35 so the rear reaches grip limit slightly sooner, rotating the car. LF target 19 hot: balance inside front grip on exit.' },
         { component: 'RF/LF Shock (Rebound)', adjustment: 'Stiffen front rebound', effect: 'Slows how fast the front extends as weight transfers rearward — keeps the front engaged in steering longer on corner exit' },
         { component: 'RR Shock (Compression)', adjustment: 'Stiffen RR compression', effect: 'Controls rear squat under power, preventing excessive weight from dumping off the front and onto the rear too quickly' },
         { component: 'RF Camber', adjustment: 'Add 0.25-0.5° negative camber to RF', effect: 'More RF grip on exit helps the front maintain steering authority even as the rear loads up under throttle' },
