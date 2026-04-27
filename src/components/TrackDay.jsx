@@ -5,7 +5,7 @@ import { REAR_SHOCKS, FRONT_STRUTS, shockLabel } from '../data/shockOptions';
 import { useSync } from '../utils/SyncContext';
 
 // ─── Storage keys ─────────────────────────────────────────────────────────────
-const APIKEY_KEY = 'race_gemini_api_key';
+const APIKEY_KEY = 'race_groq_api_key';
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 function dc(o) { return JSON.parse(JSON.stringify(o)); }
@@ -193,16 +193,19 @@ function buildPrompt(event, selectedSessions, geoProfiles) {
   return lines.join('\n');
 }
 
-// ─── Gemini API call ──────────────────────────────────────────────────────────
-const GEMINI_MODEL = 'gemini-2.0-flash';
-async function callGemini(apiKey, prompt) {
-  const url = `https://generativelanguage.googleapis.com/v1beta/models/${GEMINI_MODEL}:generateContent?key=${apiKey}`;
-  const resp = await fetch(url, {
+// ─── Groq API call ────────────────────────────────────────────────────────────
+const GROQ_MODEL = 'llama-3.3-70b-versatile';
+async function callGroq(apiKey, prompt) {
+  const resp = await fetch('https://api.groq.com/openai/v1/chat/completions', {
     method: 'POST',
-    headers: { 'content-type': 'application/json' },
+    headers: {
+      'content-type': 'application/json',
+      'authorization': `Bearer ${apiKey}`,
+    },
     body: JSON.stringify({
-      contents: [{ parts: [{ text: prompt }] }],
-      generationConfig: { maxOutputTokens: 2000 },
+      model: GROQ_MODEL,
+      max_tokens: 2000,
+      messages: [{ role: 'user', content: prompt }],
     }),
   });
   if (!resp.ok) {
@@ -210,7 +213,7 @@ async function callGemini(apiKey, prompt) {
     throw new Error(err?.error?.message || `API error ${resp.status}`);
   }
   const data = await resp.json();
-  return data.candidates?.[0]?.content?.parts?.[0]?.text ?? '';
+  return data.choices?.[0]?.message?.content ?? '';
 }
 
 function runPhysicsAnalysis(sessions) {
@@ -695,7 +698,7 @@ function ApiKeyPanel({ apiKey, setApiKey }) {
     <div className="td-apikey-bar">
       <span className="td-apikey-status">
         {apiKey
-          ? <><span className="td-apikey-dot active" />Gemini AI analysis enabled</>
+          ? <><span className="td-apikey-dot active" />Groq AI analysis enabled</>
           : <><span className="td-apikey-dot" />No API key — physics model only</>}
       </span>
       <button className="td-apikey-btn" onClick={() => { setDraft(apiKey); setEditing(true); }}>
@@ -706,13 +709,13 @@ function ApiKeyPanel({ apiKey, setApiKey }) {
 
   return (
     <div className="td-apikey-bar td-apikey-edit">
-      <input className="ml-input td-apikey-input" type="password" placeholder="AIza..."
+      <input className="ml-input td-apikey-input" type="password" placeholder="gsk_..."
         value={draft} onChange={e => setDraft(e.target.value)}
         onKeyDown={e => e.key === 'Enter' && saveKey()} />
       <button className="ml-save-btn" onClick={saveKey}>Save</button>
       {apiKey && <button className="ml-delete-btn" onClick={clearKey}>Remove</button>}
       <button className="ml-cancel-btn" onClick={() => setEditing(false)}>Cancel</button>
-      <span className="td-apikey-note">Stored in your browser only. Never sent anywhere except generativelanguage.googleapis.com.</span>
+      <span className="td-apikey-note">Stored in your browser only. Never sent anywhere except api.groq.com.</span>
     </div>
   );
 }
@@ -758,7 +761,7 @@ function AnalysisPanel({ event, allSessions, geoProfiles, apiKey }) {
 
     if (apiKey) {
       try {
-        const text = await callGemini(apiKey, buildPrompt(event, selectedSessions, geoProfiles));
+        const text = await callGroq(apiKey, buildPrompt(event, selectedSessions, geoProfiles));
         setAiText(text);
         setStatus('done');
       } catch (e) {
@@ -815,7 +818,7 @@ function AnalysisPanel({ event, allSessions, geoProfiles, apiKey }) {
 
       {status === 'error' && (
         <div className="td-analysis-error">
-          <strong>Gemini API error:</strong> {errMsg}<br />Physics model results shown below.
+          <strong>Groq API error:</strong> {errMsg}<br />Physics model results shown below.
         </div>
       )}
 
@@ -840,8 +843,8 @@ function AnalysisPanel({ event, allSessions, geoProfiles, apiKey }) {
       {aiText && (
         <div className="td-ai-results">
           <div className="td-results-heading">
-            Gemini Analysis
-            <span className="td-results-model">{GEMINI_MODEL}</span>
+            Groq Analysis
+            <span className="td-results-model">{GROQ_MODEL}</span>
           </div>
           <SimpleMarkdown text={aiText} />
         </div>
