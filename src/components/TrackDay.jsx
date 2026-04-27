@@ -89,16 +89,15 @@ function buildPrompt(event, selectedSessions, geoProfiles) {
   const lines = [
     `You are a race car setup engineer analyzing track day data for 2008 Ford Crown Victoria P71 race cars on an oval/figure-8 track.`,
     ``,
-    `EMPIRICAL CALIBRATION RULES — override any pure load-proportional math:`,
-    `  Tire: Ironman iMove Gen3 AS 235/55R17 103V XL. Car weight: 3700 lbs.`,
-    `  COLD PSI targets (set in garage): LF 20, RF 38, LR 16, RR 35.`,
-    `  Pressure rise from cold to hot: left side +2 PSI, right side +4 to +6 PSI (avg +5).`,
-    `  HOT PSI targets (empirically validated): LF ~22, RF ~43, LR ~18, RR ~40.`,
-    `  Right-side spread is kept to ~3 PSI hot (RF 43 / RR 40) to prevent push/understeer.`,
-    `  A larger spread (10+ PSI right-side) causes severe push — RF runs too stiff, front dominates.`,
-    `  LR MINIMUM: never recommend below 18 PSI hot (= 16 PSI cold) on the left rear. Hard floor.`,
-    `  The physics model's "opt" PSI values in the data below are load-proportional baselines only.`,
-    `  Use the empirical hot targets above as your pressure reference, not the "opt" values.`,
+    `CONTEXT:`,
+    `  Tire: Ironman iMove Gen3 AS 235/55R17 103V XL. Car weight: 3700 lbs. Left-turn oval.`,
+    `  Cold PSI shown is what was set before the session. Hot PSI shown is what was measured after.`,
+    `  Pressure rise: left side typically +2 PSI cold-to-hot, right side +4 to +6 PSI.`,
+    `  The physics model's "opt" PSI values are load-proportional targets derived from corner loads —`,
+    `  use these as your pressure reference. Compare hot PSI measured vs opt PSI to determine direction.`,
+    `  LR SAFETY FLOOR: never recommend below 16 PSI cold / ~18 PSI hot on the left rear.`,
+    `  Right-side spread context: a very large RF-to-RR hot spread (10+ PSI) tends to cause push/understeer`,
+    `  because the RF contact patch stiffens relative to the RR. Flag this if you see it in the data.`,
     ``,
     `EVENT: ${event.name}  |  Date: ${event.date}  |  Track: ${event.track || 'not specified'}`,
     ``,
@@ -462,6 +461,16 @@ function TireAnalysisCard({ session, geoProfiles }) {
   const hasTemps = tt && Object.values(tt).some(t => t.inside && t.middle && t.outside);
   if (!hasTemps) return null;
 
+  // Run physics model to get load-derived optimal hot PSI per corner
+  const simSetup = sessionToSimSetup(session);
+  const ambient = Number(session.ambient) || 65;
+  const inflation = Number(session.inflationTemp) || 68;
+  let physicsCorners = null;
+  try {
+    const phys = analyzeSetup(simSetup, ambient, inflation);
+    physicsCorners = phys.corners;
+  } catch { /* ignore */ }
+
   // Build the input structure analyzeFullCar expects
   const tiresInput = {};
   for (const pos of ['LF', 'RF', 'LR', 'RR']) {
@@ -473,7 +482,7 @@ function TireAnalysisCard({ session, geoProfiles }) {
     };
   }
 
-  const analysis = analyzeFullCar(tiresInput);
+  const analysis = analyzeFullCar(tiresInput, physicsCorners);
   const handling = (session.condition && session.phase)
     ? getHandlingRecommendations(session.condition, session.phase)
     : null;

@@ -1,22 +1,12 @@
 // Tire Temperature Analysis Engine
 // Aligned with the Setup Optimizer's physics model for consistent recommendations.
 
-// ============ PHYSICS-BASED PRESSURE CONSTANTS ============
-// Optimal HOT tire pressures for Crown Vic P71 on a left-turn oval.
-// Empirically calibrated from cold PSI settings + observed pressure rise:
-//   Left side rises ~2 PSI from cold to hot.
-//   Right side rises ~4-6 PSI from cold to hot (avg ~5 PSI used here).
-// Cold PSI targets: LF 20, RF 38, LR 16, RR 35.
-// Hot PSI targets (cold + rise):
-//   LF: 20 + 2 = 22 PSI hot
-//   RF: 38 + 5 = 43 PSI hot  (right-side spread kept to ~3 PSI to prevent push/understeer)
-//   LR: 16 + 2 = 18 PSI hot  (floor — do not run below 18 PSI hot on left rear)
-//   RR: 35 + 5 = 40 PSI hot
-export const OVAL_OPTIMAL_HOT_PSI = { LF: 22, RF: 43, LR: 18, RR: 40 };
-export const OVAL_COLD_PSI = { LF: 20, RF: 38, LR: 16, RR: 35 };
-// Minimum hot PSI floors — never recommend below these regardless of load calculation.
-// LR floor: 18 PSI hot (= 16 cold + 2 PSI rise) — empirical minimum for tire integrity.
-export const OVAL_MIN_HOT_PSI = { LF: 14, RF: 22, LR: 18, RR: 20 };
+// ============ PRESSURE CONSTANTS ============
+// Optimal hot PSI is derived per-session from corner loads via analyzeSetup() in raceSimulation.js.
+// The per-tire analyzer accepts an optHotPsi argument from the physics model.
+// Minimum hot PSI floors — safety limits only, not targets.
+// LR floor: never run left rear below ~16 PSI cold / ~18 PSI hot.
+export const OVAL_MIN_HOT_PSI = { LF: 12, RF: 18, LR: 18, RR: 16 };
 const COLD_REF_TEMP = 68;    // °F — temperature when cold PSI is set (garage inflate)
 const RANKINE = 459.67;      // °F → °R conversion offset
 
@@ -39,7 +29,7 @@ const RANKINE = 459.67;      // °F → °R conversion offset
  * When cold PSI is provided, uses the same physics-based optimal pressure model
  * as the Setup Optimizer — same hot-PSI calculation, same optimal targets.
  */
-export function analyzeTire(inside, middle, outside, position, currentPressure = null) {
+export function analyzeTire(inside, middle, outside, position, currentPressure = null, optHotPsi = null) {
   const avg = (inside + middle + outside) / 3;
   const spread = Math.abs(inside - outside);
   const edgeAvg = (inside + outside) / 2;
@@ -57,8 +47,9 @@ export function analyzeTire(inside, middle, outside, position, currentPressure =
   let recommendedPressure = currentPressure;
 
   // ── Hot pressure (ideal gas law) ─────────────────────────────────────────
-  // Same formula used by Setup Optimizer: P_hot = P_cold × (T_hot + 460) / (T_cold_ref + 460)
-  const optimalHotPsi = OVAL_OPTIMAL_HOT_PSI[position];
+  // optHotPsi is passed in from analyzeSetup() — load-proportional per corner.
+  // Falls back to a generic average-load estimate if not provided.
+  const optimalHotPsi = optHotPsi ?? 30; // 30 PSI fallback = average corner load baseline
   let hotPsi = null;
   let psiError = null;   // positive = over-pressured hot
   let recommendedColdPsi = null;
@@ -312,20 +303,23 @@ export function analyzeTire(inside, middle, outside, position, currentPressure =
 /**
  * Analyze all four tires together for overall balance
  */
-export function analyzeFullCar(tires) {
+// physicsCorners: optional object keyed by position with { optHotPsi } from analyzeSetup()
+export function analyzeFullCar(tires, physicsCorners = null) {
   const { LF, RF, LR, RR } = tires;
   const results = {};
   const overallRecommendations = [];
 
-  // Analyze individual tires
+  // Analyze individual tires — pass physics-derived optHotPsi if available
   for (const [pos, data] of Object.entries(tires)) {
     if (data.inside && data.middle && data.outside) {
+      const optHotPsi = physicsCorners?.[pos]?.optHotPsi ?? null;
       results[pos] = analyzeTire(
         parseFloat(data.inside),
         parseFloat(data.middle),
         parseFloat(data.outside),
         pos,
-        data.pressure ? parseFloat(data.pressure) : null
+        data.pressure ? parseFloat(data.pressure) : null,
+        optHotPsi
       );
     }
   }
@@ -684,7 +678,7 @@ export function getHandlingRecommendations(condition, phase) {
         { component: 'RF Shock (Compression)', adjustment: 'Stiffen RF compression', effect: 'Increases front roll resistance — more front LLTD keeps the front as the limiting factor, stabilizing the rear on turn-in' },
         { component: 'LR Shock (Rebound)', adjustment: 'Soften LR rebound', effect: 'Left rear extends freely as the car rolls left, allowing the rear axle to stay planted on entry' },
         { component: 'RR Shock (Compression)', adjustment: 'Soften RR compression', effect: 'Reduces rear LLTD — the RR stays more loaded rather than transferring all load off the rear' },
-        { component: 'Tire Pressure', adjustment: 'Move RF toward 43 PSI hot (38 cold) · Move RR toward 40 PSI hot (35 cold) · Raise LR toward 18 PSI hot (16 cold)', effect: 'RF target 43 PSI hot (38 cold): if over, lower cold PSI; if under, raise it. RR target 40 hot (35 cold): move toward target for maximum RR contact patch = rear planted on entry. LR minimum 18 PSI hot (16 cold) — raise if under, never go below.' },
+        { component: 'Tire Pressure', adjustment: 'Move RF toward physics-optimal hot PSI · Move RR toward physics-optimal hot PSI · Keep LR at or above 16 PSI cold / 18 PSI hot', effect: 'Compare hot PSI measured vs physics-optimal shown in session data. RF: if over optimal, lower cold PSI; if under, raise it. RR: move toward optimal for maximum contact patch = rear planted on entry. LR: never go below 16 PSI cold / 18 PSI hot.' },
       ]
     },
     loose_middle: {
@@ -694,14 +688,14 @@ export function getHandlingRecommendations(condition, phase) {
         { component: 'RF Shock (Compression)', adjustment: 'Stiffen RF compression', effect: 'Increases front roll stiffness — shifts the handling balance so the front reaches its grip limit before the rear' },
         { component: 'RR Shock (Compression)', adjustment: 'Soften RR compression', effect: 'Reduces rear LLTD — the rear stays more evenly loaded rather than shedding load to the inside (LR), giving the RR more sustained grip' },
         { component: 'LR Shock (Rebound)', adjustment: 'Soften LR rebound', effect: 'Allows the left rear to unload naturally, reducing rear roll resistance imbalance in sustained cornering' },
-        { component: 'Tire Pressure', adjustment: 'Move RF toward 43 PSI hot (38 cold) · Move RR toward 40 PSI hot (35 cold) · Raise LR toward 18 PSI hot (16 cold)', effect: 'RF target 43 PSI hot (38 cold): if over, lower cold PSI; if under, raise it. RR target 40 hot (35 cold): moving toward target maximizes RR contact patch = rear holds through the apex. LR minimum 18 PSI hot (16 cold) — never go below.' },
+        { component: 'Tire Pressure', adjustment: 'Move RF toward physics-optimal hot PSI · Move RR toward physics-optimal hot PSI · Keep LR at or above 16 PSI cold / 18 PSI hot', effect: 'Compare hot PSI measured vs physics-optimal shown in session data. RF: if over optimal, lower cold PSI; if under, raise it. RR: move toward optimal for maximum contact patch = rear holds through the apex. LR: never go below 16 PSI cold / 18 PSI hot.' },
       ]
     },
     loose_exit: {
       title: 'Loose on Exit (Oversteer on throttle application)',
       description: 'The rear steps out when applying throttle. Weight transfers rearward faster than rear grip can build.',
       changes: [
-        { component: 'Tire Pressure', adjustment: 'Move RF toward 43 PSI hot (38 cold) · Move RR toward 40 PSI hot (35 cold) · Raise LR toward 18 PSI hot (16 cold)', effect: 'RF target 43 PSI hot (38 cold): if over, lower cold PSI; if under, raise it. RR target 40 hot (35 cold): maximizes RR contact = rear plants under acceleration. LR minimum 18 PSI hot (16 cold) — raise if under, never go below.' },
+        { component: 'Tire Pressure', adjustment: 'Move RF toward physics-optimal hot PSI · Move RR toward physics-optimal hot PSI · Keep LR at or above 16 PSI cold / 18 PSI hot', effect: 'Compare hot PSI measured vs physics-optimal shown in session data. RF: if over optimal, lower cold PSI; if under, raise it. RR: move toward optimal for maximum contact patch = rear plants under acceleration. LR: never go below 16 PSI cold / 18 PSI hot.' },
         { component: 'RR Shock (Compression)', adjustment: 'Soften RR compression', effect: 'Allows the RR to absorb the weight transfer more smoothly when throttle is applied, maintaining contact' },
         { component: 'RR Shock (Rebound)', adjustment: 'Stiffen RR rebound', effect: 'Keeps the RR compressed and planted as power loads the rear, preventing the tire from bouncing off the track' },
         { component: 'RF/LF Shock (Rebound)', adjustment: 'Stiffen front rebound', effect: 'Slows how fast the front unloads under acceleration — keeps the front engaged so the car tracks straight rather than rotating' },
@@ -725,14 +719,14 @@ export function getHandlingRecommendations(condition, phase) {
         { component: 'RF Shock (Compression)', adjustment: 'Soften RF compression', effect: 'Reduces front roll stiffness — lowers front LLTD so the RF stays more evenly loaded through sustained cornering' },
         { component: 'RR Shock (Compression)', adjustment: 'Stiffen RR compression', effect: 'Increases rear LLTD — the rear reaches its grip limit before the front, which rotates the car more freely' },
         { component: 'RF Camber', adjustment: 'Add 0.25° negative camber to RF', effect: 'Improves RF contact patch through the corner, helping the front grip in sustained lateral load' },
-        { component: 'Tire Pressure', adjustment: 'Move RF toward 43 PSI hot (38 cold) · Move LF toward 22 PSI hot (20 cold) · Move RR toward 40 PSI hot (35 cold)', effect: 'RF target 43 PSI hot (38 cold): if RF is over 43, lower cold PSI — over-pressure stiffens contact patch and causes push. If under 43, raise cold PSI for more bite. RR target 40 hot (35 cold): move toward target so RR reaches grip limit sooner, encouraging rotation. LF target 22 hot (20 cold): balance inside front grip.' },
+        { component: 'Tire Pressure', adjustment: 'Move RF toward physics-optimal hot PSI · Move LF toward physics-optimal hot PSI · Move RR toward physics-optimal hot PSI', effect: 'Compare hot PSI measured vs physics-optimal shown in session data. RF: if over optimal, lower cold PSI — over-pressure stiffens contact patch and causes push; if under, raise it. RR: move toward optimal so RR reaches grip limit sooner, encouraging rotation. LF: move toward optimal to balance inside front grip.' },
       ]
     },
     tight_exit: {
       title: 'Tight on Exit (Understeer on acceleration)',
       description: 'The car pushes wide when applying throttle. The front unloads too fast as weight transfers rearward.',
       changes: [
-        { component: 'Tire Pressure', adjustment: 'Move RF toward 43 PSI hot (38 cold) · Move LF toward 22 PSI hot (20 cold) · Move RR toward 40 PSI hot (35 cold)', effect: 'RF target 43 PSI hot (38 cold): if RF is over 43, lower cold PSI — over-pressure stiffens contact patch and causes push under throttle. RR target 40 hot (35 cold): move toward target so rear reaches grip limit slightly sooner, rotating the car. LF target 22 hot (20 cold): balance inside front grip on exit.' },
+        { component: 'Tire Pressure', adjustment: 'Move RF toward physics-optimal hot PSI · Move LF toward physics-optimal hot PSI · Move RR toward physics-optimal hot PSI', effect: 'Compare hot PSI measured vs physics-optimal shown in session data. RF: if over optimal, lower cold PSI — over-pressure stiffens contact patch and causes push under throttle; if under, raise it. RR: move toward optimal so rear reaches grip limit slightly sooner, rotating the car. LF: move toward optimal to balance inside front grip on exit.' },
         { component: 'RF/LF Shock (Rebound)', adjustment: 'Stiffen front rebound', effect: 'Slows how fast the front extends as weight transfers rearward — keeps the front engaged in steering longer on corner exit' },
         { component: 'RR Shock (Compression)', adjustment: 'Stiffen RR compression', effect: 'Controls rear squat under power, preventing excessive weight from dumping off the front and onto the rear too quickly' },
         { component: 'RF Camber', adjustment: 'Add 0.25-0.5° negative camber to RF', effect: 'More RF grip on exit helps the front maintain steering authority even as the rear loads up under throttle' },
