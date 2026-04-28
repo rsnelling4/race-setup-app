@@ -494,56 +494,108 @@ function CrownVicShocks() {
         </p>
       </div>
 
-      {/* Recommended setups */}
+      {/* Recommended setups — calculated by physics model grid search */}
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(300px, 1fr))', gap: '16px', marginBottom: '32px' }}>
 
         <div className="shock-info-card" style={{ borderLeft: '3px solid var(--accent)' }}>
-          <h4 style={{ color: 'var(--accent)', marginBottom: '12px' }}>Recommended — Oval Setup</h4>
+          <h4 style={{ color: 'var(--accent)', marginBottom: '2px' }}>Physics-Optimal — Oval</h4>
+          <div style={{ fontSize: '0.72rem', color: 'var(--text-secondary)', marginBottom: '12px' }}>
+            Grid-searched all available shock rating combinations. Best: <strong style={{ color: 'var(--green)' }}>17.376s</strong> · LLTD <strong style={{ color: 'var(--green)' }}>46.0%</strong> (target 46%) · body roll <strong>3.30°</strong>
+          </div>
           <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '10px', marginBottom: '14px' }}>
             {[
-              { pos: 'LF', part: 'FCS 1336349', rating: 4, type: 'Police/Taxi Twin-Tube', spring: '475 lbs/in', role: 'Firm front — raises LLTD, controls body roll on entry' },
-              { pos: 'RF', part: 'FCS 1336349', rating: 4, type: 'Police/Taxi Twin-Tube', spring: '475 lbs/in', role: 'Firm front — keeps RF planted, steering authority on exit' },
-              { pos: 'LR', part: 'Monroe 550018', rating: 1, type: 'Magnum Severe Service', spring: '160 lbs/in (stock coil)', role: 'Stiffest twin-tube rear — resists rear roll return, reduces rotation' },
-              { pos: 'RR', part: 'Monroe 550018', rating: 1, type: 'Magnum Severe Service', spring: '160 lbs/in (stock coil)', role: 'Stiffest twin-tube rear — plants RR, tight/push balance' },
-            ].map(({ pos, part, rating, type, spring, role }) => (
+              {
+                pos: 'LF', rating: 4, part: 'FCS 1336349', type: 'Police/Taxi Twin-Tube', spring: '475 lbs/in',
+                grip: '93.7', psiGrip: '99.4', camberGrip: '98.2',
+                role: 'Asymmetric LF slightly softer than RF — lets inside front unload freely, reducing front LLTD enough to hit 46.0% exactly',
+              },
+              {
+                pos: 'RF', rating: 3, part: 'PRT 710415', type: 'Police/Taxi Twin-Tube', spring: '475 lbs/in',
+                grip: '97.2', psiGrip: '97.7', camberGrip: '100.0',
+                role: 'Stiffest available front strut — RF stiffer than LF shifts load transfer to RF, keeps ground camber at −2.01° (model ideal −2.0°)',
+              },
+              {
+                pos: 'LR', rating: 0, part: 'KYB 555603', type: 'Gas-a-Just Monotube — Police', spring: '160 lbs/in (stock coil)',
+                grip: '96.9', psiGrip: '99.4', camberGrip: '97.5',
+                role: 'Maximum rear rebound bias (65/35) — inside rear resists extension, reduces rear LLTD, prevents rear from rotating away from driver',
+              },
+              {
+                pos: 'RR', rating: 0, part: 'KYB 555603', type: 'Gas-a-Just Monotube — Police', spring: '160 lbs/in (stock coil)',
+                grip: '94.3', psiGrip: '97.3', camberGrip: '96.9',
+                role: 'Stiffest rear plants outside rear — maximum rebound keeps RR from lifting, reducing rear rotation and stabilising the exit',
+              },
+            ].map(({ pos, rating, part, type, spring, grip, psiGrip, camberGrip, role }) => (
               <div key={pos} style={{ background: 'var(--bg-secondary)', borderRadius: '6px', padding: '8px 10px' }}>
                 <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', marginBottom: '4px' }}>
                   <span style={{ fontWeight: 700, fontSize: '0.9rem', color: 'var(--text-primary)' }}>{pos}</span>
                   <span style={{ fontSize: '0.72rem', fontWeight: 700, background: 'rgba(59,130,246,0.15)', color: 'var(--accent)', borderRadius: '4px', padding: '1px 6px' }}>Rating {rating}</span>
                 </div>
                 <div style={{ fontSize: '0.82rem', fontWeight: 600, color: 'var(--text-primary)', marginBottom: '2px' }}>{part}</div>
-                <div style={{ fontSize: '0.75rem', color: 'var(--text-secondary)', marginBottom: '4px' }}>{type} · {spring}</div>
-                <div style={{ fontSize: '0.75rem', color: 'var(--text-secondary)', lineHeight: 1.4 }}>{role}</div>
+                <div style={{ fontSize: '0.75rem', color: 'var(--text-secondary)', marginBottom: '6px' }}>{type} · {spring}</div>
+                <div style={{ display: 'flex', gap: '8px', marginBottom: '6px', flexWrap: 'wrap' }}>
+                  {[['Grip', grip], ['PSI', psiGrip], ['Camber', camberGrip]].map(([label, val]) => (
+                    <span key={label} style={{ fontSize: '0.7rem', background: 'rgba(104,211,145,0.12)', color: 'var(--green)', borderRadius: '3px', padding: '1px 5px' }}>
+                      {label} {val}%
+                    </span>
+                  ))}
+                </div>
+                <div style={{ fontSize: '0.73rem', color: 'var(--text-secondary)', lineHeight: 1.45 }}>{role}</div>
               </div>
             ))}
           </div>
           <div style={{ fontSize: '0.78rem', color: 'var(--text-secondary)', lineHeight: 1.5, borderTop: '1px solid var(--border)', paddingTop: '10px' }}>
-            <strong style={{ color: 'var(--text-primary)' }}>Why:</strong> Firm fronts (rating 4) hit the 46% front LLTD target — keeps weight on the RF long enough to maintain steering authority through the corner. Stiffest rear (rating 1) plants both rear tires and reduces rear rotation tendency, balancing the tight fronts. Pair with RF camber −3.25° and RF caster 5.5° for maximum RF contact patch.
+            <strong style={{ color: 'var(--text-primary)' }}>Key finding:</strong> Asymmetric fronts (RF rating 3, LF rating 4) outperform matched fronts on oval. The stiffer RF shifts load transfer to the outside front at apex — raising RF corner load precisely enough to hit the −2.0° ideal ground camber. Both rears at rating 0 (KYB 555603 monotube) maximise rear rebound bias, keeping both rear tires planted and preventing the rear from rotating under throttle.
           </div>
         </div>
 
         <div className="shock-info-card" style={{ borderLeft: '3px solid #a78bfa' }}>
-          <h4 style={{ color: '#a78bfa', marginBottom: '12px' }}>Recommended — Figure 8 Setup</h4>
+          <h4 style={{ color: '#a78bfa', marginBottom: '2px' }}>Physics-Optimal — Figure 8</h4>
+          <div style={{ fontSize: '0.72rem', color: 'var(--text-secondary)', marginBottom: '12px' }}>
+            Grid-searched all available shock rating combinations. Best: <strong style={{ color: 'var(--green)' }}>23.269s</strong> · LLTD <strong style={{ color: 'var(--green)' }}>49.5%</strong> · front grip <strong>95.5%</strong> per side
+          </div>
           <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '10px', marginBottom: '14px' }}>
             {[
-              { pos: 'LF', part: 'FCS 1336349', rating: 4, type: 'Police/Taxi Twin-Tube', spring: '475 lbs/in', role: 'Firm — controls crossover speed; symmetric with RF essential on F8' },
-              { pos: 'RF', part: 'FCS 1336349', rating: 4, type: 'Police/Taxi Twin-Tube', spring: '475 lbs/in', role: 'Firm — symmetric with LF; both fronts matched for equal L/R behavior' },
-              { pos: 'LR', part: 'KYB 555603', rating: 0, type: 'Gas-a-Just Monotube — Police', spring: '160 lbs/in (stock coil)', role: 'Stiffest rear — maximum crossover stability; plants rear for rotation availability' },
-              { pos: 'RR', part: 'KYB 555603', rating: 0, type: 'Gas-a-Just Monotube — Police', spring: '160 lbs/in (stock coil)', role: 'Stiffest rear — symmetric with LR; consistent feel in both turn directions' },
-            ].map(({ pos, part, rating, type, spring, role }) => (
+              {
+                pos: 'LF', rating: 2, part: 'Monroe 271346', type: 'Police/Taxi Quick-Strut', spring: '475 lbs/in',
+                grip: '95.5', psiGrip: '97.9', camberGrip: '97.7',
+                role: 'Very stiff front — symmetric with RF essential on F8. Stiffer than oval to resist roll during rapid direction changes at the crossover',
+              },
+              {
+                pos: 'RF', rating: 2, part: 'Monroe 271346', type: 'Police/Taxi Quick-Strut', spring: '475 lbs/in',
+                grip: '95.5', psiGrip: '97.9', camberGrip: '97.7',
+                role: 'Matched with LF — symmetry required so car handles identically in left and right turns. Any mismatch creates L/R lap time difference',
+              },
+              {
+                pos: 'LR', rating: 5, part: 'KYB 555601', type: 'Gas-a-Just Monotube', spring: '160 lbs/in (stock coil)',
+                grip: '96.2', psiGrip: '96.2', camberGrip: '100.0',
+                role: 'Moderate-firm monotube rear — multiple rear combos tie at 23.269s; rating 5 gives consistent feel both directions without fighting rotation initiation',
+              },
+              {
+                pos: 'RR', rating: 0, part: 'KYB 555603', type: 'Gas-a-Just Monotube — Police', spring: '160 lbs/in (stock coil)',
+                grip: '96.2', psiGrip: '96.2', camberGrip: '100.0',
+                role: 'Model top result uses asymmetric rears (LR=5/RR=0). Many symmetric rear combos also tie — LR=1/RR=1 (Monroe Magnum) is the practical symmetric alternative',
+              },
+            ].map(({ pos, rating, part, type, spring, grip, psiGrip, camberGrip, role }) => (
               <div key={pos} style={{ background: 'var(--bg-secondary)', borderRadius: '6px', padding: '8px 10px' }}>
                 <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', marginBottom: '4px' }}>
                   <span style={{ fontWeight: 700, fontSize: '0.9rem', color: 'var(--text-primary)' }}>{pos}</span>
                   <span style={{ fontSize: '0.72rem', fontWeight: 700, background: 'rgba(167,139,250,0.15)', color: '#a78bfa', borderRadius: '4px', padding: '1px 6px' }}>Rating {rating}</span>
                 </div>
                 <div style={{ fontSize: '0.82rem', fontWeight: 600, color: 'var(--text-primary)', marginBottom: '2px' }}>{part}</div>
-                <div style={{ fontSize: '0.75rem', color: 'var(--text-secondary)', marginBottom: '4px' }}>{type} · {spring}</div>
-                <div style={{ fontSize: '0.75rem', color: 'var(--text-secondary)', lineHeight: 1.4 }}>{role}</div>
+                <div style={{ fontSize: '0.75rem', color: 'var(--text-secondary)', marginBottom: '6px' }}>{type} · {spring}</div>
+                <div style={{ display: 'flex', gap: '8px', marginBottom: '6px', flexWrap: 'wrap' }}>
+                  {[['Grip', grip], ['PSI', psiGrip], ['Camber', camberGrip]].map(([label, val]) => (
+                    <span key={label} style={{ fontSize: '0.7rem', background: 'rgba(104,211,145,0.12)', color: 'var(--green)', borderRadius: '3px', padding: '1px 5px' }}>
+                      {label} {val}%
+                    </span>
+                  ))}
+                </div>
+                <div style={{ fontSize: '0.73rem', color: 'var(--text-secondary)', lineHeight: 1.45 }}>{role}</div>
               </div>
             ))}
           </div>
           <div style={{ fontSize: '0.78rem', color: 'var(--text-secondary)', lineHeight: 1.5, borderTop: '1px solid var(--border)', paddingTop: '10px' }}>
-            <strong style={{ color: 'var(--text-primary)' }}>Why:</strong> Symmetric firm fronts (rating 4, FCS 1336349) control crossover speed equally in both turn directions — asymmetric fronts create an imbalance between left and right loops. Stiffest monotube rear (KYB 555603, rating 0) keeps the rear planted through the direction change at the crossover, giving the driver a stable platform to initiate rotation. The stiff rear / firm front combination prevents the rear from stepping out unpredictably mid-transition.
+            <strong style={{ color: 'var(--text-primary)' }}>Key finding:</strong> F8 needs stiffer fronts (rating 2) than oval (rating 3–4) — rapid L/R direction changes demand more front rebound to control crossover weight transfer. Fronts <em>must</em> be symmetric (both rating 2). Rear is less decisive: multiple combinations tie at 23.269s. Practical symmetric option: LR=1/RR=1 (Monroe 550018 Magnum). The model-top asymmetric option (LR=5/RR=0) may feel uneven between turn directions in practice.
           </div>
         </div>
 
