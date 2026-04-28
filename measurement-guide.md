@@ -170,33 +170,31 @@ The front roll center on an SLA (short-long arm) suspension is found geometrical
 
 ## Measurement 6: Caster Camber Gain Validation
 
-**What it feeds:** Caster-camber gain coefficients used by the simulation models. Two separate sets are used:
+**What it feeds:** Caster-camber gain coefficients used by the simulation models. The physical formula is:
 
-- **Oval (left-turn only):** `RF: 0.667°/° caster, LF: 0.167°/° caster` — measured on-track 2026-04-22. These are the real cornering values for a left-hand oval where RF is always outside and LF is always inside.
-- **Figure 8 (averaged across both turn directions):** `RF/LF: 0.18°/° caster (outside) and 0.10°/° caster (inside)` — averaged across left and right turns since each tire alternates roles every lap.
+`camberGain = caster_deg × sin(apexSteerAngle_rad) × K`
 
-These affect how much dynamic camber change the model predicts when steering into the corner.
+where K is a calibration constant derived from the on-track measurement. The coefficients therefore depend on the actual steer angle at the corner apex, which is track-geometry-dependent.
 
-Your current alignment: LF 7° caster, RF 3° caster.
+**Apex steer angles (Ackermann geometry):**
+- **Oval:** atan(wheelbase 114.7" / racing line radius 1740") = **3.77°**
+- **Figure 8:** atan(wheelbase 114.7" / loop radius 1788") = **3.67°**
 
-**How to measure:**
+These are much smaller than road-course steer angles. Caster contributes very little camber gain on these short tracks — all meaningful camber must come from the static alignment.
 
-This requires turning the wheels to a known angle and measuring camber change.
+**Corrected model coefficients (April 2026 — pyrometer validated):**
+- **Oval RF:** 0.136°/°caster · **Oval LF:** 0.034°/°caster
+- **F8 outside:** 0.125°/°caster · **F8 inside:** 0.031°/°caster
 
-1. With car at ride height on flat ground, set wheels straight ahead.
-2. Measure static camber (same as your alignment specs — LF +2 3/4 RF -2 1/4.
-3. Turn the steering wheel to the right (clockwise) until the front tires are at approximately 20° of steer. Use a reference mark on the steering wheel or count turns and use a protractor/angle finder on the tire sidewall.
-4. Measure camber of LF and RF wheels at 20° steer.
+These replace the old values (RF 0.667, LF 0.167) which were calibrated at 20° steer and incorrectly applied at oval steer angles — overstating caster camber gain by ~4.9×. Two independent April 2026 sessions confirmed the correction: RF outside-edge-hotter pyrometer patterns (insufficient camber) matched the corrected model, not the old one.
 
-**Record:**
-- LF camber at 20° steer: _+1 1/2 °
-- RF camber at 20° steer: _+1____ °
-- Camber change LF (steer minus straight): _+ 1 1/4°
-- Camber change RF (steer minus straight): _______ °
+**Calibration measurement (keep for reference):**
 
-Divide each change by 20 to get °/° steer for comparison.
+The raw calibration was done at 20° steer:
+- LF camber change at 20° steer: +1.25° with 9° LF caster → K_LF = 1.25 / (9 × sin(20°)) = 0.406
+- RF camber change at 20° steer: measured at 3° RF caster → K_RF ≈ 1.949
 
-**Note:** At the corner apex the model uses 10° of steer, so half these values apply.
+To re-measure: turn wheels to 20° steer (use a digital angle finder on the wheel face), measure camber change from straight-ahead. Record the change and divide by (caster × sin(20°)) to get K. The model then scales K × sin(apexSteer) to get the effective coefficient at the actual corner.
 
 ---
 
