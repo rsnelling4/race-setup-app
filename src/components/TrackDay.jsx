@@ -396,15 +396,27 @@ function PhysicsCard({ analysis, session, geoProfiles }) {
             {(lltd * 100).toFixed(1)}%
           </span>
         </div>
-        {['RF', 'LF', 'RR', 'LR'].map(pos => (
-          <div key={pos} className="td-phys-item">
-            <span className="td-phys-label">{pos}</span>
-            <span className="td-phys-val">
-              {c?.[pos]?.grip?.toFixed(0)}%
-              <span className="td-phys-sub"> {c?.[pos]?.hp?.toFixed(1)} hot / {c?.[pos]?.optHotPsi?.toFixed(1)} opt</span>
-            </span>
-          </div>
-        ))}
+        {['RF', 'LF', 'RR', 'LR'].map(pos => {
+          const corner = c?.[pos];
+          const hp = corner?.hp;
+          const opt = corner?.optHotPsi;
+          const psiDev = hp != null && opt != null ? Math.abs(hp - opt) : 0;
+          const hasHotPsi = session?.hotPsi && Object.values(session.hotPsi).some(v => v !== '');
+          // Only show opt comparison when measured hot PSI exists OR model is significantly off target
+          const showOpt = hasHotPsi && psiDev > 1;
+          return (
+            <div key={pos} className="td-phys-item">
+              <span className="td-phys-label">{pos}</span>
+              <span className="td-phys-val">
+                {corner?.grip?.toFixed(0)}%
+                <span className="td-phys-sub">
+                  {hp?.toFixed(1)} hot
+                  {showOpt ? ` / ${opt?.toFixed(1)} target` : ''}
+                </span>
+              </span>
+            </div>
+          );
+        })}
       </div>
     </div>
   );
@@ -452,7 +464,12 @@ function TireStrip({ pos, data, result }) {
           <span className="td-tire-avg"> avg {result.avg}°F</span>
         </span>
         {result.hotPsi !== null && (
-          <span className="td-tire-hot-psi">hot {result.hotPsi} PSI (opt {result.optimalHotPsi})</span>
+          <span className="td-tire-hot-psi">
+            est. hot {result.hotPsi?.toFixed(1)} PSI
+            {result.optimalHotPsi != null && Math.abs(result.hotPsi - result.optimalHotPsi) > 1
+              ? ` (model target ${result.optimalHotPsi?.toFixed(1)})`
+              : ''}
+          </span>
         )}
       </div>
       {result.recommendations.map((rec, i) => (
