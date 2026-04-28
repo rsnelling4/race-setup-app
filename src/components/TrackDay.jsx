@@ -87,17 +87,52 @@ function carLabel(session, geoProfiles) {
 // ─── AI prompt ────────────────────────────────────────────────────────────────
 function buildPrompt(event, selectedSessions, geoProfiles) {
   const lines = [
-    `You are a race car setup engineer analyzing track day data for 2008 Ford Crown Victoria P71 race cars on an oval/figure-8 track.`,
+    `You are a race car setup engineer specializing in the 2008 Ford Crown Victoria P71 on a left-turn oval.`,
+    `Analyze the session data below with the depth of a crew chief who knows this car's physics chain cold.`,
     ``,
-    `CONTEXT:`,
-    `  Tire: Ironman iMove Gen3 AS 235/55R17 103V XL. Car weight: 3700 lbs. Left-turn oval.`,
-    `  Cold PSI shown is what was set before the session. Hot PSI shown is what was measured after.`,
-    `  Pressure rise: left side typically +2 PSI cold-to-hot, right side +4 to +6 PSI.`,
-    `  The physics model's "opt" PSI values are load-proportional targets derived from corner loads —`,
-    `  use these as your pressure reference. Compare hot PSI measured vs opt PSI to determine direction.`,
-    `  LR SAFETY FLOOR: never recommend below 16 PSI cold / ~18 PSI hot on the left rear.`,
-    `  Right-side spread context: a very large RF-to-RR hot spread (10+ PSI) tends to cause push/understeer`,
-    `  because the RF contact patch stiffens relative to the RR. Flag this if you see it in the data.`,
+    `CAR PHYSICS (use these to interpret data and explain recommendations):`,
+    `  Weight: 3700 lbs. Tire: Ironman iMove Gen3 AS 235/55R17 103V XL. Left-turn oval.`,
+    `  RF is the primary loaded corner — it carries the most load, runs the hottest, and has the most grip to gain or lose.`,
+    ``,
+    `  CAMBER CHAIN (RF ground camber = what the tire actually sees at the contact patch):`,
+    `    Ground camber = static + caster gain + body roll (SLA jounce) + KPI + roll-frame + sidewall compliance`,
+    `    Caster gain (RF): −0.667°/° of caster (measured). At 3° caster = −2.0° gain; at 5.5° = −3.67°.`,
+    `    Body roll (RF): −0.355°/° of roll. At 1.26° roll = −0.45°.`,
+    `    KPI (RF): +0.144° at apex steer (works against you on the outside tire).`,
+    `    Sidewall compliance: +0.000342°/lb load — at RF ~1400 lbs = +0.48° positive camber added (always works against you).`,
+    `    Roll frame conversion (RF outside): adds body roll angle to convert chassis→ground frame.`,
+    `    Model ideal ground camber for RF: −2.0°. Every degree short of that costs ~1.75% grip.`,
+    `    Over-camber penalty: ~1.0%/° (less severe than insufficient camber).`,
+    ``,
+    `  CASTER — two independent effects on RF grip:`,
+    `    1. Camber gain: more caster = more dynamic negative camber at apex (see chain above).`,
+    `    2. Mechanical trail: trail = tire_radius × sin(caster) − scrub × cos(caster).`,
+    `       Optimal trail ≈ 0.9". At 3° caster = 0.44" (below peak). At 5.5° = 0.97" (peak, ~2% bonus).`,
+    `       Above 1.5" trail the steering effort penalty starts to cut into the benefit.`,
+    ``,
+    `  PRESSURE — load-proportional optimal: optHotPsi = 30 × (cornerLoad / avgLoad).`,
+    `    avgLoad = 925 lbs (3700/4). RF corner load ~1400 lbs → opt ~45 PSI hot.`,
+    `    Penalty: 0.6% grip per PSI off optimal. Over-pressure also heats tread center → compounds on next lap.`,
+    `    Right-side spread: if RF hot PSI is 10+ PSI above RR hot PSI, RF contact patch stiffens relative to RR`,
+    `    and the front dominates — causes push/understeer. Flag this if you see it.`,
+    `    LR FLOOR: never recommend below 16 PSI cold / ~18 PSI hot on the left rear.`,
+    ``,
+    `  SHOCK STIFFNESS → LLTD → RF LOAD:`,
+    `    Front LLTD target: 46% (oval). Stiffer RF shock raises front LLTD → more RF load.`,
+    `    More RF load → higher optimal PSI → if pressure not adjusted, RF runs under-optimal.`,
+    `    Stiffer RF shock also reduces body roll → less SLA jounce camber gain → RF runs more positive ground camber.`,
+    `    RF shock rebound: stiffer = front stays loaded longer on exit = more steering authority under throttle.`,
+    ``,
+    `  PYROMETER INTERPRETATION:`,
+    `    Inside/Middle/Outside zones. RF outside (wall side) expected hotter — centrifugal load is normal.`,
+    `    RF inside much hotter than outside = too much negative camber (over-cambered).`,
+    `    RF outside much hotter than inside = insufficient camber (contact patch tilted away).`,
+    `    Middle hotter than both edges = over-inflated. Edges hotter than middle = under-inflated.`,
+    `    Temperature spread across RF I/M/O > 20°F = contact patch not fully loaded — investigate camber + pressure.`,
+    ``,
+    `  COLD vs HOT PSI: cold = set in garage. Hot = measured after session. Rise: left +2, right +4 to +6 PSI typical.`,
+    `  Physics model "opt" PSI = load-derived target. Compare measured hot PSI to opt to determine direction.`,
+    `  All setup values shown are WHAT WAS RUN — not assumed to be optimal.`,
     ``,
     `EVENT: ${event.name}  |  Date: ${event.date}  |  Track: ${event.track || 'not specified'}`,
     ``,
@@ -201,16 +236,42 @@ function buildPrompt(event, selectedSessions, geoProfiles) {
   lines.push(`${'─'.repeat(60)}`);
   lines.push(`ANALYSIS REQUESTED:`);
   if (cars.length > 1) {
-    lines.push(`NOTE: This analysis covers ${cars.length} different cars: ${cars.join(', ')}. Analyze each car's sessions together, then compare across cars only where useful.`);
+    lines.push(`NOTE: This analysis covers ${cars.length} different cars: ${cars.join(', ')}. Analyze each car separately, then compare across cars where useful.`);
   }
-  lines.push(`1. For each car: compare sessions in order — what changed and did it help?`);
-  lines.push(`2. Identify the primary handling issue(s) per car based on driver feel + tire data.`);
-  lines.push(`3. Assess tire contact patch quality per session (camber spread, pressure vs optimal, temp gradients).`);
-  lines.push(`4. Give ranked specific recommendations for the NEXT session per car.`);
-  lines.push(`   Prioritize: PSI and toe first (trackside), then shocks/springs/alignment (shop).`);
-  lines.push(`   Focus on maximum contact patch and driver feel.`);
-  lines.push(`5. Flag any tire temperature red flags (excessive gradients, uneven wear patterns).`);
-  lines.push(`Be specific and numeric. Reference actual values. Keep it concise — crew chief is reading this at the track.`);
+  lines.push(``);
+  lines.push(`For each session, walk through the following in order:`);
+  lines.push(``);
+  lines.push(`RF CONTACT PATCH CHAIN (do this numerically for every session):`);
+  lines.push(`  1. Start from the static RF camber that was run.`);
+  lines.push(`  2. Add caster gain (−0.667°/° of RF caster).`);
+  lines.push(`  3. Add body roll contribution (use model ground camber value if available).`);
+  lines.push(`  4. State the estimated RF ground camber vs the −2.0° ideal. Calculate the grip penalty in %.`);
+  lines.push(`  5. State measured hot RF PSI vs model-optimal. Calculate the PSI delta and grip penalty (0.6%/PSI).`);
+  lines.push(`  6. Interpret RF pyrometer zones: which zone is hottest? What does that pattern indicate (over/under camber, over/under pressure)?`);
+  lines.push(`  7. Do the pyrometer pattern and the physics model agree? If not, flag the discrepancy and explain.`);
+  lines.push(``);
+  lines.push(`HANDLING DIAGNOSIS:`);
+  lines.push(`  - Name the primary handling condition (push/understeer, loose/oversteer, tight entry, loose exit, etc.).`);
+  lines.push(`  - Tie it to the physics: which corner is causing it and what in the camber/pressure/LLTD chain explains it?`);
+  lines.push(`  - If front LLTD deviates from 46%, explain the implication for RF load and what that does to optimal PSI.`);
+  lines.push(``);
+  lines.push(`RANKED NEXT-SESSION RECOMMENDATIONS:`);
+  lines.push(`  Give exactly 3–5 changes, ranked by expected grip gain. For each:`);
+  lines.push(`    a) The specific change (with numbers: current → target).`);
+  lines.push(`    b) Which step of the camber/pressure/LLTD chain it affects.`);
+  lines.push(`    c) The expected effect on RF ground camber or hot PSI.`);
+  lines.push(`    d) Whether it is TRACKSIDE (PSI, tire swap) or SHOP (alignment, shocks, springs).`);
+  lines.push(`  Prioritize TRACKSIDE changes first. Flag if no trackside change is available — shop changes only.`);
+  lines.push(``);
+  lines.push(`SESSION COMPARISON (if multiple sessions):`);
+  lines.push(`  - What changed between sessions and did the data confirm it helped?`);
+  lines.push(`  - Was the grip delta consistent with what the physics model predicted?`);
+  lines.push(``);
+  lines.push(`FORMAT RULES:`);
+  lines.push(`  - Every claim must reference an actual number from the data above.`);
+  lines.push(`  - Never say "adjust camber" without specifying the direction and a target value.`);
+  lines.push(`  - Never say "check pressure" without giving the delta from optimal and direction to adjust.`);
+  lines.push(`  - Write for a crew chief reading this at the wall between sessions — terse, numeric, actionable.`);
 
   return lines.join('\n');
 }
