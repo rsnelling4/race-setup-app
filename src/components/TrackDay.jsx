@@ -135,7 +135,7 @@ function buildPrompt(event, selectedSessions, geoProfiles) {
       lines.push(``);
     }
 
-    lines.push(`  SETUP:`);
+    lines.push(`  SETUP (what was run — NOT assumed optimal):`);
     lines.push(`    Camber LF ${simSetup.camber.LF}°  RF ${simSetup.camber.RF}°`);
     lines.push(`    Caster LF ${simSetup.caster.LF}°  RF ${simSetup.caster.RF}°`);
     lines.push(`    Toe ${simSetup.toe}" front`);
@@ -173,12 +173,24 @@ function buildPrompt(event, selectedSessions, geoProfiles) {
 
     if (physics) {
       const c = physics.corners;
-      lines.push(`  PHYSICS MODEL:`);
-      lines.push(`    Est. lap ${physics.lapTime?.toFixed(3)}s  |  Front LLTD ${(physics.ss?.frontLLTD * 100).toFixed(1)}% (target 46%)`);
-      lines.push(`    RF grip ${c?.RF?.grip?.toFixed(1)}%  hot PSI ${c?.RF?.hp?.toFixed(1)} (opt ${c?.RF?.optHotPsi?.toFixed(1)})  ground camber ${c?.RF?.groundCamber?.toFixed(2)}°`);
-      lines.push(`    LF grip ${c?.LF?.grip?.toFixed(1)}%  hot PSI ${c?.LF?.hp?.toFixed(1)} (opt ${c?.LF?.optHotPsi?.toFixed(1)})  ground camber ${c?.LF?.groundCamber?.toFixed(2)}°`);
-      lines.push(`    RR grip ${c?.RR?.grip?.toFixed(1)}%  hot PSI ${c?.RR?.hp?.toFixed(1)} (opt ${c?.RR?.optHotPsi?.toFixed(1)})`);
-      lines.push(`    LR grip ${c?.LR?.grip?.toFixed(1)}%  hot PSI ${c?.LR?.hp?.toFixed(1)} (opt ${c?.LR?.optHotPsi?.toFixed(1)})`);
+      lines.push(`  PHYSICS MODEL (calculated — not based on user setup assumptions):`);
+      lines.push(`    Est. lap ${physics.lapTime?.toFixed(3)}s  |  Front LLTD ${(physics.ss?.frontLLTD * 100).toFixed(1)}% (model target 46%)`);
+      lines.push(`    Per-corner: grip% / hot PSI run (model-optimal PSI) / ground camber run (model-ideal camber) / model-recommended cold PSI`);
+      for (const pos of ['RF', 'LF', 'RR', 'LR']) {
+        const corner = c?.[pos];
+        if (!corner) continue;
+        const camberStr = corner.groundCamber != null
+          ? `ground camber ${corner.groundCamber.toFixed(2)}° (ideal ${corner.idealGroundCamber?.toFixed(2) ?? '—'}°)${corner.optStaticCamber != null ? `, opt static ${corner.optStaticCamber.toFixed(2)}°` : ''}`
+          : '';
+        const psiStr = `hot PSI ${corner.hp?.toFixed(1)} (opt ${corner.optHotPsi?.toFixed(1)}, rec cold ${corner.recColdPsi?.toFixed(1)})`;
+        lines.push(`    ${pos}: grip ${corner.grip?.toFixed(1)}%  ${psiStr}  ${camberStr}`);
+      }
+      if (physics.recommendations?.length) {
+        lines.push(`    Model-ranked changes (calculated deltas vs current setup):`);
+        for (const r of physics.recommendations.slice(0, 6)) {
+          lines.push(`      • ${r.parameter}: ${r.current} → ${r.optimal}  (${r.detail ?? ''})`);
+        }
+      }
       lines.push(``);
     }
   });
