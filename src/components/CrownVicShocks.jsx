@@ -494,6 +494,61 @@ function CrownVicShocks() {
         </p>
       </div>
 
+      {/* Recommended setups */}
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(300px, 1fr))', gap: '16px', marginBottom: '32px' }}>
+
+        <div className="shock-info-card" style={{ borderLeft: '3px solid var(--accent)' }}>
+          <h4 style={{ color: 'var(--accent)', marginBottom: '12px' }}>Recommended — Oval Setup</h4>
+          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '10px', marginBottom: '14px' }}>
+            {[
+              { pos: 'LF', part: 'FCS 1336349', rating: 4, type: 'Police/Taxi Twin-Tube', spring: '475 lbs/in', role: 'Firm front — raises LLTD, controls body roll on entry' },
+              { pos: 'RF', part: 'FCS 1336349', rating: 4, type: 'Police/Taxi Twin-Tube', spring: '475 lbs/in', role: 'Firm front — keeps RF planted, steering authority on exit' },
+              { pos: 'LR', part: 'Monroe 550018', rating: 1, type: 'Magnum Severe Service', spring: '160 lbs/in (stock coil)', role: 'Stiffest twin-tube rear — resists rear roll return, reduces rotation' },
+              { pos: 'RR', part: 'Monroe 550018', rating: 1, type: 'Magnum Severe Service', spring: '160 lbs/in (stock coil)', role: 'Stiffest twin-tube rear — plants RR, tight/push balance' },
+            ].map(({ pos, part, rating, type, spring, role }) => (
+              <div key={pos} style={{ background: 'var(--bg-secondary)', borderRadius: '6px', padding: '8px 10px' }}>
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', marginBottom: '4px' }}>
+                  <span style={{ fontWeight: 700, fontSize: '0.9rem', color: 'var(--text-primary)' }}>{pos}</span>
+                  <span style={{ fontSize: '0.72rem', fontWeight: 700, background: 'rgba(59,130,246,0.15)', color: 'var(--accent)', borderRadius: '4px', padding: '1px 6px' }}>Rating {rating}</span>
+                </div>
+                <div style={{ fontSize: '0.82rem', fontWeight: 600, color: 'var(--text-primary)', marginBottom: '2px' }}>{part}</div>
+                <div style={{ fontSize: '0.75rem', color: 'var(--text-secondary)', marginBottom: '4px' }}>{type} · {spring}</div>
+                <div style={{ fontSize: '0.75rem', color: 'var(--text-secondary)', lineHeight: 1.4 }}>{role}</div>
+              </div>
+            ))}
+          </div>
+          <div style={{ fontSize: '0.78rem', color: 'var(--text-secondary)', lineHeight: 1.5, borderTop: '1px solid var(--border)', paddingTop: '10px' }}>
+            <strong style={{ color: 'var(--text-primary)' }}>Why:</strong> Firm fronts (rating 4) hit the 46% front LLTD target — keeps weight on the RF long enough to maintain steering authority through the corner. Stiffest rear (rating 1) plants both rear tires and reduces rear rotation tendency, balancing the tight fronts. Pair with RF camber −3.25° and RF caster 5.5° for maximum RF contact patch.
+          </div>
+        </div>
+
+        <div className="shock-info-card" style={{ borderLeft: '3px solid #a78bfa' }}>
+          <h4 style={{ color: '#a78bfa', marginBottom: '12px' }}>Recommended — Figure 8 Setup</h4>
+          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '10px', marginBottom: '14px' }}>
+            {[
+              { pos: 'LF', part: 'FCS 1336349', rating: 4, type: 'Police/Taxi Twin-Tube', spring: '475 lbs/in', role: 'Firm — controls crossover speed; symmetric with RF essential on F8' },
+              { pos: 'RF', part: 'FCS 1336349', rating: 4, type: 'Police/Taxi Twin-Tube', spring: '475 lbs/in', role: 'Firm — symmetric with LF; both fronts matched for equal L/R behavior' },
+              { pos: 'LR', part: 'KYB 555603', rating: 0, type: 'Gas-a-Just Monotube — Police', spring: '160 lbs/in (stock coil)', role: 'Stiffest rear — maximum crossover stability; plants rear for rotation availability' },
+              { pos: 'RR', part: 'KYB 555603', rating: 0, type: 'Gas-a-Just Monotube — Police', spring: '160 lbs/in (stock coil)', role: 'Stiffest rear — symmetric with LR; consistent feel in both turn directions' },
+            ].map(({ pos, part, rating, type, spring, role }) => (
+              <div key={pos} style={{ background: 'var(--bg-secondary)', borderRadius: '6px', padding: '8px 10px' }}>
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', marginBottom: '4px' }}>
+                  <span style={{ fontWeight: 700, fontSize: '0.9rem', color: 'var(--text-primary)' }}>{pos}</span>
+                  <span style={{ fontSize: '0.72rem', fontWeight: 700, background: 'rgba(167,139,250,0.15)', color: '#a78bfa', borderRadius: '4px', padding: '1px 6px' }}>Rating {rating}</span>
+                </div>
+                <div style={{ fontSize: '0.82rem', fontWeight: 600, color: 'var(--text-primary)', marginBottom: '2px' }}>{part}</div>
+                <div style={{ fontSize: '0.75rem', color: 'var(--text-secondary)', marginBottom: '4px' }}>{type} · {spring}</div>
+                <div style={{ fontSize: '0.75rem', color: 'var(--text-secondary)', lineHeight: 1.4 }}>{role}</div>
+              </div>
+            ))}
+          </div>
+          <div style={{ fontSize: '0.78rem', color: 'var(--text-secondary)', lineHeight: 1.5, borderTop: '1px solid var(--border)', paddingTop: '10px' }}>
+            <strong style={{ color: 'var(--text-primary)' }}>Why:</strong> Symmetric firm fronts (rating 4, FCS 1336349) control crossover speed equally in both turn directions — asymmetric fronts create an imbalance between left and right loops. Stiffest monotube rear (KYB 555603, rating 0) keeps the rear planted through the direction change at the crossover, giving the driver a stable platform to initiate rotation. The stiff rear / firm front combination prevents the rear from stepping out unpredictably mid-transition.
+          </div>
+        </div>
+
+      </div>
+
       <div className="shock-cards-grid" style={{ marginBottom: '32px' }}>
 
         <div className="shock-info-card">
