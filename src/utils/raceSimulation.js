@@ -114,17 +114,50 @@ export const VEH = {
 //   Correct formula: KPI_deg × (1 - cos(steerAngle))
 //   At 10° steer: 9.5° × (1 - cos(10°)) = 9.5 × 0.01519 = +0.144°
 //   (Previous formula sin(KPI)×sin(steer) was wrong — underestimated by ~5×.)
+// Steer angle at corner apex — Ackermann geometry, back-calculated from actual corner radius.
+//   Ackermann steer angle = arctan(wheelbase / cornerRadius)
+//   Wheelbase = 114.7", effective racing line radius = 145 ft = 1740".
+//   atan(114.7 / 1740) = atan(0.0659) = 3.77°
+//
+// Pyrometer validation (April 2026 session, RF caster 8.5°):
+//   RF outside edge ran 20°F HOTTER than inside — the pattern for INSUFFICIENT camber.
+//   Model previously used steerAngle=10° which gave caster gain coefficient 0.667°/°
+//   (measured at 20° steer, applied unchanged). At 10° steer that over-estimated caster gain
+//   by sin(10°)/sin(3.77°) = 1.74×, and at the prior hardcoded 20° steer, by ~4.8×.
+//   With corrected 3.77° steer, caster gain at 8.5° = 8.5 × 0.136 = −1.15° (not −5.67°).
+//   Revised RF ground camber ≈ −1.45°, which is INSUFFICIENT (short of −2.0° ideal) —
+//   consistent with the outside-hotter pyrometer reading. Steer angle corrected to 3.77°.
+//
+// Caster camber gain coefficient (per degree of caster):
+//   Physical formula: camberGain = caster_deg × sin(steerAngle_rad)
+//   At calibration point (20° steer, 3° RF caster): measured 2.0° gain → 2.0/(3×sin20°) = 1.946 ≈ 2.
+//   So: camberGain = caster_deg × sin(steerAngle_rad) × 2 / sin(20°_rad)
+//               = caster_deg × sin(steerAngle_rad) × CASTER_CAMBER_K
+//   CASTER_CAMBER_K = 2 / sin(20°) = 5.848 — the gain-per-radian scalar from the calibration.
+//   At 3.77° steer: coefficient = sin(3.77°) × 5.848 = 0.0658 × 5.848 = 0.385 × (1/caster)
+//     → per degree of caster at 3.77° steer: sin(3.77°×π/180) × 5.848 ≈ 0.136°/°
+//
+// LF caster coefficient (inside tire, steer opposite direction):
+//   At calibration (20° steer, 9° LF caster): measured 1.5° gain → 1.5/(9×sin20°) = 0.487 ≈ 0.5.
+//   CASTER_LF_K = 0.5 / sin(20°_rad) = 1.462.
+//   At 3.77° steer: per degree of caster = sin(3.77°×π/180) × 1.462 ≈ 0.034°/°
+const _STEER_RAD        = 3.77 * Math.PI / 180; // ≈ 0.0658 rad
+const CASTER_CAMBER_K_RF = 2.0  / Math.sin(20 * Math.PI / 180); // ≈ 5.848 — RF calibration scalar
+const CASTER_CAMBER_K_LF = 0.5  / Math.sin(20 * Math.PI / 180); // ≈ 1.462 — LF calibration scalar
+// Per-degree-of-caster coefficient at actual oval steer angle:
+const CASTER_COEFF_RF   = Math.sin(_STEER_RAD) * CASTER_CAMBER_K_RF; // ≈ 0.385 total, /degree ≈ 0.136
+const CASTER_COEFF_LF   = Math.sin(_STEER_RAD) * CASTER_CAMBER_K_LF; // ≈ 0.096 total, /degree ≈ 0.034
+
 const GEOM = {
   kpi:         9.5,                          // ° — kingpin inclination (measured)
   wheelOffset: 1.75,                         // inches — P71 17×7 factory wheel
   scrubRadius: 13.6 * Math.tan(9.5 * Math.PI / 180) - 1.75, // ≈ 0.525"
-  steerAngle:  10,                           // ° — estimated front steer at corner apex
+  steerAngle:  3.77,                         // ° — Ackermann at apex: atan(114.7"/1740") = 3.77°
   // KPI camber gain: positive on outside tire (RF), negative on inside (LF)
   // Correct formula: KPI_deg × (1 - cos(steerAngle)) — derived from wheel rotating about
-  // a tilted kingpin axis. NOT sin(KPI)×sin(steer) which underestimates by ~5×.
-  // At 10° steer: 9.5° × (1 - cos(10°)) = 9.5 × 0.01519 = +0.144°
-  // Source: standard suspension geometry (EvolutionM, Eng-Tips, Kelvin Tse kinematic curves)
-  kpiCamberGain: (9.5 * Math.PI / 180) * (1 - Math.cos(10 * Math.PI / 180)), // ≈ +0.144°
+  // a tilted kingpin axis.
+  // At 3.77° steer: 9.5° × (1 - cos(3.77°)) = 9.5 × 0.00216 = +0.021°
+  kpiCamberGain: (9.5 * Math.PI / 180) * (1 - Math.cos(_STEER_RAD)), // ≈ +0.021°
 };
 
 // ============ TIRE SIDEWALL COMPLIANCE ============
@@ -317,8 +350,8 @@ function camberGripFactor(groundCamber, isOutside, isFront, load = VEH.weight / 
 // Caster: modeled via mechanical trail — the correct physical mechanism.
 //
 // NOTE: Caster's camber gain effect is already fully captured in casterCamberGain
-// (caster × 0.667 for RF, × 0.167 for LF — measured 2026-04-22 at 20° steer, halved for 10° apex)
-// which feeds into effectiveCamber →
+// (caster × CASTER_COEFF_RF for RF, × CASTER_COEFF_LF for LF — calibrated at 20° steer,
+// scaled to actual oval steer angle 3.77° via sin ratio) which feeds into effectiveCamber →
 // groundCamber → camberGripFactor. This function handles ONLY the steering
 // torque / driveability effect of mechanical trail.
 //
@@ -623,8 +656,8 @@ function calcPerformance(setup, tires, inflationTemp = COLD_PSI_TEMP) {
       // The two front wheels go OPPOSITE directions: RF (outside) gains negative, LF (inside)
       // gains positive. This is the caster geometry — same effect on both SLA and MacPherson.
       const casterCamberGain = outside
-        ? -(caster[c] * 0.667 * refG)  // RF: measured 2.0° at 20° steer / 3.0° caster = 0.667/deg
-        :  (caster[c] * 0.167 * refG); // LF: measured 1.5° at 20° steer / 9.0° caster = 0.167/deg
+        ? -(caster[c] * CASTER_COEFF_RF * refG)  // RF: calibrated at 20° steer, scaled to 3.77° apex
+        :  (caster[c] * CASTER_COEFF_LF * refG); // LF: calibrated at 20° steer, scaled to 3.77° apex
       // SLA body roll camber at actual corner apex (cornerRoll = roll × OVAL_RACING_G).
       // RF (outside, jounce): SLA gains NEGATIVE camber — key advantage over MacPherson.
       // LF (inside, droop): gains POSITIVE camber — same direction as MacPherson droop.
@@ -750,8 +783,8 @@ function updateTireTemps(tires, workFactors, ambient, lapTime, setup, inflationT
       camberVal = setup.camber[c];
       // Caster gain: RF (outside) gains negative, LF (inside) gains positive — geometric.
       const casterGain = outside
-        ? -(caster[c] * 0.667)  // measured: 2.0° at 20° steer / 3.0° caster = 0.667/deg
-        :  (caster[c] * 0.167); // measured: 1.5° at 20° steer / 9.0° caster = 0.167/deg
+        ? -(caster[c] * CASTER_COEFF_RF)
+        :  (caster[c] * CASTER_COEFF_LF);
       camberVal += casterGain;
     } else {
       // Rear: body roll effect (solid axle)
@@ -1133,7 +1166,7 @@ export function analyzeSetup(setup, ambientTemp = 65, inflationTemp = COLD_PSI_T
 
     if (front) {
       // Caster gain: RF (outside) gains negative, LF (inside) gains positive — geometric.
-      casterGain = outside ? -(caster[c] * 0.667) : (caster[c] * 0.167); // measured: RF 2.0°/3°caster, LF 1.5°/9°caster
+      casterGain = outside ? -(caster[c] * CASTER_COEFF_RF) : (caster[c] * CASTER_COEFF_LF);
       // SLA body roll camber at actual corner apex (cornerRoll = roll × OVAL_RACING_G).
       bodyRollCamber = outside ? -(cornerRoll * 0.355) : (cornerRoll * 0.547); // measured droop coeff
       // KPI camber: +positive on outside (RF), -negative on inside (LF). ≈ ±0.144°.
@@ -1366,18 +1399,28 @@ export function analyzeSetup(setup, ambientTemp = 65, inflationTemp = COLD_PSI_T
   };
 }
 
+// ============ FIGURE 8 CASTER COEFFICIENTS ============
+// F8 loop radius = 149 ft = 1788". Ackermann steer angle: atan(114.7"/1788") = 3.67°
+// Same derivation as oval (CASTER_CAMBER_K_RF/LF calibrated at 20° steer, scaled by sin ratio):
+//   F8 outside: sin(3.67°) × CASTER_CAMBER_K_RF = 0.0640 × 5.848 ≈ 0.125°/°caster
+//   F8 inside:  sin(3.67°) × CASTER_CAMBER_K_LF = 0.0640 × 1.462 ≈ 0.031°/°caster
+// Virtually identical to oval values (3.67° vs 3.77° apex steer = 0.3% difference).
+const F8_CASTER_COEFF_OUT = Math.sin(3.67 * Math.PI / 180) * CASTER_CAMBER_K_RF; // ≈ 0.125°/°caster
+const F8_CASTER_COEFF_IN  = Math.sin(3.67 * Math.PI / 180) * CASTER_CAMBER_K_LF; // ≈ 0.031°/°caster
+
 // ============ FIGURE 8 SETUP ANALYSIS ============
 // Adapted for bidirectional loading. Each front tire alternates outside/inside each lap.
 //
 // Key physics differences from oval:
 //   - Average loads ≈ static loads (lateral transfer cancels across L+R turns)
-//   - Fronts heavier than rears (55% front bias) → optimal psi still differs F/R
+//   - Fronts heavier than rears (57% front bias) → optimal psi still differs F/R
 //   - Optimal static camber found by minimizing sum of per-turn deviations from ideal:
 //       optStatic = avg(ideal_outside_static, ideal_inside_static)
-//       = avg(-4.5 + caster×0.18, 0.0 - caster×0.10)  [inside ideal = 0° flat]
+//       = avg(-4.5 + caster×F8_CASTER_COEFF_OUT, 0.0 - caster×F8_CASTER_COEFF_IN)
+//       At F8 steer 3.67°: coefficients ≈ 0.125°/° (outside) and 0.031°/° (inside) — nearly flat.
 //   - Caster benefits each front ONLY when it is the outside tire (50% of laps)
 //       avgCasterFactor = (casterGripFactor_outside + 1.0) / 2
-//   - Balance penalty in calcPerformanceF8 still uses VEH.frontBias (0.55), not 0.50
+//   - Balance penalty in calcPerformanceF8 still uses VEH.frontBias, not 0.50
 //
 // Display factors mirror calcPerformanceF8 exactly so scores reflect actual lap time impact.
 const F8_IDEAL_AVG_EFFECTIVE_CAMBER = -2.25; // avg of outside ideal (−4.5°) + inside ideal (0°, flat)
@@ -1430,8 +1473,8 @@ export function analyzeSetupF8(setup, ambientTemp = 65, inflationTemp = COLD_PSI
     if (front) {
       // Per-turn caster camber gains: outside wheel gains negative, inside gains positive.
       // Caster direction is geometric and the same on SLA and MacPherson.
-      const gOut = -(caster[c] * 0.18); // outside turn: negative camber gain
-      const gIn  =  (caster[c] * 0.10); // inside turn: positive camber gain (geometric)
+      const gOut = -(caster[c] * F8_CASTER_COEFF_OUT); // outside turn: negative camber gain (3.67° apex steer)
+      const gIn  =  (caster[c] * F8_CASTER_COEFF_IN);  // inside turn: positive camber gain (geometric)
       // Average caster gain across both turns (F8 body roll averages to ~0 across L+R)
       casterGain = (gOut + gIn) / 2; // = caster × -0.04
 
@@ -1450,8 +1493,8 @@ export function analyzeSetupF8(setup, ambientTemp = 65, inflationTemp = COLD_PSI
       casterFactor = (casterBenefit + 1.0) / 2;
 
       // Optimal static camber: avg of (ideal_outside_static, ideal_inside_static)
-      //   ideal_outside_static = -4.5 - gOut = -4.5 + caster×0.18
-      //   ideal_inside_static  =  0.0 - gIn  = 0.0 - caster×0.10  (flat patch; gIn is positive)
+      //   ideal_outside_static = -4.5 - gOut = -4.5 + caster×F8_CASTER_COEFF_OUT
+      //   ideal_inside_static  =  0.0 - gIn  = 0.0 - caster×F8_CASTER_COEFF_IN  (flat patch; gIn positive)
       const optOut = -4.5 - gOut;
       const optIn  =  0.0 - gIn;
       optStaticCamber = Math.round(((optOut + optIn) / 2) * 4) / 4;
@@ -1510,8 +1553,8 @@ export function analyzeSetupF8(setup, ambientTemp = 65, inflationTemp = COLD_PSI
     const opt = corners[c].optStaticCamber;
     if (opt === null || Math.abs(opt - cur) < 0.25) continue;
     const gain = testGain(s => { s.camber[c] = opt; });
-    const gOut = -(caster[c] * 0.18);
-    const gIn  =  (caster[c] * 0.10);
+    const gOut = -(caster[c] * F8_CASTER_COEFF_OUT);
+    const gIn  =  (caster[c] * F8_CASTER_COEFF_IN);
     const effOut = (opt + gOut).toFixed(2);
     const effIn  = (opt + gIn).toFixed(2);
     recs.push({
@@ -1708,10 +1751,10 @@ function calcPerformanceF8(setup, tires, inflationTemp = COLD_PSI_TEMP) {
       mu *= pressureGripFactor(hp, cLoad);
 
       if (front) {
-        // Caster: outside gains negative, inside gains positive (geometric, same on SLA/MacPherson)
+        // Caster: outside gains negative, inside gains positive. F8 apex steer 3.67°.
         const casterGain = outside
-          ? -(caster[c] * 0.18 * refG)
-          :  (caster[c] * 0.10 * refG);
+          ? -(caster[c] * F8_CASTER_COEFF_OUT * refG)
+          :  (caster[c] * F8_CASTER_COEFF_IN  * refG);
         mu *= camberGripFactor(setup.camber[c] + casterGain, outside, refG);
         mu *= casterGripFactor(caster[c], outside, true);
         mu *= toeGripFactor(toe);
@@ -1769,8 +1812,8 @@ function updateTireTempsF8(tires, workFactors, ambient, lapTime, setup, inflatio
     // Average effective camber across both turn directions
     let camberAvg = 0;
     if (front) {
-      const gOut = -(caster[c] * 0.18);
-      const gIn  =  (caster[c] * 0.10);
+      const gOut = -(caster[c] * F8_CASTER_COEFF_OUT);
+      const gIn  =  (caster[c] * F8_CASTER_COEFF_IN);
       const camberL = setup.camber[c] + (OUTSIDE[c]  ? gOut : gIn);
       const camberR = setup.camber[c] + (!OUTSIDE[c] ? gOut : gIn);
       camberAvg = (camberL + camberR) / 2;

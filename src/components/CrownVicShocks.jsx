@@ -601,6 +601,120 @@ function CrownVicShocks() {
 
       </div>
 
+      {/* Real-world session analysis card */}
+      <div className="shock-info-card" style={{ borderLeft: '3px solid var(--yellow)', marginBottom: '32px' }}>
+        <h4 style={{ color: 'var(--yellow)', marginBottom: '2px' }}>Real-World Session Analysis — April 2026 Oval</h4>
+        <div style={{ fontSize: '0.72rem', color: 'var(--text-secondary)', marginBottom: '14px' }}>
+          Two independent sessions. Both show <strong>RF and RR outside edge hotter than inside</strong> — consistent insufficient camber across different shock and caster combinations.
+          Physics model and pyrometer agree on the root cause after correcting the caster coefficient for actual oval steer angle (3.77°, not 20°).
+        </div>
+
+        {/* Two-session comparison table */}
+        <div style={{ overflowX: 'auto', marginBottom: '16px' }}>
+          <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '0.78rem' }}>
+            <thead>
+              <tr style={{ borderBottom: '1px solid var(--border)' }}>
+                <th style={{ textAlign: 'left', padding: '5px 8px', color: 'var(--text-secondary)', fontWeight: 600, width: '22%' }}></th>
+                <th style={{ textAlign: 'left', padding: '5px 8px', color: 'var(--accent)', fontWeight: 700 }}>Session A</th>
+                <th style={{ textAlign: 'left', padding: '5px 8px', color: '#a78bfa', fontWeight: 700 }}>Session B</th>
+              </tr>
+            </thead>
+            <tbody>
+              {[
+                ['LF shock', 'FCS 1336349 · TT · rating 4', 'FCS 1336343 · TT · rating 9'],
+                ['RF shock', 'Monroe 271346 · TT · rating 2', 'FCS 1336349 · TT · rating 4'],
+                ['LR / RR shock', 'KYB 555603 · Mono · rating 0', 'KYB 555603 · Mono · rating 0'],
+                ['LF spring', '475 lbs/in', '440 lbs/in'],
+                ['RF spring', '475 lbs/in', '475 lbs/in'],
+                ['Camber LF / RF', '+2.25° / −2.5°', '+2.5° / −2.75°'],
+                ['Caster LF / RF', '7.5° / 8.5°', '4° / 6°'],
+                ['Cold PSI LF/RF/LR/RR', '20 / 42 / 16 / 37', '20 / 36 / 16 / 34'],
+                ['Hot PSI LF/RF/LR/RR', '— / — / — / —', '21 / 38 / 17 / 36'],
+                ['RF pyro I/M/O (°F)', '— / — / — (outside +20°F)', '118 / 129 / 142 (outside +24°F)'],
+                ['RR pyro I/M/O (°F)', '— / — / —', '118 / 124 / 140 (outside +22°F)'],
+                ['Front LLTD (model)', '46.8%', '41.1%'],
+                ['RF ground camber (model)', '−1.43°', '−1.31°'],
+                ['RF vs ideal −2.0°', '−0.57° short', '−0.69° short'],
+                ['RF opt hot PSI', '~44.4 PSI', '~43.1 PSI'],
+                ['RF measured hot PSI', '~45.8 (est)', '38 PSI measured'],
+                ['RF PSI delta', '+1.4 PSI over', '−5.1 PSI under'],
+              ].map(([label, a, b], i) => (
+                <tr key={i} style={{ borderBottom: '1px solid rgba(255,255,255,0.04)', background: i % 2 === 0 ? 'transparent' : 'rgba(255,255,255,0.015)' }}>
+                  <td style={{ padding: '4px 8px', color: 'var(--text-secondary)', fontWeight: 600 }}>{label}</td>
+                  <td style={{ padding: '4px 8px', color: 'var(--text-primary)' }}>{a}</td>
+                  <td style={{ padding: '4px 8px', color: 'var(--text-primary)' }}>{b}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+
+        {/* Cross-session finding */}
+        <div style={{ background: 'rgba(239,68,68,0.07)', borderRadius: '6px', padding: '10px 14px', marginBottom: '14px', borderLeft: '3px solid var(--red)' }}>
+          <div style={{ fontWeight: 700, fontSize: '0.82rem', color: 'var(--red)', marginBottom: '6px' }}>CROSS-SESSION FINDING: RF GROUND CAMBER CONSISTENTLY SHORT</div>
+          <div style={{ fontSize: '0.78rem', color: 'var(--text-secondary)', lineHeight: 1.6 }}>
+            <div>Two different caster values (8.5° and 6°), two different RF shocks (rating 2 and 4), different springs. <strong style={{ color: 'var(--text-primary)' }}>Both produce RF ground camber of −1.3° to −1.4°</strong> — 0.6–0.7° short of the −2.0° ideal — and both produce outside-edge-hotter pyrometer patterns confirming it.</div>
+            <div style={{ marginTop: '6px' }}>The root cause is structural, not setup-dependent: <strong style={{ color: 'var(--text-primary)' }}>at 3.77° apex steer on a 1/4-mile oval, caster contributes almost no camber gain</strong> (0.136°/° vs 0.667°/° at 20° road course steer). All camber must come from static. The current static values of −2.5° to −2.75° are not enough.</div>
+            <div style={{ marginTop: '6px' }}>Session B additionally shows <strong style={{ color: 'var(--text-primary)' }}>RF 5.1 PSI under-inflated</strong> (38 hot vs 43.1 optimal) compounding the camber deficit. Session B front LLTD of 41.1% (vs 46% target) with the softest LF strut available means the front is chronically under-loaded — contributing to push from a different direction.</div>
+            <div style={{ marginTop: '6px' }}>RR outside-hotter pattern (I:118/M:124/O:140) in Session B: with both rears at rating 0 and 2.76° of body roll, RR ground camber is +3.1° — outside tread significantly off the road. Same structural issue: too much body roll because rear shocks add zero roll resistance.</div>
+          </div>
+        </div>
+
+        {/* Ranked corrections */}
+        <div style={{ borderTop: '1px solid var(--border)', paddingTop: '12px' }}>
+          <div style={{ fontWeight: 700, color: 'var(--text-primary)', marginBottom: '8px', fontSize: '0.78rem', textTransform: 'uppercase', letterSpacing: '0.04em' }}>
+            Ranked Corrections — Applies to Both Sessions
+          </div>
+          <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
+            {[
+              {
+                rank: 1, label: 'SHOP', change: 'RF static camber: −2.75° → −3.75° (with RF caster 6°)',
+                why: 'Session B chain: static −2.75° + caster gain −0.82° + body roll −0.98° + KPI +0.02° + roll-frame +2.76° + sidewall +0.46° = −1.31° ground. To reach −2.0°: need 0.69° more negative static → target −3.44°, round to −3.5°. At 8.5° caster (Session A): target −3.25°. In both cases the static must carry the load — caster contributes ≤0.15° at this oval.',
+              },
+              {
+                rank: 2, label: 'TRACKSIDE', change: 'RF cold PSI: 36 → 41 PSI (Session B only)',
+                why: 'Session B RF running 38 PSI hot vs 43.1 PSI optimal — 5.1 PSI under-inflated, costing ~3% grip. This is a pure trackside fix. Cold target: 41 PSI at ~85°F inflation → ~45 PSI hot. Session A RF at 42 cold was nearly correct (45.8 hot vs 44.4 opt); no change needed there.',
+              },
+              {
+                rank: 3, label: 'SHOP', change: 'LF strut: FCS 1336343 (rating 9) → FCS 1336349 (rating 4) — Session B',
+                why: 'Session B front LLTD is 41.1% — 5 points below the 46% target — because LF rating 9 contributes almost nothing to front roll resistance. Matching both fronts at rating 4 (FCS 1336349) brings LLTD to ~46% and also reduces body roll, which directly reduces the RR camber problem (less roll = less positive RR ground camber).',
+              },
+              {
+                rank: 4, label: 'SHOP', change: 'RF caster: 8.5° → 5.5°–6.0° (Session A only)',
+                why: 'At 8.5° the mechanical trail is 1.49" — 0.59" above the 0.9" optimum, costing ~1.9% via steering workload. Caster camber gain at 3.77° steer is only 0.136°/°, so there is no compensating benefit. Reducing to 6° (as in Session B) brings trail to 1.09" — still slightly above optimal but acceptable. Re-measure and reset static camber after any caster change.',
+              },
+              {
+                rank: 5, label: 'SHOP', change: 'Rear shocks: KYB 555603 (rating 0) → Gabriel 69574 or Motorcraft ASH12277 (rating 3–4) — both sessions',
+                why: 'Rating 0 rears (65/35 R/C monotube) contribute 10 stiffness units of rear damper force that creates snappy transient weight transfer. More importantly: stepping to rating 3–4 reduces body roll slightly, which brings RR ground camber from +3.1° closer to 0° and reduces the outside-hot RR pattern. The loose-in/loose-out transient behaviour is also driven by the 65/35 rebound bias snapping weight transfer at both entry and exit.',
+              },
+            ].map(({ rank, label, change, why }) => (
+              <div key={rank} style={{ display: 'flex', gap: '10px', background: 'var(--bg-secondary)', borderRadius: '6px', padding: '8px 10px', alignItems: 'flex-start' }}>
+                <span style={{
+                  flexShrink: 0, width: '20px', height: '20px', borderRadius: '50%',
+                  background: rank === 1 ? 'var(--red)' : rank === 2 ? 'var(--green)' : rank === 3 ? 'var(--yellow)' : rank === 4 ? 'var(--accent)' : 'var(--text-secondary)',
+                  color: 'white', fontWeight: 700, fontSize: '0.72rem', display: 'flex', alignItems: 'center', justifyContent: 'center',
+                }}>{rank}</span>
+                <div style={{ flex: 1 }}>
+                  <div style={{ display: 'flex', gap: '8px', alignItems: 'baseline', marginBottom: '3px', flexWrap: 'wrap' }}>
+                    <span style={{ fontWeight: 700, fontSize: '0.83rem', color: 'var(--text-primary)' }}>{change}</span>
+                    <span style={{
+                      fontSize: '0.68rem', fontWeight: 700, padding: '1px 6px', borderRadius: '3px',
+                      background: label === 'TRACKSIDE' ? 'rgba(104,211,145,0.15)' : 'rgba(239,68,68,0.15)',
+                      color: label === 'TRACKSIDE' ? 'var(--green)' : 'var(--red)',
+                    }}>{label}</span>
+                  </div>
+                  <div style={{ fontSize: '0.75rem', color: 'var(--text-secondary)', lineHeight: 1.5 }}>{why}</div>
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>
+
+        <div style={{ marginTop: '12px', fontSize: '0.73rem', color: 'var(--text-secondary)', fontStyle: 'italic', borderTop: '1px solid var(--border)', paddingTop: '8px' }}>
+          Model calibration note: the prior caster coefficient (0.667°/° RF) was derived at 20° steer and applied uncorrected. On a 1/4-mile oval at ~48 mph the Ackermann steer angle is 3.77° — sin(3.77°)/sin(20°) = 0.204 — reducing the effective coefficient to 0.136°/°. This correction was validated by two independent pyrometer readings both showing outside-edge-hotter on the RF, which is only consistent with insufficient camber, not over-camber.
+        </div>
+      </div>
+
       <div className="shock-cards-grid" style={{ marginBottom: '32px' }}>
 
         <div className="shock-info-card">

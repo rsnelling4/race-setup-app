@@ -84,7 +84,7 @@ const TIPS = {
   tempFactor: 'Grip multiplier from tire temperature. These all-season tires are optimal between 100–165°F. Below 100°F the tire is cold and loses grip; above 165°F heat starts to degrade the compound.',
   camberSection: 'Camber is the inward/outward tilt of the tire. Negative camber tilts the top of the tire inward. The outside front (RF in a left turn) needs negative camber to stay flat on the road under cornering load.',
   staticCamber: 'Your static alignment setting in degrees. Negative = top of tire tilted inward toward the car. This is what you set in the garage.',
-  casterGain: 'Combined dynamic camber change from three sources: (1) Caster geometry — RF gains negative camber (0.667°/deg caster, measured), LF gains positive (0.167°/deg, measured). (2) SLA body roll — RF gains negative in jounce (0.355°/° roll, measured), LF gains positive in droop (0.547°/° roll, measured). (3) KPI (kingpin inclination 9.5°) — adds +0.14° positive camber to RF, −0.14° to LF at ~10° steer. Formula: KPI_deg × (1 − cos(steer)).',
+  casterGain: 'Combined dynamic camber change from three sources: (1) Caster geometry — RF gains negative camber (0.136°/° caster at 3.77° apex steer), LF gains positive (0.034°/°). Calibrated at 20° steer then scaled by sin(3.77°)/sin(20°) = 0.204 for actual short-oval steer angle. (2) SLA body roll — RF gains negative in jounce (0.355°/° roll, measured), LF gains positive in droop (0.547°/° roll, measured). (3) KPI (kingpin inclination 9.5°) — adds +0.02° positive camber to RF, −0.02° to LF at 3.77° steer. Formula: KPI_deg × (1 − cos(steer)).',
   effectiveCamber: 'Chassis-relative effective camber at mid-corner: static setting plus caster gain, SLA body-roll gain, and KPI-induced camber. This is the angle relative to the car body — not the same as tire-to-road angle.',
   groundCamber: 'Tire-to-road angle at mid-corner — the contact patch metric. Accounts for body roll rotating the chassis: outside tire\'s ground camber = effective + cornerRoll; inside = effective − cornerRoll. This is what actually determines how the contact patch loads.',
   idealCamber: {
@@ -383,13 +383,19 @@ function BalanceGauge({ frontGripPct, frontLLTD, springLLTD, corners, setup }) {
 //   LF (inside):  idealGround = +0.75° → small positive ground angle: camber thrust > contact patch loss
 // rollCoeff 0.355 = 1.1° camber gain / 3.1° body roll (measured: 1.7" wheel disp × 0.65°/in)
 // Droop coeff measured 2026-04-22: avg 0.547°/° roll (was estimated 0.15)
-// Caster coefficients measured 2026-04-22 at 20° steer (caster confirmed at same time):
-//   RF: 2.0° gain at 20° steer / 3.0° caster = 0.667°/°caster
-//   LF: 1.5° gain at 20° steer / 9.0° caster = 0.167°/°caster
+//
+// Caster coefficients — calibrated at 20° steer then scaled to actual oval apex steer angle.
+//   Ackermann steer at apex: atan(wheelbase 114.7" / racing line radius 1740") = 3.77°
+//   Scaling factor: sin(3.77°) / sin(20°) = 0.0658 / 0.342 = 0.204
+//   RF: 2.0° gain at 20° steer / 3.0° caster = 0.667°/° × 0.204 = 0.136°/°caster
+//   LF: 1.5° gain at 20° steer / 9.0° caster = 0.167°/° × 0.204 = 0.034°/°caster
+// Pyrometer validation (April 2026, two sessions): outside-edge-hotter RF in both sessions
+// confirmed insufficient camber at −1.3° to −1.4° ground — consistent with 0.136 coefficient,
+// not the old 0.667 which would have predicted over-camber.
 const IDEAL_GROUND = { RF: -2.0, LF: 0.75 }; // ° ground camber targets (must match raceSimulation.js)
 const CALC = {
-  RF: { outside: true,  casterCoeff: 0.667, rollCoeff: 0.355  },
-  LF: { outside: false, casterCoeff: 0.167, rollCoeff: 0.547  },
+  RF: { outside: true,  casterCoeff: 0.136, rollCoeff: 0.355  },
+  LF: { outside: false, casterCoeff: 0.034, rollCoeff: 0.547  },
 };
 const OVAL_RACING_G_CALC = 0.813; // instantaneous apex G — must match raceSimulation.js OVAL_RACING_G
 
@@ -1030,8 +1036,10 @@ export default function SetupOptimizer({ setup, setSetup, ambient, setAmbient, i
 
       <div className="sim-disclaimer">
         <strong>Model note:</strong> Analysis uses steady-state equilibrium temperatures.
-        Camber recommendations use caster-induced dynamic camber gain of 0.667°/deg (RF) and 0.167°/deg (LF, measured 2026-04-22)
-        from caster × sin(~10° steer). Caster grip score is based on mechanical trail
+        Camber recommendations use caster-induced dynamic camber gain of 0.136°/° (RF) and 0.034°/° (LF) — calibrated
+        at 20° steer and scaled to the actual oval apex steer angle of 3.77° (Ackermann: atan(114.7"/1740") = 3.77°).
+        Pyrometer-validated April 2026: two sessions both showed RF outside-edge-hotter, confirming insufficient camber
+        at −1.3° to −1.4° ground — matching the 0.136 coefficient. Caster grip score is based on mechanical trail
         (R × sin(caster) − scrub × cos(caster)) — RF sweet spot ~0.9" trail (~5–6°), LF optimal low (~0.3–0.5").
         All display scores match the lap time model exactly. Always verify camber with real pyrometer data.
       </div>

@@ -96,19 +96,24 @@ function buildPrompt(event, selectedSessions, geoProfiles) {
     ``,
     `  CAMBER CHAIN (RF ground camber = what the tire actually sees at the contact patch):`,
     `    Ground camber = static + caster gain + body roll (SLA jounce) + KPI + roll-frame + sidewall compliance`,
-    `    Caster gain (RF): −0.667°/° of caster (measured). At 3° caster = −2.0° gain; at 5.5° = −3.67°.`,
-    `    Body roll (RF): −0.355°/° of roll. At 1.26° roll = −0.45°.`,
-    `    KPI (RF): +0.144° at apex steer (works against you on the outside tire).`,
+    `    Caster gain (RF): −0.136°/° of caster at actual oval apex steer (3.77°). At 6° caster = −0.82°; at 8.5° = −1.15°.`,
+    `    CRITICAL: caster camber gain is tiny on a short oval. Steer angle is only 3.77° (Ackermann at 145 ft radius).`,
+    `    The old coefficient (0.667°/°) was calibrated at 20° steer — wrong for this track. Pyrometer-validated April 2026.`,
+    `    Body roll (RF): −0.355°/° of roll (SLA jounce, measured).`,
+    `    KPI (RF): +0.02° at apex steer (negligible at 3.77° steer).`,
     `    Sidewall compliance: +0.000342°/lb load — at RF ~1400 lbs = +0.48° positive camber added (always works against you).`,
     `    Roll frame conversion (RF outside): adds body roll angle to convert chassis→ground frame.`,
-    `    Model ideal ground camber for RF: −2.0°. Every degree short of that costs ~1.75% grip.`,
+    `    Model ideal ground camber for RF: −2.0°. Every degree short of that costs ~1.75% grip (load-weighted).`,
     `    Over-camber penalty: ~1.0%/° (less severe than insufficient camber).`,
+    `    Both April 2026 sessions: RF outside edge hotter = insufficient camber. Ground camber was −1.3° to −1.4°, not −2.0°.`,
+    `    Fix is more static negative camber, NOT more caster. Caster contributes almost nothing at this oval.`,
     ``,
     `  CASTER — two independent effects on RF grip:`,
-    `    1. Camber gain: more caster = more dynamic negative camber at apex (see chain above).`,
+    `    1. Camber gain: only 0.136°/° on this short oval (3.77° apex steer). Nearly negligible.`,
+    `       All camber must come from static. Target static ≈ −3.25° to −3.5° RF with typical 6–8° caster.`,
     `    2. Mechanical trail: trail = tire_radius × sin(caster) − scrub × cos(caster).`,
-    `       Optimal trail ≈ 0.9". At 3° caster = 0.44" (below peak). At 5.5° = 0.97" (peak, ~2% bonus).`,
-    `       Above 1.5" trail the steering effort penalty starts to cut into the benefit.`,
+    `       Optimal trail ≈ 0.9". At 5.5° caster = 0.97" (near peak). At 8.5° = 1.49" (above peak, −1.9% workload penalty).`,
+    `       Above 1.5" trail the steering effort penalty exceeds the camber benefit at oval speeds.`,
     ``,
     `  PRESSURE — load-proportional optimal: optHotPsi = 30 × (cornerLoad / avgLoad).`,
     `    avgLoad = 925 lbs (3700/4). RF corner load ~1400 lbs → opt ~45 PSI hot.`,
@@ -244,12 +249,13 @@ function buildPrompt(event, selectedSessions, geoProfiles) {
   lines.push(``);
   lines.push(`RF CONTACT PATCH CHAIN (do this numerically for every session):`);
   lines.push(`  1. Start from the static RF camber that was run.`);
-  lines.push(`  2. Add caster gain (−0.667°/° of RF caster).`);
-  lines.push(`  3. Add body roll contribution (use model ground camber value if available).`);
-  lines.push(`  4. State the estimated RF ground camber vs the −2.0° ideal. Calculate the grip penalty in %.`);
-  lines.push(`  5. State measured hot RF PSI vs model-optimal. Calculate the PSI delta and grip penalty (0.6%/PSI).`);
+  lines.push(`  2. Add caster gain: RF caster × −0.136°/° (short oval, 3.77° apex steer — NOT 0.667°, that is a road course value).`);
+  lines.push(`  3. Add body roll SLA jounce: cornerRoll × −0.355°. Add KPI: +0.02°. Add roll-frame: +cornerRoll. Add sidewall: ~+0.47°.`);
+  lines.push(`  4. State the RF ground camber vs −2.0° ideal. Outside-hotter pyro = insufficient camber. Inside-hotter = over-camber.`);
+  lines.push(`  5. State measured hot RF PSI vs model-optimal (optHotPsi = 30 × cornerLoad/925). Calculate PSI delta and grip penalty (0.6%/PSI).`);
   lines.push(`  6. Interpret RF pyrometer zones: which zone is hottest? What does that pattern indicate (over/under camber, over/under pressure)?`);
-  lines.push(`  7. Do the pyrometer pattern and the physics model agree? If not, flag the discrepancy and explain.`);
+  lines.push(`  7. Do the pyrometer pattern and the physics model agree? If not, state which is the ground truth and correct the other.`);
+  lines.push(`  NOTE: on this short oval, caster contributes only ~0.1–1.2° of camber gain total. Static camber carries all the load.`);
   lines.push(``);
   lines.push(`HANDLING DIAGNOSIS:`);
   lines.push(`  - Name the primary handling condition (push/understeer, loose/oversteer, tight entry, loose exit, etc.).`);
