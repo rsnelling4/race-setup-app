@@ -4559,6 +4559,100 @@
 .td-phys-val { font-size: 0.9rem; font-weight: 700; color: var(--text-primary); }
 .td-phys-sub { font-size: 0.72rem; font-weight: 400; color: var(--text-secondary); }
 
+/* Per-corner contact patch table */
+.td-phys-corner-table {
+  margin-top: 12px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  border-top: 1px solid var(--border);
+  padding-top: 10px;
+}
+.td-phys-corner-heading {
+  font-size: 0.7rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: var(--text-secondary);
+  margin-bottom: 2px;
+}
+.td-phys-rec-total { font-weight: 400; text-transform: none; color: var(--green); letter-spacing: 0; }
+.td-phys-corner-row {
+  display: flex;
+  gap: 10px;
+  align-items: flex-start;
+  padding: 6px 8px;
+  border-radius: 5px;
+  background: var(--bg-secondary, rgba(255,255,255,0.03));
+}
+.td-phys-corner-pos {
+  font-weight: 700;
+  font-size: 0.85rem;
+  min-width: 30px;
+  padding-top: 2px;
+  color: var(--text-primary);
+}
+.td-phys-corner-detail {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  flex: 1;
+  min-width: 0;
+}
+.td-phys-detail-line {
+  display: flex;
+  gap: 8px;
+  align-items: baseline;
+  font-size: 0.78rem;
+  flex-wrap: wrap;
+}
+.td-phys-detail-key {
+  font-weight: 600;
+  color: var(--text-secondary);
+  min-width: 80px;
+  flex-shrink: 0;
+}
+.td-phys-detail-val {
+  color: var(--text-primary);
+  font-variant-numeric: tabular-nums;
+  line-height: 1.5;
+}
+.td-phys-chain { flex-direction: column; gap: 2px; }
+.td-phys-chain-val { font-size: 0.76rem; line-height: 1.6; word-break: break-word; }
+
+/* Optimal setup recommendations */
+.td-phys-recs {
+  border-top: 1px solid var(--border);
+  padding-top: 10px;
+  margin-top: 4px;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+.td-phys-rec-row {
+  display: grid;
+  grid-template-columns: 20px 110px 130px 60px 1fr;
+  gap: 4px 8px;
+  font-size: 0.78rem;
+  align-items: baseline;
+  padding: 4px 6px;
+  border-radius: 4px;
+  background: var(--bg-secondary, rgba(255,255,255,0.02));
+}
+.td-phys-rec-rank { color: var(--text-secondary); font-weight: 600; }
+.td-phys-rec-param { font-weight: 700; color: var(--text-primary); }
+.td-phys-rec-change { color: #a78bfa; font-variant-numeric: tabular-nums; }
+.td-phys-rec-gain { font-weight: 700; font-variant-numeric: tabular-nums; }
+.td-phys-rec-detail { color: var(--text-secondary); line-height: 1.5; grid-column: 3 / -1; }
+.td-phys-rec-note { color: var(--text-secondary); font-style: italic; font-size: 0.73rem; grid-column: 2 / -1; }
+
+@media (max-width: 640px) {
+  .td-phys-rec-row { grid-template-columns: 20px 1fr 50px; }
+  .td-phys-rec-change { grid-column: 2; }
+  .td-phys-rec-detail { grid-column: 1 / -1; }
+  .td-phys-rec-note { grid-column: 1 / -1; }
+}
+
 /* AI results */
 .td-ai-results { margin-top: 20px; }
 .td-ai-text {

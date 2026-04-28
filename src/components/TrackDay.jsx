@@ -218,7 +218,8 @@ function buildPrompt(event, selectedSessions, geoProfiles) {
           ? `ground camber ${corner.groundCamber.toFixed(2)}° (ideal ${corner.idealGroundCamber?.toFixed(2) ?? '—'}°)${corner.optStaticCamber != null ? `, opt static ${corner.optStaticCamber.toFixed(2)}°` : ''}`
           : '';
         const psiStr = `hot PSI ${corner.hp?.toFixed(1)} (opt ${corner.optHotPsi?.toFixed(1)}, rec cold ${corner.recColdPsi?.toFixed(1)})`;
-        lines.push(`    ${pos}: grip ${corner.grip?.toFixed(1)}%  ${psiStr}  ${camberStr}`);
+        const gripPct = corner.adjustableScore != null ? (corner.adjustableScore * 100).toFixed(1) : '—';
+        lines.push(`    ${pos}: grip ${gripPct}%  ${psiStr}  ${camberStr}`);
       }
       if (physics.recommendations?.length) {
         lines.push(`    Model-ranked changes (calculated deltas vs current setup):`);
@@ -440,45 +441,140 @@ function PhysicsCard({ analysis, session, geoProfiles }) {
   const c = analysis.corners;
   const lltd = analysis.ss?.frontLLTD ?? 0;
   const lltdOk = Math.abs(lltd - 0.46) < 0.03;
+
+  // Penalty % from ideal for a given grip factor
+  const pen = (f) => f != null ? ((1 - f) * 100).toFixed(1) : '—';
+  const sign = (v) => v >= 0 ? `+${v.toFixed(2)}` : v.toFixed(2);
+
   return (
     <div className="td-physics-card">
       <div className="td-physics-title">
         {session.name || 'Session'}
         <span className="td-physics-car">{carLabel(session, geoProfiles)}</span>
       </div>
+
+      {/* Summary row */}
       <div className="td-physics-grid">
         <div className="td-phys-item">
           <span className="td-phys-label">Est. Lap</span>
           <span className="td-phys-val">{analysis.lapTime?.toFixed(3)}s</span>
         </div>
         <div className="td-phys-item">
+          <span className="td-phys-label">Opt. Lap</span>
+          <span className="td-phys-val" style={{ color: 'var(--green)' }}>
+            {analysis.optLapTime?.toFixed(3)}s
+            <span className="td-phys-sub">−{analysis.totalGain?.toFixed(3)}s avail</span>
+          </span>
+        </div>
+        <div className="td-phys-item">
           <span className="td-phys-label">Front LLTD</span>
           <span className="td-phys-val" style={{ color: lltdOk ? 'var(--green)' : 'var(--yellow)' }}>
             {(lltd * 100).toFixed(1)}%
+            <span className="td-phys-sub">target 46%</span>
           </span>
         </div>
+      </div>
+
+      {/* Per-corner camber chain + PSI breakdown */}
+      <div className="td-phys-corner-table">
+        <div className="td-phys-corner-heading">Per-Corner Contact Patch Analysis</div>
         {['RF', 'LF', 'RR', 'LR'].map(pos => {
-          const corner = c?.[pos];
-          const hp = corner?.hp;
-          const opt = corner?.optHotPsi;
-          const psiDev = hp != null && opt != null ? Math.abs(hp - opt) : 0;
-          const hasHotPsi = session?.hotPsi && Object.values(session.hotPsi).some(v => v !== '');
-          // Only show opt comparison when measured hot PSI exists OR model is significantly off target
-          const showOpt = hasHotPsi && psiDev > 1;
+          const cr = c?.[pos];
+          if (!cr) return null;
+          const gripPct = cr.adjustableScore != null ? (cr.adjustableScore * 100).toFixed(1) : '—';
+          const camberPen = cr.camberFactor != null ? pen(cr.camberFactor) : '—';
+          const psiPen = cr.psiGripFactor != null ? pen(cr.psiGripFactor) : '—';
+          const gcOk = cr.groundCamber != null && cr.idealGroundCamber != null
+            && Math.abs(cr.groundCamber - cr.idealGroundCamber) < 0.3;
+          const psiOk = cr.psiGripFactor != null && cr.psiGripFactor > 0.99;
           return (
-            <div key={pos} className="td-phys-item">
-              <span className="td-phys-label">{pos}</span>
-              <span className="td-phys-val">
-                {corner?.grip?.toFixed(0)}%
-                <span className="td-phys-sub">
-                  {hp?.toFixed(1)} hot
-                  {showOpt ? ` / ${opt?.toFixed(1)} target` : ''}
-                </span>
-              </span>
+            <div key={pos} className="td-phys-corner-row">
+              <div className="td-phys-corner-pos">{pos}</div>
+              <div className="td-phys-corner-detail">
+                {/* Grip score */}
+                <div className="td-phys-detail-line">
+                  <span className="td-phys-detail-key">Grip score</span>
+                  <span className="td-phys-detail-val" style={{ color: parseFloat(gripPct) > 95 ? 'var(--green)' : parseFloat(gripPct) > 90 ? 'var(--yellow)' : 'var(--red)' }}>
+                    {gripPct}%
+                  </span>
+                </div>
+
+                {/* Camber chain (fronts only) */}
+                {cr.front && (
+                  <div className="td-phys-detail-line td-phys-chain">
+                    <span className="td-phys-detail-key">Camber chain</span>
+                    <span className="td-phys-detail-val td-phys-chain-val">
+                      static {sign(session.setup?.camber?.[pos] ?? (pos === 'RF' ? -2.25 : 2.75))}°
+                      {cr.casterGain != null && ` + caster ${sign(cr.casterGain)}°`}
+                      {cr.bodyRollCamber != null && ` + roll ${sign(cr.bodyRollCamber)}°`}
+                      {cr.kpiCamber != null && ` + KPI ${sign(cr.kpiCamber)}°`}
+                      {cr.sidewallCamber != null && ` + SW ${sign(cr.sidewallCamber)}°`}
+                      {cr.groundCamber != null && (
+                        <span style={{ fontWeight: 700, color: gcOk ? 'var(--green)' : 'var(--yellow)' }}>
+                          {' '}= {sign(cr.groundCamber)}° ground
+                        </span>
+                      )}
+                      {cr.idealGroundCamber != null && (
+                        <span style={{ color: 'var(--text-secondary)' }}> (ideal {cr.idealGroundCamber.toFixed(1)}°, −{camberPen}% grip)</span>
+                      )}
+                    </span>
+                  </div>
+                )}
+
+                {/* Rear ground camber (body roll only) */}
+                {!cr.front && cr.groundCamber != null && (
+                  <div className="td-phys-detail-line">
+                    <span className="td-phys-detail-key">Ground camber</span>
+                    <span className="td-phys-detail-val" style={{ color: gcOk ? 'var(--green)' : 'var(--yellow)' }}>
+                      {sign(cr.groundCamber)}° (body roll only, ideal 0°, −{camberPen}% grip)
+                    </span>
+                  </div>
+                )}
+
+                {/* Optimal static camber recommendation (fronts) */}
+                {cr.front && cr.optStaticCamber != null && (
+                  <div className="td-phys-detail-line">
+                    <span className="td-phys-detail-key">Opt static</span>
+                    <span className="td-phys-detail-val" style={{ color: 'var(--green)' }}>
+                      {cr.optStaticCamber.toFixed(2)}°
+                      {cr.alignmentOutOfRange && <span style={{ color: 'var(--yellow)' }}> ⚠ beyond ±4° range</span>}
+                    </span>
+                  </div>
+                )}
+
+                {/* PSI */}
+                <div className="td-phys-detail-line">
+                  <span className="td-phys-detail-key">Pressure</span>
+                  <span className="td-phys-detail-val" style={{ color: psiOk ? 'var(--green)' : 'var(--yellow)' }}>
+                    {cr.hp?.toFixed(1)} hot / {cr.optHotPsi?.toFixed(1)} opt
+                    <span style={{ color: 'var(--text-secondary)' }}> (−{psiPen}% grip, rec cold: {Math.round(cr.recColdPsi * 2) / 2} PSI)</span>
+                  </span>
+                </div>
+              </div>
             </div>
           );
         })}
       </div>
+
+      {/* Optimal setup — ranked recommendations with lap time gains */}
+      {analysis.recs?.length > 0 && (
+        <div className="td-phys-recs">
+          <div className="td-phys-corner-heading">
+            Mathematically Optimal Setup Changes
+            <span className="td-phys-rec-total"> (total available: −{analysis.totalGain?.toFixed(3)}s)</span>
+          </div>
+          {analysis.recs.map((rec, i) => (
+            <div key={rec.id} className="td-phys-rec-row">
+              <span className="td-phys-rec-rank">#{i + 1}</span>
+              <span className="td-phys-rec-param">{rec.parameter}</span>
+              <span className="td-phys-rec-change">{rec.current} → {rec.optimal}</span>
+              <span className="td-phys-rec-gain" style={{ color: 'var(--green)' }}>−{rec.gain.toFixed(3)}s</span>
+              <span className="td-phys-rec-detail">{rec.detail}</span>
+              {rec.note && <span className="td-phys-rec-note">{rec.note}</span>}
+            </div>
+          ))}
+        </div>
+      )}
     </div>
   );
 }
@@ -513,9 +609,45 @@ function SimpleMarkdown({ text }) {
 }
 
 // ─── Per-tire temp strip ──────────────────────────────────────────────────────
-function TireStrip({ pos, data, result }) {
+function TireStrip({ pos, data, result, physicsCorner }) {
   if (!result) return null;
   const sev = result.severity;
+  const pc = physicsCorner;
+
+  // Determine if pyrometer pattern agrees with physics model
+  // RF: outside expected hotter (centrifugal load). Inside hotter = over-cambered.
+  // LF: inside expected hotter (body roll). Outside hotter = insufficient camber.
+  // Rear: solid axle, body roll determines loading.
+  let modelAgrees = null;
+  let modelNote = null;
+  if (pc?.groundCamber != null && pc?.idealGroundCamber != null) {
+    const gcDev = pc.groundCamber - pc.idealGroundCamber;
+    const insideHotter = result.camberDiff > 0; // camberDiff = inside - outside
+    if (pos === 'RF') {
+      // RF ideal: ground camber −2.0°. Too positive (insufficient neg) = outside edge overloaded.
+      if (gcDev > 0.3) {
+        // Model says insufficient negative camber → expect outside hotter (camberDiff < 0)
+        modelAgrees = !insideHotter;
+        modelNote = modelAgrees
+          ? `Pyro confirms: outside hotter — consistent with model's +${gcDev.toFixed(2)}° ground camber deficit (ideal −2.0°).`
+          : `Pyro contradicts model: inside hotter but model shows +${gcDev.toFixed(2)}° ground camber deficit (insufficient negative camber). Check static camber accuracy.`;
+      } else if (gcDev < -0.3) {
+        // Model says over-cambered → expect inside hotter (camberDiff > 0)
+        modelAgrees = insideHotter;
+        modelNote = modelAgrees
+          ? `Pyro confirms: inside hotter — consistent with model's ${gcDev.toFixed(2)}° over-camber at contact patch.`
+          : `Pyro contradicts model: outside hotter but model shows ${gcDev.toFixed(2)}° over-camber. Verify caster gain calculation with measured alignment.`;
+      } else {
+        modelNote = `Model shows RF ground camber ${pc.groundCamber.toFixed(2)}° (ideal −2.0°, within 0.3°). Pyro spread is primary indicator at this precision.`;
+      }
+    } else if (pos === 'LF') {
+      // LF: inside expected hotter (body roll overcambers in cornering). Ideal +0.75° ground.
+      if (gcDev > 0.5) {
+        modelNote = `Model: LF ground camber +${pc.groundCamber.toFixed(2)}° vs ideal +0.75° — excessive positive. Expect inside edge dominance confirmed by I>${result.inside}° vs O>${result.outside}°.`;
+      }
+    }
+  }
+
   return (
     <div className="td-tire-strip" style={{ borderLeft: `3px solid ${SEV_COLOR[sev] || SEV_COLOR.good}` }}>
       <div className="td-tire-strip-header">
@@ -532,7 +664,23 @@ function TireStrip({ pos, data, result }) {
               : ''}
           </span>
         )}
+        {/* Physics chain ground camber inline */}
+        {pc?.groundCamber != null && (
+          <span className="td-tire-ground-camber" style={{
+            color: Math.abs(pc.groundCamber - pc.idealGroundCamber) < 0.3 ? 'var(--green)' : 'var(--yellow)',
+            fontSize: '0.75em', marginLeft: 8,
+          }}>
+            ground {pc.groundCamber >= 0 ? '+' : ''}{pc.groundCamber.toFixed(2)}° / ideal {pc.idealGroundCamber.toFixed(1)}°
+            {pc.optStaticCamber != null && ` → opt static ${pc.optStaticCamber.toFixed(2)}°`}
+          </span>
+        )}
       </div>
+      {/* Model / pyro agreement note */}
+      {modelNote && (
+        <div className="td-tire-rec" style={{ color: modelAgrees === false ? 'var(--yellow)' : 'var(--text-secondary)', fontStyle: 'italic' }}>
+          {modelAgrees === false ? '⚠ ' : 'ℹ '}{modelNote}
+        </div>
+      )}
       {result.recommendations.map((rec, i) => (
         <div key={i} className="td-tire-rec">
           <SevBadge severity={rec.severity} />{rec.message}
@@ -590,7 +738,7 @@ function TireAnalysisCard({ session, geoProfiles }) {
       {/* Per-tire breakdown */}
       <div className="td-tire-strips">
         {['RF', 'LF', 'RR', 'LR'].map(pos => (
-          <TireStrip key={pos} pos={pos} data={tiresInput[pos]} result={analysis.tires[pos]} />
+          <TireStrip key={pos} pos={pos} data={tiresInput[pos]} result={analysis.tires[pos]} physicsCorner={physicsCorners?.[pos]} />
         ))}
       </div>
 
