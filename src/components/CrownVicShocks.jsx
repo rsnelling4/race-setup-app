@@ -1,4 +1,5 @@
 import { useState, useRef, useEffect } from 'react';
+import { REAR_SHOCKS, FRONT_STRUTS } from '../data/shockOptions';
 
 function Tooltip({ text }) {
   const [visible, setVisible] = useState(false);
@@ -404,56 +405,11 @@ function SpringReferenceTable() {
   );
 }
 
-function CrownVicShocks() {
-  // myRating: Claude independent analysis (10=softest, 0=stiffest)
-  //   Factors: construction type (mono vs twin-tube), intended use, brand/product line, stroke length
+function ShockTable({ data }) {
+  const [expanded, setExpanded] = useState(null);
+  const getRatingColor = (r) => r >= 7 ? 'var(--green)' : r >= 4 ? 'var(--yellow)' : 'var(--red)';
 
-  const rearShocks = [
-    { manufacturer: 'Monroe', partNumber: '5993', type: 'OESpectrum (Twin-Tube)', intendedUse: 'Base Model / LX', compressed: 12.5, extended: 21.25, stroke: 8.75, myRating: 10 },
-    { manufacturer: 'Monroe', partNumber: '210108', type: 'Restore (Twin-Tube)', intendedUse: 'Economy (Mustang)', compressed: 12.21, extended: 20.04, stroke: 7.84, myRating: 10 },
-    { manufacturer: 'Monroe', partNumber: '210149', type: 'Restore (Twin-Tube)', intendedUse: 'Base Model / LX', compressed: 12.28, extended: 20.04, stroke: 7.76, myRating: 9 },
-    { manufacturer: 'PRT', partNumber: '173898', type: 'Shock Absorber (Twin-Tube)', intendedUse: 'Base Model / LX (Mustang)', compressed: 12.21, extended: 20.04, stroke: 7.84, myRating: 8 },
-    { manufacturer: 'Motorcraft', partNumber: 'ASH24539 06+', type: 'Shock Absorber (Twin-Tube)', intendedUse: 'Standard Duty', compressed: 12.4, extended: 20.1, stroke: 7.7, rating: 8, myRating: 8 },
-    { manufacturer: 'FCS', partNumber: '341967', type: 'Shock Absorber (Twin-Tube)', intendedUse: 'Base Model / LX', compressed: 12.56, extended: 20.2, stroke: 7.64, rating: 8, myRating: 8 },
-    { manufacturer: 'Duralast', partNumber: 'TS33-31962B', type: 'Shock Absorber (Twin-Tube)', intendedUse: 'Base Model', compressed: 12.56, extended: 20.16, stroke: 7.6, rating: 8, myRating: 8 },
-    { manufacturer: 'FCS', partNumber: '341587', type: 'Shock Absorber (Twin-Tube)', intendedUse: 'GT Base / Original Ride (Mustang)', compressed: 12.2, extended: 20.08, stroke: 7.88, rating: 8, myRating: 7 },
-    { manufacturer: 'Monroe', partNumber: '5783', type: 'OESpectrum (Twin-Tube)', intendedUse: 'Original Ride Quality (Mustang)', compressed: 12.5, extended: 20.0, stroke: 7.5, rating: 8, myRating: 8 },
-    { manufacturer: 'Gabriel', partNumber: '69593', type: 'Ultra (Twin-Tube)', intendedUse: 'Convertible / Original Ride (Mustang)', compressed: 12.56, extended: 20.07, stroke: 7.51, rating: 7, myRating: 7 },
-    { manufacturer: 'Gabriel', partNumber: '69592', type: 'Ultra (Twin-Tube)', intendedUse: 'Coupe / Original Ride (Mustang)', compressed: 12.56, extended: 20.07, stroke: 7.51, rating: 7, myRating: 7 },
-    { manufacturer: 'KYB', partNumber: '349026', type: 'Excel-G (Twin-Tube)', intendedUse: 'GT Model / Original Ride (Mustang)', compressed: 12.2, extended: 20.03, stroke: 7.83, rating: 7, myRating: 7 },
-    { manufacturer: 'Gabriel', partNumber: '69575', type: 'Ultra (Twin-Tube)', intendedUse: 'Base Model / LX', compressed: 12.4, extended: 20.16, stroke: 7.76, rating: 7, myRating: 7 },
-    { manufacturer: 'KYB', partNumber: '555601', type: 'Gas-a-Just (Monotube)', intendedUse: 'Performance Upgrade', compressed: 12.92, extended: 20.09, stroke: 7.17, rating: 5, myRating: 4 },
-    { manufacturer: 'FCS', partNumber: 'DT551380', type: 'Monotube Gas Charged', intendedUse: 'Base Model', compressed: 12.99, extended: 20.0, stroke: 7.01, rating: 5, myRating: 5 },
-    { manufacturer: 'Motorcraft', partNumber: 'ASH12277 03-05', type: 'Shock Absorber (Twin-Tube)', intendedUse: 'Heavy Duty / Handling', compressed: 12.5, extended: 20.26, stroke: 7.76, rating: 4, myRating: 4 },
-    { manufacturer: 'KYB', partNumber: '554355', type: 'Gas-A-Just (Monotube)', intendedUse: 'Increased Handling (Mustang)', compressed: 12.79, extended: 20.03, stroke: 7.24, rating: 4, myRating: 3 },
-    { manufacturer: 'PRT', partNumber: '194510', type: 'Shock Absorber (Twin-Tube)', intendedUse: 'Police / Taxi', compressed: 12.28, extended: 20.04, stroke: 7.76, rating: 4, myRating: 3 },
-    { manufacturer: 'Duralast', partNumber: 'TS33-32752B', type: 'Shock Absorber (Twin-Tube)', intendedUse: 'Police / Taxi', compressed: 12.4, extended: 20.31, stroke: 7.91, rating: 3, myRating: 3 },
-    { manufacturer: 'Gabriel', partNumber: '69574', type: 'Ultra (Twin-Tube)', intendedUse: 'Police Interceptor', compressed: 12.5, extended: 20.26, stroke: 7.76, rating: 3, myRating: 3 },
-    { manufacturer: 'PRT', partNumber: '194574', type: 'Shock Absorber (Twin-Tube)', intendedUse: 'Police / Taxi', compressed: 12.99, extended: 19.88, stroke: 6.89, rating: 3, myRating: 2 },
-    { manufacturer: 'KYB', partNumber: '555603', type: 'Gas-a-Just (Monotube)', intendedUse: 'Police / Taxi', compressed: 12.92, extended: 20.09, stroke: 7.17, rating: 2, myRating: 1 },
-    { manufacturer: 'Monroe', partNumber: '550018', type: 'Magnum Severe Service (Twin-Tube)', intendedUse: 'Police / Taxi', compressed: 12.5, extended: 20.0, stroke: 7.5, rating: 1, myRating: 1 },
-    { manufacturer: 'Monroe', partNumber: '550055', type: 'Magnum Severe Service (Twin-Tube)', intendedUse: 'Police Interceptor', compressed: 12.375, extended: 20.125, stroke: 7.75, myRating: 1 },
-  ];
-
-  const frontStruts = [
-    { manufacturer: 'FCS', partNumber: '1336343', type: 'Strut Assembly (Twin-Tube)', intendedUse: 'Base Model / LX', compressed: 12.01, extended: 15.59, stroke: 3.58, myRating: 10 },
-    { manufacturer: 'PRT', partNumber: '714075', type: 'Strut Assembly (Twin-Tube)', intendedUse: 'Base Model / LX', compressed: 12.09, extended: 15.55, stroke: 3.47, myRating: 9 },
-    { manufacturer: 'Monroe', partNumber: '171346', type: 'Quick-Strut (Twin-Tube)', intendedUse: 'Base Model / LX', compressed: 12.25, extended: 15.52, stroke: 3.27, myRating: 8 },
-    { manufacturer: 'KYB', partNumber: 'SR4140', type: 'Strut-Plus (Monotube)', intendedUse: 'Base Model / LX', compressed: 12.4, extended: 15.51, stroke: 3.11, myRating: 5 },
-    { manufacturer: 'KYB', partNumber: '551600', type: 'Strut (Monotube)', intendedUse: 'Base Model / LX', compressed: 12.4, extended: 15.51, stroke: 3.11, myRating: 5 },
-    { manufacturer: 'FCS', partNumber: '1336349', type: 'Strut Assembly (Twin-Tube)', intendedUse: 'Police / Taxi', compressed: 11.85, extended: 15.94, stroke: 4.09, myRating: 4 },
-    { manufacturer: 'PRT', partNumber: '710415', type: 'Strut Assembly (Twin-Tube)', intendedUse: 'Police / Taxi', compressed: 12.28, extended: 15.71, stroke: 3.43, myRating: 3 },
-    { manufacturer: 'Monroe', partNumber: '271346', type: 'Quick-Strut (Twin-Tube)', intendedUse: 'Police / Taxi', compressed: 12.25, extended: 15.52, stroke: 3.27, myRating: 2 },
-  ];
-
-  // Rating color: 10=soft(green), 0=stiff(red)
-  const getMyRatingColor = (rating) => {
-    if (rating >= 8) return 'var(--green)';
-    if (rating >= 5) return 'var(--yellow)';
-    return 'var(--red)';
-  };
-
-  const ShockTable = ({ data }) => (
+  return (
     <div className="table-responsive">
       <table className="shock-specs-table">
         <thead>
@@ -465,27 +421,70 @@ function CrownVicShocks() {
             <th>Comp. (in)</th>
             <th>Ext. (in)</th>
             <th>Stroke (in)</th>
-            <th>Stiffness Rating (10 Soft – 0 Stiff)</th>
+            <th>Rating</th>
+            <th>R/C Split</th>
+            <th>Roles</th>
           </tr>
         </thead>
         <tbody>
-          {data.map((row, i) => (
-            <tr key={i}>
-              <td>{row.manufacturer}</td>
-              <td>{row.partNumber}</td>
-              <td>{row.type}</td>
-              <td>{row.intendedUse}</td>
-              <td>{row.compressed}</td>
-              <td>{row.extended}</td>
-              <td>{row.stroke}</td>
-              <td style={{ color: getMyRatingColor(row.myRating), fontWeight: 700 }}>{row.myRating}</td>
-            </tr>
-          ))}
+          {data.map((row, i) => {
+            const isOpen = expanded === i;
+            return (
+              <>
+                <tr key={i} style={{ cursor: row.ovalRole ? 'pointer' : 'default' }}
+                  onClick={() => setExpanded(isOpen ? null : i)}>
+                  <td>{row.manufacturer}</td>
+                  <td style={{ fontFamily: 'monospace', fontSize: '0.82rem' }}>{row.part}</td>
+                  <td>{row.type}</td>
+                  <td>{row.use}</td>
+                  <td>{row.compressed}</td>
+                  <td>{row.extended}</td>
+                  <td>{row.stroke}</td>
+                  <td style={{ color: getRatingColor(row.rating), fontWeight: 700, textAlign: 'center' }}>{row.rating}</td>
+                  <td style={{ textAlign: 'center', fontVariantNumeric: 'tabular-nums', fontSize: '0.8rem', color: 'var(--text-secondary)' }}>{row.dampingBias}</td>
+                  <td style={{ textAlign: 'center' }}>
+                    {row.ovalRole && (
+                      <button
+                        onClick={e => { e.stopPropagation(); setExpanded(isOpen ? null : i); }}
+                        style={{
+                          background: isOpen ? 'var(--accent)' : 'rgba(59,130,246,0.15)',
+                          border: 'none', borderRadius: '4px', color: isOpen ? 'white' : 'var(--accent)',
+                          fontSize: '0.72rem', fontWeight: 700, padding: '2px 8px', cursor: 'pointer',
+                        }}
+                      >{isOpen ? '▲ hide' : '▼ show'}</button>
+                    )}
+                  </td>
+                </tr>
+                {isOpen && row.ovalRole && (
+                  <tr key={`${i}-detail`} style={{ background: 'rgba(59,130,246,0.04)' }}>
+                    <td colSpan={10} style={{ padding: '10px 14px' }}>
+                      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px 24px' }}>
+                        <div>
+                          <div style={{ fontSize: '0.7rem', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.05em', color: 'var(--accent)', marginBottom: '4px' }}>
+                            Oval Role
+                          </div>
+                          <div style={{ fontSize: '0.82rem', color: 'var(--text-primary)', lineHeight: 1.5 }}>{row.ovalRole}</div>
+                        </div>
+                        <div>
+                          <div style={{ fontSize: '0.7rem', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.05em', color: '#a78bfa', marginBottom: '4px' }}>
+                            Figure 8 Role
+                          </div>
+                          <div style={{ fontSize: '0.82rem', color: 'var(--text-primary)', lineHeight: 1.5 }}>{row.f8Role}</div>
+                        </div>
+                      </div>
+                    </td>
+                  </tr>
+                )}
+              </>
+            );
+          })}
         </tbody>
       </table>
     </div>
   );
+}
 
+function CrownVicShocks() {
   return (
     <div className="shocks-reference-page">
       <div className="section-header">
@@ -624,14 +623,102 @@ function CrownVicShocks() {
 
       </div>
 
+      {/* Damping explanation */}
+      <div className="shock-cards-grid" style={{ marginBottom: '32px' }}>
+
+        <div className="shock-info-card">
+          <h4>Rebound vs. Compression</h4>
+          <div className="shock-use-table">
+            <div className="shock-use-row">
+              <span className="use-label" style={{ color: 'var(--accent)' }}>Rebound</span>
+              <span className="use-desc">Resists the shock <strong>extending</strong> — wheel dropping after a bump or body roll recovery. Controls how long a corner stays loaded after weight transfer and how fast the car returns to ride height.</span>
+            </div>
+            <div className="shock-use-row">
+              <span className="use-label" style={{ color: 'var(--yellow)' }}>Compression</span>
+              <span className="use-desc">Resists the shock <strong>compressing</strong> — wheel rising on a bump or during initial cornering load transfer. Controls how fast weight moves to a corner at turn-in.</span>
+            </div>
+          </div>
+          <p className="shock-note">Damping rates are set by internal valving (orifice size, shim stacks, gas charge). You cannot calculate them from shock lengths — stroke is travel range only.</p>
+        </div>
+
+        <div className="shock-info-card">
+          <h4>Rebound/Compression Split by Type</h4>
+          <div className="shock-use-table">
+            <div className="shock-use-row">
+              <span className="use-label" style={{ color: 'var(--green)' }}>Base Twin-Tube</span>
+              <span className="use-desc">~58% rebound / 42% compression — comfort-biased, slow return to ride height</span>
+            </div>
+            <div className="shock-use-row">
+              <span className="use-label" style={{ color: 'var(--yellow)' }}>Police Twin-Tube</span>
+              <span className="use-desc">~62% rebound / 38% compression — moderate rebound, resists body roll recovery</span>
+            </div>
+            <div className="shock-use-row">
+              <span className="use-label" style={{ color: 'var(--red)' }}>Monotube</span>
+              <span className="use-desc">~65% rebound / 35% compression — highest rebound bias; gas charge handles compression, valving emphasizes rebound control</span>
+            </div>
+            <div className="shock-use-row">
+              <span className="use-label" style={{ color: 'var(--red)' }}>Monroe Magnum</span>
+              <span className="use-desc">~63% rebound / 37% compression — police-rated twin-tube, firm overall</span>
+            </div>
+          </div>
+          <p className="shock-note">"Add rebound" on a non-adjustable shock = select a stiffer shock (lower rating) at that corner. Stiffer = more total damping = more rebound effect since rebound is always the larger share.</p>
+        </div>
+
+        <div className="shock-info-card">
+          <h4>Oval — Corner Roles</h4>
+          <div className="shock-use-table">
+            <div className="shock-use-row">
+              <span className="use-label" style={{ color: 'var(--accent)' }}>RF (outside front)</span>
+              <span className="use-desc">More rebound = RF stays planted longer under throttle = steering authority on exit. Too much = tight exit. Too little = loose entry.</span>
+            </div>
+            <div className="shock-use-row">
+              <span className="use-label" style={{ color: 'var(--accent)' }}>LF (inside front)</span>
+              <span className="use-desc">More rebound = slows body roll → raises front LLTD → tightens entry. Less = lower LLTD → loosens entry.</span>
+            </div>
+            <div className="shock-use-row">
+              <span className="use-label" style={{ color: 'var(--accent)' }}>RR (outside rear)</span>
+              <span className="use-desc">More rebound = rear stays planted = resists rotation = tighter. Less = rear rotates more freely = looser.</span>
+            </div>
+            <div className="shock-use-row">
+              <span className="use-label" style={{ color: 'var(--accent)' }}>LR (inside rear)</span>
+              <span className="use-desc">More rebound = slows roll return → raises rear LLTD → loosens. Less = inside rear extends freely → lowers rear LLTD → tightens.</span>
+            </div>
+          </div>
+        </div>
+
+        <div className="shock-info-card">
+          <h4>Figure 8 — Setup Roles</h4>
+          <p style={{ fontSize: '0.82rem', color: 'var(--text-secondary)', marginBottom: '10px', lineHeight: 1.5 }}>
+            On a figure 8, each front strut alternates inside/outside every half-lap. Corner-specific loading language doesn't apply — use symmetric fronts and focus on transition rate.
+          </p>
+          <div className="shock-use-table">
+            <div className="shock-use-row">
+              <span className="use-label" style={{ color: '#a78bfa' }}>Front rebound</span>
+              <span className="use-desc">Controls direction change speed. More rebound = slower weight transfer return = car takes longer to load up = push through crossover. Less = faster, sharper direction change.</span>
+            </div>
+            <div className="shock-use-row">
+              <span className="use-label" style={{ color: '#a78bfa' }}>Rear rebound</span>
+              <span className="use-desc">Controls crossover stability. More rebound = rear stays planted = more rotation available but must not be overdone. Too much = rear slow to settle = loose mid-transition.</span>
+            </div>
+            <div className="shock-use-row">
+              <span className="use-label" style={{ color: '#a78bfa' }}>Front compression</span>
+              <span className="use-desc">Controls initial load transfer at crossover. Too stiff = abrupt weight shift = unsettled. Too soft = sluggish turn-in bite.</span>
+            </div>
+          </div>
+        </div>
+
+      </div>
+
       <div className="shock-specs-container">
         <h3 className="section-sub-header">Rear Shocks</h3>
-        <ShockTable data={rearShocks} />
+        <p style={{ fontSize: '0.8rem', color: 'var(--text-secondary)', marginBottom: '8px' }}>Click "show" on any row to see Oval and Figure 8 setup roles for that shock.</p>
+        <ShockTable data={REAR_SHOCKS} />
       </div>
 
       <div className="shock-specs-container" style={{ marginTop: '24px' }}>
         <h3 className="section-sub-header">Front Strut &amp; Coil Spring Assemblies</h3>
-        <ShockTable data={frontStruts} />
+        <p style={{ fontSize: '0.8rem', color: 'var(--text-secondary)', marginBottom: '8px' }}>Click "show" on any row to see Oval and Figure 8 setup roles for that strut.</p>
+        <ShockTable data={FRONT_STRUTS} />
       </div>
 
       <SpringRateCalculator />
