@@ -551,7 +551,7 @@ function CrownVicShocks() {
         <div className="shock-info-card" style={{ borderLeft: '3px solid #a78bfa' }}>
           <h4 style={{ color: '#a78bfa', marginBottom: '2px' }}>Physics-Optimal — Figure 8</h4>
           <div style={{ fontSize: '0.72rem', color: 'var(--text-secondary)', marginBottom: '12px' }}>
-            Grid-searched all available shock rating combinations. Best: <strong style={{ color: 'var(--green)' }}>23.269s</strong> · LLTD <strong style={{ color: 'var(--green)' }}>49.5%</strong> · front grip <strong>95.5%</strong> per side
+            Grid-searched all available shock rating combinations. Best symmetric: <strong style={{ color: 'var(--green)' }}>23.269s</strong> · LLTD <strong style={{ color: 'var(--green)' }}>48.8%</strong> · front grip <strong>95.5%</strong> per side
           </div>
           <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '10px', marginBottom: '14px' }}>
             {[
@@ -566,14 +566,14 @@ function CrownVicShocks() {
                 role: 'Matched with LF — symmetry required so car handles identically in left and right turns. Any mismatch creates L/R lap time difference',
               },
               {
-                pos: 'LR', rating: 5, part: 'KYB 555601', type: 'Gas-a-Just Monotube', spring: '160 lbs/in (stock coil)',
+                pos: 'LR', rating: 1, part: 'Monroe 550018', type: 'Magnum Severe Service Twin-Tube', spring: '160 lbs/in (stock coil)',
                 grip: '96.2', psiGrip: '96.2', camberGrip: '100.0',
-                role: 'Moderate-firm monotube rear — multiple rear combos tie at 23.269s; rating 5 gives consistent feel both directions without fighting rotation initiation',
+                role: 'Stiff symmetric rear — matched with RR. Multiple rear combos tie at 23.269s; Monroe Magnum (rating 1) chosen as the stiffest symmetric pair available',
               },
               {
-                pos: 'RR', rating: 0, part: 'KYB 555603', type: 'Gas-a-Just Monotube — Police', spring: '160 lbs/in (stock coil)',
+                pos: 'RR', rating: 1, part: 'Monroe 550018', type: 'Magnum Severe Service Twin-Tube', spring: '160 lbs/in (stock coil)',
                 grip: '96.2', psiGrip: '96.2', camberGrip: '100.0',
-                role: 'Model top result uses asymmetric rears (LR=5/RR=0). Many symmetric rear combos also tie — LR=1/RR=1 (Monroe Magnum) is the practical symmetric alternative',
+                role: 'Matched with LR — symmetric rear ensures identical crossover behaviour in both turn directions. Car feels the same going left and right',
               },
             ].map(({ pos, rating, part, type, spring, grip, psiGrip, camberGrip, role }) => (
               <div key={pos} style={{ background: 'var(--bg-secondary)', borderRadius: '6px', padding: '8px 10px' }}>
@@ -595,7 +595,7 @@ function CrownVicShocks() {
             ))}
           </div>
           <div style={{ fontSize: '0.78rem', color: 'var(--text-secondary)', lineHeight: 1.5, borderTop: '1px solid var(--border)', paddingTop: '10px' }}>
-            <strong style={{ color: 'var(--text-primary)' }}>Key finding:</strong> F8 needs stiffer fronts (rating 2) than oval (rating 3–4) — rapid L/R direction changes demand more front rebound to control crossover weight transfer. Fronts <em>must</em> be symmetric (both rating 2). Rear is less decisive: multiple combinations tie at 23.269s. Practical symmetric option: LR=1/RR=1 (Monroe 550018 Magnum). The model-top asymmetric option (LR=5/RR=0) may feel uneven between turn directions in practice.
+            <strong style={{ color: 'var(--text-primary)' }}>Key finding:</strong> F8 needs stiffer fronts (rating 2, Monroe 271346) than oval — rapid L/R direction changes demand more front rebound to control crossover weight transfer. Both sides kept identical: LF=RF=2, LR=RR=1. Monroe Magnum rears (rating 1) are the stiffest symmetric pair available and tie with several other rear combos at 23.269s. Any front mismatch (different LF vs RF rating) would create an imbalance between left and right loops.
           </div>
         </div>
 
