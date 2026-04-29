@@ -85,9 +85,13 @@ export const VEH = {
   mass: 3700 / G,
   frontBias: 0.57,          // Ford P71 published curb weight distribution ~57/43 front-heavy
   cgHeight: 23 / 12,          // ft — stock ~22" + roll cage ~0.8" raise + battery in passenger seat
-  rollCenterHeight: 8.1 / 12, // ft — measured: SLA geometry from all 4 hardpoints (2026-04-22)
-                               //   LF IC: x=-47.2" h=20.5" → RCH 8.27". RF IC: x=-76.8" h=27.1" → RCH 7.99"
-                               //   Average 8.13" rounded to 8.1". Previously stated as 3" (Ford FSM — incorrect for this ride height.)
+  rollCenterHeight: 20.4 / 12, // ft — ESTIMATED pending upper arm inner pivot measurement
+                               //   Calculated 2026-04-29 from 4 measured hardpoints + estimated upper arm pivot:
+                               //   RF IC: 14.9" from CL, 10.2" high → RCH line intersects CL at 19.1"
+                               //   LF IC: 16.6" from CL, 10.4" high → RCH line intersects CL at 21.6"
+                               //   Average 20.4". Upper arm inner pivot assumed 13.5" (published P71 geometry) —
+                               //   UPDATE this value once upper arm inner pivot is physically measured.
+                               //   Prior value: 8.1" (2026-04-22, different geometry assumptions).
   rollCenterHeightRear: 14.5 / 12, // ft — measured: Watts link center pivot 14.5" from floor
   trackWidth: 64 / 12,        // ft — measured front (64"); rear 65.125" — using front for model
   tireRadius: 13.6 / 12,  // ft — 235/55R17: 129.25mm sidewall + 215.9mm wheel = 13.59" ✓
