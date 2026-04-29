@@ -56,6 +56,14 @@ TRACK.totalLength = 2 * TRACK.straightLength + 2 * TRACK.cornerArc;
 // LR floor 18 PSI hot (= 16 cold + 2 rise) — never run left rear below this.
 const MIN_HOT_PSI = { LF: 14, RF: 22, LR: 18, RR: 20 };
 
+// Per-corner maximum hot PSI ceilings — practical operational limits.
+// The theoretical load-optimal PSI can exceed these when the front RC is high (20.4" estimated)
+// because geometric LLTD inflates RF corner load in the model. Cap recommendations at values
+// that reflect real-world tire management on this oval. Revisit after upper arm pivot is measured
+// and RC is confirmed — if measured RC drops, the theoretical optimum will come back down.
+// Tire max rated cold = 51 PSI (XL), but hot running limit is lower due to heat buildup.
+const MAX_HOT_PSI = { LF: 32, RF: 42, LR: 30, RR: 40 };
+
 // TIME-AVERAGED LATERAL G — used for tire load, pressure target, and camber calculations.
 //
 // The tires are only cornering for a fraction of each lap; on the straights lateral G = 0.
@@ -1154,10 +1162,10 @@ export function analyzeSetup(setup, ambientTemp = 65, inflationTemp = COLD_PSI_T
     const optHotPsi = 30 * (cornerLoads[c] / avgLoad);
     const psiDev = hp - optHotPsi;
     const psiGripFactor = pressureGripFactor(hp, cornerLoads[c]);
-    // XL-rated Ironman iMove Gen3 AS 235/55R17: 51 PSI cold max → use 51 PSI as hot ceiling.
     const minHot = MIN_HOT_PSI[c] ?? 12;
-    const isPresLimited = optHotPsi < minHot || optHotPsi > 51;
-    const recHotPsi = Math.min(Math.max(minHot, optHotPsi), 51);
+    const maxHot = MAX_HOT_PSI[c] ?? 51;
+    const isPresLimited = optHotPsi < minHot || optHotPsi > maxHot;
+    const recHotPsi = Math.min(Math.max(minHot, optHotPsi), maxHot);
     const recColdPsi = recHotPsi * (inflationTemp + RANKINE) / (tEq + RANKINE);
 
     // Camber — all calculations in GROUND FRAME (tire-to-road angle)
@@ -1468,8 +1476,9 @@ export function analyzeSetupF8(setup, ambientTemp = 65, inflationTemp = COLD_PSI
     const psiDev = hp - optHotPsi;
     const psiGripFactor = pressureGripFactor(hp, load);
     const minHot = MIN_HOT_PSI[c] ?? 12;
-    const isPresLimited = optHotPsi < minHot || optHotPsi > 51;
-    const recHotPsi = Math.min(Math.max(minHot, optHotPsi), 51);
+    const maxHot = MAX_HOT_PSI[c] ?? 51;
+    const isPresLimited = optHotPsi < minHot || optHotPsi > maxHot;
+    const recHotPsi = Math.min(Math.max(minHot, optHotPsi), maxHot);
     const recColdPsi = recHotPsi * (inflationTemp + RANKINE) / (tEq + RANKINE);
 
     let effectiveCamber, idealCamber, camberDev, camberFactor;
