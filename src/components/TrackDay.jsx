@@ -104,7 +104,7 @@ function sessionToSimSetup(session) {
     const val = s.shocks[corner];
     shocks[corner] = (typeof val === 'string' && val.includes('|'))
       ? shockLabelToRating(val, corner === 'LF' || corner === 'RF')
-      : Number(val) || 4;
+      : (val != null && val !== '' ? Number(val) : 4);
   }
   return {
     shocks,
@@ -750,7 +750,10 @@ function PhysicsCard({ analysis, session, geoProfiles }) {
                 <div className="td-phys-detail-line">
                   <span className="td-phys-detail-key">Pressure</span>
                   <span className="td-phys-detail-val" style={{ color: psiOk ? 'var(--green)' : 'var(--yellow)' }}>
-                    {cr.hp?.toFixed(1)} hot / {cr.optHotPsi?.toFixed(1)} opt
+                    {cr.hp?.toFixed(1)} hot / {cr.recHotPsi?.toFixed(1)} opt
+                    {cr.isPresLimited && cr.optHotPsi != null && (
+                      <span style={{ color: 'var(--text-secondary)', fontSize: '0.85em' }}> (load-ideal {cr.optHotPsi.toFixed(0)}, capped)</span>
+                    )}
                     <span style={{ color: 'var(--text-secondary)' }}> (−{psiPen}% grip, rec cold: {Math.round(cr.recColdPsi * 2) / 2} PSI)</span>
                   </span>
                 </div>

@@ -1309,15 +1309,19 @@ export function analyzeSetup(setup, ambientTemp = 65, inflationTemp = COLD_PSI_T
     const opt = Math.round(corners[c].recColdPsi * 2) / 2;
     if (Math.abs(opt - cur) < 0.5) continue;
     const gain = testGain(s => { s.coldPsi[c] = opt; });
-    if (Math.abs(gain) < 0.003) continue;
+    if (gain < 0.003) continue; // skip zero-gain AND negative-gain (moving away from optimum)
+    const isCapped = corners[c].isPresLimited;
+    const optStr = isCapped
+      ? `load-optimal ${corners[c].optHotPsi.toFixed(0)} PSI is outside practical range — capped at ${corners[c].recHotPsi.toFixed(1)} PSI`
+      : `model optimal: ${corners[c].optHotPsi.toFixed(0)} PSI`;
     recs.push({
       id: `${c.toLowerCase()}-psi`,
       parameter: `${c} Pressure`,
       current: `${cur} PSI`, currentVal: cur,
       optimal: `${opt} PSI`, optimalVal: opt,
       gain,
-      detail: `Hot: ${corners[c].hp.toFixed(1)} PSI → target ${corners[c].recHotPsi.toFixed(1)} PSI (model optimal: ${corners[c].optHotPsi.toFixed(0)} PSI)`,
-      note: corners[c].isPresLimited ? 'Corner load is far from average — optimal pressure is outside practical range' : null,
+      detail: `Hot: ${corners[c].hp.toFixed(1)} PSI → target ${corners[c].recHotPsi.toFixed(1)} PSI (${optStr})`,
+      note: isCapped ? 'Corner load far from average — practical PSI cap applied' : null,
     });
   }
 
