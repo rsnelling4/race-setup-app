@@ -1249,6 +1249,7 @@ export function analyzeSetup(setup, ambientTemp = 65, inflationTemp = COLD_PSI_T
       hp, optHotPsi, psiDev, psiGripFactor, isPresLimited, recHotPsi, recColdPsi,
       effectiveCamber, groundCamber, idealGroundCamber, camberDev, camberFactor,
       casterGain, bodyRollCamber, kpiCamber: front ? kpiCamber : 0,
+      frameRollCamber: front ? (outside ? cornerRoll : -cornerRoll) : 0,
       dynamicGain: front ? casterGain + bodyRollCamber + kpiCamber : 0,
       casterFactor, optStaticCamber, alignmentOutOfRange,
       sidewallCamber: front ? swCamber : sidewallCamberDeg(cornerLoads[c]),

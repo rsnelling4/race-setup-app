@@ -282,11 +282,15 @@ function buildPrompt(event, selectedSessions, geoProfiles, confirmations) {
     `    and the front dominates — causes push/understeer. Flag this if you see it.`,
     `    LR FLOOR: never recommend below 16 PSI cold / ~18 PSI hot on the left rear.`,
     ``,
+    `  SHOCK SCALE — CRITICAL: Click 0 = STIFFEST. Click 10 = SOFTEST. Higher number = softer damping.`,
+    `    "Stiffen" means lower click number (e.g. Click 4 → Click 2). "Soften" means higher click number (e.g. Click 4 → Click 6).`,
+    `    NEVER say "increase click number" to mean stiffer — that is wrong. Lower number = more damping force.`,
+    ``,
     `  SHOCK STIFFNESS → LLTD → RF LOAD:`,
-    `    Front LLTD target: 46% (oval). Stiffer RF shock raises front LLTD → more RF load.`,
+    `    Front LLTD target: 46% (oval). Stiffer RF shock (lower click) raises front LLTD → more RF load.`,
     `    More RF load → higher optimal PSI → if pressure not adjusted, RF runs under-optimal.`,
     `    Stiffer RF shock also reduces body roll → less SLA jounce camber gain → RF runs more positive ground camber.`,
-    `    RF shock rebound: stiffer = front stays loaded longer on exit = more steering authority under throttle.`,
+    `    RF shock rebound: stiffer (lower click) = front stays loaded longer on exit = more steering authority under throttle.`,
     ``,
     `  PYROMETER INTERPRETATION:`,
     `    Inside/Middle/Outside zones. RF outside (wall side) expected hotter — centrifugal load is normal.`,
@@ -444,9 +448,13 @@ function buildPrompt(event, selectedSessions, geoProfiles, confirmations) {
   lines.push(`For each session, walk through the following in order:`);
   lines.push(``);
   lines.push(`RF CONTACT PATCH CHAIN (do this numerically for every session):`);
-  lines.push(`  1. Start from the static RF camber that was run.`);
-  lines.push(`  2. Add caster gain: RF caster × −0.136°/° (short oval, 3.77° apex steer — NOT 0.667°, that is a road course value).`);
-  lines.push(`  3. Add body roll SLA jounce: cornerRoll × −0.355°. Add KPI: +0.02°. Add roll-frame: +cornerRoll. Add sidewall: ~+0.47°.`);
+  lines.push(`  The physics model already calculated this chain. Use the values from the PHYSICS MODEL section directly.`);
+  lines.push(`  Chain: static + caster + SLA jounce + frame roll + KPI + sidewall = ground camber`);
+  lines.push(`  Where: SLA jounce = body roll × −0.355° (RF outside). Frame roll = +cornerRoll (chassis→ground conversion).`);
+  lines.push(`  These are two separate roll effects: SLA changes the WHEEL angle; frame roll changes the REFERENCE FRAME.`);
+  lines.push(`  1. State the static RF camber that was run.`);
+  lines.push(`  2. Caster gain: RF caster × −0.136°/° (short oval, 3.77° apex steer — NOT 0.667°, that is a road course value).`);
+  lines.push(`  3. SLA jounce (roll × −0.355°) + frame roll (+cornerRoll) + KPI (+0.02°) + sidewall (+~0.47°).`);
   lines.push(`  4. State the RF ground camber vs −2.0° ideal. Outside-hotter pyro = insufficient camber. Inside-hotter = over-camber.`);
   lines.push(`  5. State measured hot RF PSI vs model-optimal (optHotPsi = 30 × cornerLoad/925). Calculate PSI delta and grip penalty (0.6%/PSI).`);
   lines.push(`  6. Interpret RF pyrometer zones: which zone is hottest? What does that pattern indicate (over/under camber, over/under pressure)?`);
@@ -476,6 +484,9 @@ function buildPrompt(event, selectedSessions, geoProfiles, confirmations) {
   lines.push(`  - Every claim must reference an actual number from the data above.`);
   lines.push(`  - Never say "adjust camber" without specifying the direction and a target value.`);
   lines.push(`  - Never say "check pressure" without giving the delta from optimal and direction to adjust.`);
+  lines.push(`  - SHOCK SCALE: Click 0 = stiffest, Click 10 = softest. A higher click number means SOFTER damping.`);
+  lines.push(`    When describing a shock change: "stiffen" means lower click (e.g. Click 4 → Click 2).`);
+  lines.push(`    "Soften" means higher click (e.g. Click 4 → Click 6). NEVER say "increase stiffness" with a higher click number.`);
   lines.push(`  - Write for a crew chief reading this at the wall between sessions — terse, numeric, actionable.`);
 
   return lines.join('\n');
@@ -722,7 +733,8 @@ function PhysicsCard({ analysis, session, geoProfiles, onSendToOptimizer }) {
                     <span className="td-phys-detail-val td-phys-chain-val">
                       static {sign(session.setup?.camber?.[pos] ?? (pos === 'RF' ? -2.25 : 2.75))}°
                       {cr.casterGain != null && ` + caster ${sign(cr.casterGain)}°`}
-                      {cr.bodyRollCamber != null && ` + roll ${sign(cr.bodyRollCamber)}°`}
+                      {cr.bodyRollCamber != null && ` + SLA ${sign(cr.bodyRollCamber)}°`}
+                      {cr.frameRollCamber != null && cr.frameRollCamber !== 0 && ` + frame ${sign(cr.frameRollCamber)}°`}
                       {cr.kpiCamber != null && ` + KPI ${sign(cr.kpiCamber)}°`}
                       {cr.sidewallCamber != null && ` + SW ${sign(cr.sidewallCamber)}°`}
                       {cr.groundCamber != null && (
