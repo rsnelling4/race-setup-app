@@ -1,4 +1,5 @@
 import { useState } from 'react';
+import GeometryVisualizer, { GeometryTable } from './GeometryVisualizer';
 import { REAR_SHOCKS, FRONT_STRUTS, shockLabel } from '../data/shockOptions';
 import { useSync } from '../utils/SyncContext';
 
@@ -36,6 +37,7 @@ const EMPTY_GEO = {
   lowerBallJoint:  { LF: '', RF: '' },
   upperBallJoint:  { LF: '', RF: '' },
   lowerArmPivot:   { LF: '', RF: '' },
+  upperArmPivot:   { LF: '', RF: '' },
   wheelCenterHeight: '',
   droopCamber:     { LF: '', RF: '' },
   droopTravel:     { LF: '', RF: '' },
@@ -550,6 +552,15 @@ function GeoEditor({ editing, setEditing }) {
             <NumIn value={editing.lowerArmPivot.RF} onChange={v => setN('lowerArmPivot', 'RF', v)} placeholder="e.g. 9.375" step="0.125" />
           </Field>
         </div>
+        <div className="ml-row">
+          <Field label="LF upper arm inner pivot (inches)"
+            hint="Inner end of the upper control arm where it bolts to the subframe/tower. Measure pivot bolt center to floor. This is the critical measurement for computing the instant center.">
+            <NumIn value={editing.upperArmPivot?.LF ?? ''} onChange={v => setN('upperArmPivot', 'LF', v)} placeholder="e.g. 13.5 (est)" step="0.125" />
+          </Field>
+          <Field label="RF upper arm inner pivot (inches)" hint="Same as LF — right front upper arm subframe bolt center to floor.">
+            <NumIn value={editing.upperArmPivot?.RF ?? ''} onChange={v => setN('upperArmPivot', 'RF', v)} placeholder="e.g. 13.5 (est)" step="0.125" />
+          </Field>
+        </div>
         <Field label="Front wheel center height (inches)"
           hint="Measure from the center of the front hub/axle straight down to the floor. Should be approximately the tire radius (~13.5&quot; for 235/55R17).">
           <NumIn value={editing.wheelCenterHeight} onChange={v => set('wheelCenterHeight', v)} placeholder="e.g. 13.0" step="0.125" />
@@ -683,7 +694,23 @@ export function SuspensionGeometry() {
       formatFn={formatGeo}
       label="Cars"
       renderEditor={(editing, setEditing) => (
-        <GeoEditor editing={editing} setEditing={setEditing} />
+        <>
+          <GeoEditor editing={editing} setEditing={setEditing} />
+          <div style={{ padding: '16px 0 0' }}>
+            <div style={{ color: '#94a3b8', fontFamily: 'monospace', fontSize: 12, marginBottom: 8 }}>
+              LIVE GEOMETRY PREVIEW (updates as you edit)
+            </div>
+            <GeometryVisualizer geo={editing} />
+            <GeometryTable geo={editing} />
+          </div>
+        </>
+      )}
+      renderView={(item) => (
+        <>
+          <GeometryVisualizer geo={item} />
+          <GeometryTable geo={item} />
+          <pre className="ml-preview" style={{ marginTop: 16 }}>{formatGeo(item)}</pre>
+        </>
       )}
     />
   );
