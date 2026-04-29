@@ -1,5 +1,6 @@
 import { useState } from 'react';
 import GeometryVisualizer, { GeometryTable } from './GeometryVisualizer';
+import GeometryAnalysis from './GeometryAnalysis';
 import { REAR_SHOCKS, FRONT_STRUTS, shockLabel } from '../data/shockOptions';
 import { useSync } from '../utils/SyncContext';
 
@@ -702,6 +703,7 @@ export function SuspensionGeometry() {
             </div>
             <GeometryVisualizer geo={editing} />
             <GeometryTable geo={editing} />
+            <GeometryAnalysis geo={editing} />
           </div>
         </>
       )}
@@ -709,6 +711,7 @@ export function SuspensionGeometry() {
         <>
           <GeometryVisualizer geo={item} />
           <GeometryTable geo={item} />
+          <GeometryAnalysis geo={item} />
           <pre className="ml-preview" style={{ marginTop: 16 }}>{formatGeo(item)}</pre>
         </>
       )}
