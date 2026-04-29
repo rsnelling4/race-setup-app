@@ -4544,6 +4544,19 @@
   gap: 10px;
 }
 .td-results-model { font-size: 0.7rem; background: rgba(99,102,241,0.15); color: #a78bfa; border-radius: 4px; padding: 2px 7px; text-transform: none; font-weight: 600; letter-spacing: 0; }
+.td-send-optimizer-btn {
+  margin-left: auto;
+  font-size: 0.72rem;
+  font-weight: 600;
+  padding: 3px 10px;
+  border-radius: 5px;
+  border: 1px solid var(--accent);
+  background: rgba(59,130,246,0.1);
+  color: var(--accent);
+  cursor: pointer;
+  transition: background 0.15s;
+}
+.td-send-optimizer-btn:hover { background: rgba(59,130,246,0.22); }
 
 .td-physics-card {
   background: var(--bg-card);

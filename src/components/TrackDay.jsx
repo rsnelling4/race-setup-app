@@ -640,7 +640,7 @@ function SetupEditor({ setup, onChange }) {
   );
 }
 
-function PhysicsCard({ analysis, session, geoProfiles }) {
+function PhysicsCard({ analysis, session, geoProfiles, onSendToOptimizer }) {
   if (!analysis) return null;
   const c = analysis.corners;
   const lltd = analysis.ss?.frontLLTD ?? 0;
@@ -650,11 +650,23 @@ function PhysicsCard({ analysis, session, geoProfiles }) {
   const pen = (f) => f != null ? ((1 - f) * 100).toFixed(1) : '—';
   const sign = (v) => v >= 0 ? `+${v.toFixed(2)}` : v.toFixed(2);
 
+  function handleSendToOptimizer() {
+    const simSetup = sessionToSimSetup(session);
+    const ambient = Number(session.ambient) || 65;
+    const inflation = Number(session.inflationTemp) || 68;
+    onSendToOptimizer?.(simSetup, ambient, inflation);
+  }
+
   return (
     <div className="td-physics-card">
       <div className="td-physics-title">
         {session.name || 'Session'}
         <span className="td-physics-car">{carLabel(session, geoProfiles)}</span>
+        {onSendToOptimizer && (
+          <button className="td-send-optimizer-btn" onClick={handleSendToOptimizer}>
+            Open in Optimizer
+          </button>
+        )}
       </div>
 
       {/* Summary row */}
@@ -1244,7 +1256,7 @@ function PredictionConfirmCard({ session, prediction, confirmation, onChange }) 
 }
 
 // ─── Analysis panel ───────────────────────────────────────────────────────────
-function AnalysisPanel({ event, allSessions, geoProfiles, apiKey }) {
+function AnalysisPanel({ event, allSessions, geoProfiles, apiKey, onSendToOptimizer }) {
   const [selected, setSelected]         = useState(() => new Set(allSessions.map(s => s.id)));
   // phase: 'idle' | 'confirming' | 'running' | 'done' | 'error'
   const [phase, setPhase]               = useState('idle');
@@ -1418,7 +1430,7 @@ function AnalysisPanel({ event, allSessions, geoProfiles, apiKey }) {
         <div className="td-physics-results">
           <div className="td-results-heading">Physics Model Results</div>
           {physicsResults.map((res, i) => (
-            <PhysicsCard key={res.sessionId} analysis={res} session={selectedSessions[i]} geoProfiles={geoProfiles} />
+            <PhysicsCard key={res.sessionId} analysis={res} session={selectedSessions[i]} geoProfiles={geoProfiles} onSendToOptimizer={onSendToOptimizer} />
           ))}
         </div>
       )}
@@ -1512,7 +1524,7 @@ function EventEditor({ event, onChange, geoProfiles }) {
 }
 
 // ─── Main component ───────────────────────────────────────────────────────────
-export default function TrackDay() {
+export default function TrackDay({ onSendToOptimizer }) {
   const { events, setEvents, geometry: geoProfiles } = useSync();
   const [apiKey, setApiKey]     = useState(() => localStorage.getItem(APIKEY_KEY) || '');
   const [selectedIdx, setSelectedIdx] = useState(null);
@@ -1661,6 +1673,7 @@ export default function TrackDay() {
                   allSessions={editing ? editing.sessions : activeEvent.sessions}
                   geoProfiles={geoProfiles}
                   apiKey={apiKey}
+                  onSendToOptimizer={onSendToOptimizer}
                 />
               </div>
             )}

@@ -136,7 +136,16 @@ function App() {
         )}
         {activeTab === 'mathref' && <SimulationMath />}
         {activeTab === 'suggested' && <SuggestedSetup />}
-        {activeTab === 'trackday'     && <TrackDay />}
+        {activeTab === 'trackday'     && (
+          <TrackDay
+            onSendToOptimizer={(simSetup, ambientVal, inflationVal) => {
+              setSetup(simSetup);
+              if (ambientVal != null) setAmbient(ambientVal);
+              if (inflationVal != null) setInflationTemp(inflationVal);
+              selectTab('optimize');
+            }}
+          />
+        )}
         {activeTab === 'measurements' && <MeasurementLog />}
         {activeTab === 'geometry'     && <SuspensionGeometry />}
         {activeTab === 'settings'     && <Settings />}
