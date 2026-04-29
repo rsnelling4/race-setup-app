@@ -56,6 +56,47 @@ function shockLabelToRating(label, isFront) {
   return found ? found.rating : 4;
 }
 
+// Returns current shock ratings for a session's setup (0=stiffest, 10=softest)
+function sessionShockRatings(session) {
+  const s = session.setup ?? blankSetup();
+  const ratings = {};
+  for (const corner of ['LF', 'RF', 'LR', 'RR']) {
+    const val = s.shocks[corner];
+    ratings[corner] = (typeof val === 'string' && val.includes('|'))
+      ? shockLabelToRating(val, corner === 'LF' || corner === 'RF')
+      : Number(val) ?? 4;
+  }
+  return ratings;
+}
+
+// Annotates handling changes with "already at limit" if the shock is maxed out.
+// component names containing a corner code (RF, LR, etc.) are checked.
+function annotateShockLimits(changes, shockRatings) {
+  return changes.map(ch => {
+    const isStiffen = /stiffen/i.test(ch.adjustment);
+    const isSoften  = /soften/i.test(ch.adjustment);
+    if (!isStiffen && !isSoften) return ch;
+
+    // Find which corner this change targets
+    const corner = ['RF', 'LF', 'RR', 'LR'].find(c => ch.component.includes(c));
+    if (!corner || shockRatings[corner] == null) return ch;
+
+    const rating = shockRatings[corner];
+    const isFront = corner === 'LF' || corner === 'RF';
+    const list = isFront ? FRONT_STRUTS : REAR_SHOCKS;
+    const minRating = Math.min(...list.map(s => s.rating)); // stiffest available
+    const maxRating = Math.max(...list.map(s => s.rating)); // softest available
+
+    if (isStiffen && rating <= minRating) {
+      return { ...ch, atLimit: true, limitNote: `already at stiffest available option (rating ${rating})` };
+    }
+    if (isSoften && rating >= maxRating) {
+      return { ...ch, atLimit: true, limitNote: `already at softest available option (rating ${rating})` };
+    }
+    return ch;
+  });
+}
+
 function sessionToSimSetup(session) {
   const s = session.setup ?? blankSetup();
   const shocks = {};
@@ -727,8 +768,12 @@ function TireAnalysisCard({ session, geoProfiles }) {
   }
 
   const analysis = analyzeFullCar(tiresInput, physicsCorners);
-  const handling = (session.condition && session.phase)
+  const shockRatings = sessionShockRatings(session);
+  const handlingRaw = (session.condition && session.phase)
     ? getHandlingRecommendations(session.condition, session.phase)
+    : null;
+  const handling = handlingRaw
+    ? { ...handlingRaw, changes: annotateShockLimits(handlingRaw.changes, shockRatings) }
     : null;
 
   const condLabel = handlingConditions.find(c => c.value === session.condition)?.label || '';
@@ -780,9 +825,15 @@ function TireAnalysisCard({ session, geoProfiles }) {
           <div className="td-handling-desc">{handling.description}</div>
           <div className="td-handling-changes">
             {handling.changes.map((ch, i) => (
-              <div key={i} className="td-change-row">
+              <div key={i} className={`td-change-row${ch.atLimit ? ' td-change-row--at-limit' : ''}`}>
                 <span className="td-change-component">{ch.component}</span>
-                <span className="td-change-action">{ch.adjustment}</span>
+                {ch.atLimit
+                  ? <span className="td-change-action td-change-action--at-limit">
+                      {ch.adjustment}
+                      <span className="td-change-at-limit-badge">⚠ {ch.limitNote} — try the opposite corner instead</span>
+                    </span>
+                  : <span className="td-change-action">{ch.adjustment}</span>
+                }
                 <span className="td-change-effect">{ch.effect}</span>
               </div>
             ))}

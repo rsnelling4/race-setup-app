@@ -719,7 +719,7 @@ export function getHandlingRecommendations(condition, phase) {
         { component: 'RF Shock (Compression)', adjustment: 'Soften RF compression', effect: 'Reduces front roll stiffness — lowers front LLTD so the RF stays more evenly loaded through sustained cornering' },
         { component: 'RR Shock (Compression)', adjustment: 'Stiffen RR compression', effect: 'Increases rear LLTD — the rear reaches its grip limit before the front, which rotates the car more freely' },
         { component: 'RF Camber', adjustment: 'Add 0.25° negative camber to RF', effect: 'Improves RF contact patch through the corner, helping the front grip in sustained lateral load' },
-        { component: 'Tire Pressure', adjustment: 'Move RF toward physics-optimal hot PSI · Move LF toward physics-optimal hot PSI · Move RR toward physics-optimal hot PSI', effect: 'Compare hot PSI measured vs physics-optimal shown in session data. RF: if over optimal, lower cold PSI — over-pressure stiffens contact patch and causes push; if under, raise it. RR: move toward optimal so RR reaches grip limit sooner, encouraging rotation. LF: move toward optimal to balance inside front grip.' },
+        { component: 'Tire Pressure', adjustment: 'RF: move toward physics-optimal · LF: move toward physics-optimal · RR: do not reduce significantly', effect: 'RF: if over optimal, lower cold PSI — over-pressure stiffens contact patch and causes push; if under, raise it. LF: move toward optimal to balance inside front grip. RR: the model optimal may be unreliable if front RC is estimated — do not cut RR pressure more than 2 PSI at a time. A large RF-to-RR pressure spread tightens the car further. Verify RR pyrometer shows even I/M/O spread before adjusting.' },
       ]
     },
     tight_exit: {
