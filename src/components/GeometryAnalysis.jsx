@@ -4,6 +4,10 @@ import { computeGeometry } from './GeometryVisualizer';
 // ─── Constants ────────────────────────────────────────────────────────────────
 const P71_LOWER_ARM_LENGTH = 13.0;
 const P71_UPPER_ARM_LENGTH = 9.5;
+const P71_KPI              = 9.5;    // kingpin inclination °
+const P71_WHEEL_OFFSET     = 1.75;  // " — factory wheel offset
+const P71_FRONT_AXLE_FRAC  = 0.57;  // front weight fraction
+const P71_TOTAL_WEIGHT     = 3700;  // lbs
 
 // Oval-specific targets derived from session data and physics model
 const OVAL = {
@@ -70,11 +74,7 @@ export function analyzeGeometry(geo) {
   const armRatio = P71_UPPER_ARM_LENGTH / P71_LOWER_ARM_LENGTH; // 0.731
 
   // ── Scrub radius ──────────────────────────────────────────────────────────
-  // Scrub = wheel_center_height * tan(KPI) - wheel_offset
-  // P71 KPI ~9.5°, wheel offset ~1.75"
-  const kpi = 9.5;
-  const wheelOffset = 1.75;
-  const scrubRadius = wh * Math.tan(kpi * Math.PI / 180) - wheelOffset;
+  const scrubRadius = wh * Math.tan(P71_KPI * Math.PI / 180) - P71_WHEEL_OFFSET;
 
   // ── Asymmetry analysis ────────────────────────────────────────────────────
   const bjAsymmetry     = num(geo.lowerBallJoint?.LF || 7.75) - num(geo.lowerBallJoint?.RF || 6.75);
@@ -85,12 +85,11 @@ export function analyzeGeometry(geo) {
   const rcDiff = rcAvg != null ? rcAvg - rearRC : null; // positive = front higher
 
   // ── Geometric LLTD estimate ───────────────────────────────────────────────
-  // geoLLTD_front = (frontAxleWeight * lateralG * frontRCH) / (totalWeight * lateralG * trackWidth/12)
-  const frontAxleWeight = 3700 * 0.57;
-  const rearAxleWeight  = 3700 * 0.43;
+  const frontAxleWeight = P71_TOTAL_WEIGHT * P71_FRONT_AXLE_FRAC;
+  const rearAxleWeight  = P71_TOTAL_WEIGHT * (1 - P71_FRONT_AXLE_FRAC);
   const trackFt         = trackWidthF / 12;
-  const geoLLTDF = rcAvg  != null ? (frontAxleWeight * OVAL.trackG * rcAvg  / 12) / (3700 * OVAL.trackG * trackFt) : null;
-  const geoLLTDR =                   (rearAxleWeight  * OVAL.trackG * rearRC / 12) / (3700 * OVAL.trackG * trackFt);
+  const geoLLTDF = rcAvg  != null && trackFt > 0 ? (frontAxleWeight * OVAL.trackG * rcAvg  / 12) / (P71_TOTAL_WEIGHT * OVAL.trackG * trackFt) : null;
+  const geoLLTDR = trackFt > 0                   ? (rearAxleWeight  * OVAL.trackG * rearRC / 12) / (P71_TOTAL_WEIGHT * OVAL.trackG * trackFt) : 0;
 
   return {
     rf, lf, halfTrack, trackWidthF, trackWidthR, wh,
@@ -528,7 +527,7 @@ export default function GeometryAnalysis({ geo }) {
             fixMethod="Scrub radius is effectively fixed on the P71 — KPI is cast into the spindle and cannot be changed. Wheel offset (spacers or different-offset aftermarket wheels) can modify it: a wider wheel (more positive offset) reduces scrub radius. However, NASCAR/oval rules often restrict wheel modifications. Do not change scrub radius unless handling specifically indicates a scrub-related issue (heavy steering, tire fight under braking)."
           />}
         >
-          Calculated scrub radius: {a.scrubRadius.toFixed(3)}" = (wheel center {a.wh.toFixed(2)}" × tan({kpi}° KPI)) − {wheelOffset}" wheel offset = {(a.wh * Math.tan(kpi * Math.PI / 180)).toFixed(3)}" − {wheelOffset}". A positive scrub radius means the tire contact patch is outboard of the kingpin projected axis — the wheel tends to toe-in under braking (stabilizing). At {a.scrubRadius.toFixed(2)}" it is {a.scrubRadius < 1.5 ? 'within the low-scrub range typical of P71 geometry — steering will be light and self-centering.' : 'moderate — steering feel should be adequate.'}
+          Calculated scrub radius: {a.scrubRadius.toFixed(3)}" = (wheel center {a.wh.toFixed(2)}" × tan({P71_KPI}° KPI)) − {P71_WHEEL_OFFSET}" wheel offset = {(a.wh * Math.tan(P71_KPI * Math.PI / 180)).toFixed(3)}" − {P71_WHEEL_OFFSET}". A positive scrub radius means the tire contact patch is outboard of the kingpin projected axis — the wheel tends to toe-in under braking (stabilizing). At {a.scrubRadius.toFixed(2)}" it is {a.scrubRadius < 1.5 ? 'within the low-scrub range typical of P71 geometry — steering will be light and self-centering.' : 'moderate — steering feel should be adequate.'}
         </Finding>
 
         <Finding
@@ -589,7 +588,7 @@ export default function GeometryAnalysis({ geo }) {
           />}
         >
           {a.momentArm != null
-            ? `With a ${a.momentArm.toFixed(2)}" moment arm, the body rolls only ${(a.momentArm / a.momentArm * OVAL.trackG * OVAL.bodyRollPerG * (a.momentArm / OVAL.cgHeight)).toFixed(2)}° at apex (estimated). The P71's 29.5mm front ARB has an estimated roll stiffness of ~40,500 lb-ft/rad. At this roll angle, ARB load transfer ≈ ${(40500 * (OVAL.trackG * OVAL.bodyRollPerG * (a.momentArm / OVAL.cgHeight) * Math.PI / 180) / (a.trackWidthF / 12)).toFixed(0)} lbs — compared to the ${(frontAxleWeight * OVAL.trackG).toFixed(0)} lbs of total front lateral force. The ARB is contributing approximately ${(((40500 * (OVAL.trackG * OVAL.bodyRollPerG * (a.momentArm / OVAL.cgHeight) * Math.PI / 180) / (a.trackWidthF / 12)) / (frontAxleWeight * OVAL.trackG)) * 100).toFixed(1)}% of front LLTD from elastic transfer.`
+            ? `With a ${a.momentArm.toFixed(2)}" moment arm, the body rolls only ${(OVAL.trackG * OVAL.bodyRollPerG * (a.momentArm / OVAL.cgHeight)).toFixed(2)}° at apex (estimated). The P71's 29.5mm front ARB has an estimated roll stiffness of ~40,500 lb-ft/rad. At this roll angle, ARB load transfer ≈ ${(40500 * (OVAL.trackG * OVAL.bodyRollPerG * (a.momentArm / OVAL.cgHeight) * Math.PI / 180) / (a.trackWidthF / 12 || 1)).toFixed(0)} lbs — compared to the ${(P71_TOTAL_WEIGHT * P71_FRONT_AXLE_FRAC * OVAL.trackG).toFixed(0)} lbs of total front lateral force. The ARB is contributing approximately ${(((40500 * (OVAL.trackG * OVAL.bodyRollPerG * (a.momentArm / OVAL.cgHeight) * Math.PI / 180) / (a.trackWidthF / 12 || 1)) / (P71_TOTAL_WEIGHT * P71_FRONT_AXLE_FRAC * OVAL.trackG)) * 100).toFixed(1)}% of front LLTD from elastic transfer.`
             : 'Requires RC height to compute.'}
         </Finding>
       </Section>
