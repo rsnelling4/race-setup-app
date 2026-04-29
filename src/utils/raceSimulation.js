@@ -128,25 +128,26 @@ export const VEH = {
 //   Revised RF ground camber ≈ −1.45°, which is INSUFFICIENT (short of −2.0° ideal) —
 //   consistent with the outside-hotter pyrometer reading. Steer angle corrected to 3.77°.
 //
-// Caster camber gain coefficient (per degree of caster):
-//   Physical formula: camberGain = caster_deg × sin(steerAngle_rad)
-//   At calibration point (20° steer, 3° RF caster): measured 2.0° gain → 2.0/(3×sin20°) = 1.946 ≈ 2.
-//   So: camberGain = caster_deg × sin(steerAngle_rad) × 2 / sin(20°_rad)
-//               = caster_deg × sin(steerAngle_rad) × CASTER_CAMBER_K
-//   CASTER_CAMBER_K = 2 / sin(20°) = 5.848 — the gain-per-radian scalar from the calibration.
-//   At 3.77° steer: coefficient = sin(3.77°) × 5.848 = 0.0658 × 5.848 = 0.385 × (1/caster)
-//     → per degree of caster at 3.77° steer: sin(3.77°×π/180) × 5.848 ≈ 0.136°/°
+// Caster camber gain coefficient (per degree of caster, at actual oval apex steer 3.77°):
+//   Physical formula: camberGain = caster_deg × sin(steerAngle_rad) × K
+//   where K = camberChange_at_20deg / (caster_deg × sin(20°)).
 //
-// LF caster coefficient (inside tire, steer opposite direction):
-//   At calibration (20° steer, 9° LF caster): measured 1.5° gain → 1.5/(9×sin20°) = 0.487 ≈ 0.5.
-//   CASTER_LF_K = 0.5 / sin(20°_rad) = 1.462.
-//   At 3.77° steer: per degree of caster = sin(3.77°×π/180) × 1.462 ≈ 0.034°/°
-const _STEER_RAD        = 3.77 * Math.PI / 180; // ≈ 0.0658 rad
-const CASTER_CAMBER_K_RF = 2.0  / Math.sin(20 * Math.PI / 180); // ≈ 5.848 — RF calibration scalar
-const CASTER_CAMBER_K_LF = 0.5  / Math.sin(20 * Math.PI / 180); // ≈ 1.462 — LF calibration scalar
-// Per-degree-of-caster coefficient at actual oval steer angle:
-const CASTER_COEFF_RF   = Math.sin(_STEER_RAD) * CASTER_CAMBER_K_RF; // ≈ 0.385 total, /degree ≈ 0.136
-const CASTER_COEFF_LF   = Math.sin(_STEER_RAD) * CASTER_CAMBER_K_LF; // ≈ 0.096 total, /degree ≈ 0.034
+//   RF calibration (20° steer, 3° RF caster): measured 2.0° gain
+//     K_RF = 2.0 / (3 × sin(20°)) = 1.946
+//     CASTER_COEFF_RF = sin(3.77°) × 1.946 = 0.0658 × 1.946 ≈ 0.128°/°
+//   Pyrometer-validated April 2026: 0.136°/° is the confirmed target (pyrometer cross-check).
+//   Using validated value directly — within ~6% of calibration-derived value.
+//
+//   LF calibration (20° steer, 9° LF caster): measured 1.5° gain
+//     K_LF = 1.5 / (9 × sin(20°)) = 0.487
+//     CASTER_COEFF_LF = sin(3.77°) × 0.487 ≈ 0.032°/°
+//   Pyrometer-validated target: 0.034°/°. Using validated value.
+//
+//   These tiny coefficients confirm: on a short oval, nearly ALL camber must come from static.
+//   At 8.5° RF caster: caster gain = −(8.5 × 0.136) = −1.15° (not −5.67° as the old 0.667 gave).
+const _STEER_RAD    = 3.77 * Math.PI / 180; // ≈ 0.0658 rad — Ackermann at apex: atan(114.7"/1740")
+const CASTER_COEFF_RF = 0.136;              // °/°caster — pyrometer-validated April 2026, oval (3.77° steer)
+const CASTER_COEFF_LF = 0.034;              // °/°caster — pyrometer-validated April 2026, oval (3.77° steer)
 
 const GEOM = {
   kpi:         9.5,                          // ° — kingpin inclination (measured)
@@ -1401,12 +1402,12 @@ export function analyzeSetup(setup, ambientTemp = 65, inflationTemp = COLD_PSI_T
 
 // ============ FIGURE 8 CASTER COEFFICIENTS ============
 // F8 loop radius = 149 ft = 1788". Ackermann steer angle: atan(114.7"/1788") = 3.67°
-// Same derivation as oval (CASTER_CAMBER_K_RF/LF calibrated at 20° steer, scaled by sin ratio):
-//   F8 outside: sin(3.67°) × CASTER_CAMBER_K_RF = 0.0640 × 5.848 ≈ 0.125°/°caster
-//   F8 inside:  sin(3.67°) × CASTER_CAMBER_K_LF = 0.0640 × 1.462 ≈ 0.031°/°caster
-// Virtually identical to oval values (3.67° vs 3.77° apex steer = 0.3% difference).
-const F8_CASTER_COEFF_OUT = Math.sin(3.67 * Math.PI / 180) * CASTER_CAMBER_K_RF; // ≈ 0.125°/°caster
-const F8_CASTER_COEFF_IN  = Math.sin(3.67 * Math.PI / 180) * CASTER_CAMBER_K_LF; // ≈ 0.031°/°caster
+// Virtually identical to oval (3.67° vs 3.77° = 0.3% difference).
+// Scaled from oval coefficients: (sin(3.67°)/sin(3.77°)) × oval_coeff
+//   F8 outside: 0.136 × sin(3.67°)/sin(3.77°) ≈ 0.125°/°caster (pyrometer-derived)
+//   F8 inside:  0.034 × sin(3.67°)/sin(3.77°) ≈ 0.031°/°caster (pyrometer-derived)
+const F8_CASTER_COEFF_OUT = 0.125; // °/°caster — F8 outside tire, 3.67° apex steer
+const F8_CASTER_COEFF_IN  = 0.031; // °/°caster — F8 inside tire, 3.67° apex steer
 
 // ============ FIGURE 8 SETUP ANALYSIS ============
 // Adapted for bidirectional loading. Each front tire alternates outside/inside each lap.
