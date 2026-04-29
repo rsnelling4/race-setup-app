@@ -185,9 +185,6 @@ export default function GeometryVisualizer({ geo }) {
           );
         })}
 
-        {/* ── Chassis body — positioned high, away from arm geometry ───── */}
-        <rect x={tx(-22)} y={ty(40)} width={tx(22) - tx(-22)} height={ty(28) - ty(40)}
-          rx="4" fill="#1e3a5f" stroke="#2563eb" strokeWidth="1.5" opacity="0.5" />
 
         {/* ── Hardpoint dots — drawn last so they sit on top of arms ───── */}
         {[rf, lf].map(g => {
@@ -227,33 +224,43 @@ export default function GeometryVisualizer({ geo }) {
           </>
         )}
 
-        {/* ── RC dot — on centerline with offset callout RIGHT ─────────── */}
+        {/* ── Moment arm line (CG to RC) — drawn before dots so dots sit on top */}
         {mc && (
-          <>
-            <Dot p={mc} fill="#22c55e" r={8} stroke="#0f172a" sw={2} />
-            <LeaderLine x1={tx(0) + 10} y1={ty(mc.y)} x2={tx(0) + 22} y2={ty(mc.y)} color="#22c55e" />
-            <Callout cx={tx(0) + 24} cy={ty(mc.y) - 10} lines={['Roll Center', `avg ${mc.y.toFixed(1)}"`, `RC-R ${rf.rcHeight?.toFixed(1)}"`, `RC-L ${lf.rcHeight?.toFixed(1)}"`]} color="#22c55e" anchor="start" />
-          </>
+          <line x1={tx(0)} y1={ty(mc.y)} x2={tx(0)} y2={ty(cg.y)}
+            stroke="#f59e0b" strokeWidth="2" strokeDasharray="5,3" opacity="0.8" />
         )}
 
-        {/* ── CG dot — on centerline with offset callout LEFT ──────────── */}
-        <Dot p={cg} fill="#fbbf24" r={7} stroke="#0f172a" sw={2} />
-        <LeaderLine x1={tx(0) - 10} y1={ty(cg.y)} x2={tx(0) - 22} y2={ty(cg.y)} color="#fbbf24" />
-        <Callout cx={tx(0) - 24} cy={ty(cg.y) - 10} lines={['CG (est)', `${cgH.toFixed(1)}"`]} color="#fbbf24" anchor="end" />
+        {/* ── RC dot — callout to the RIGHT, leader line from dot outward ── */}
+        {mc && (() => {
+          const dotX = tx(0), dotY = ty(mc.y);
+          const calloutX = dotX + 130; // well clear of the dot
+          return (
+            <>
+              <Dot p={mc} fill="#22c55e" r={8} stroke="#0f172a" sw={2} />
+              <line x1={dotX + 10} y1={dotY} x2={calloutX - 2} y2={dotY}
+                stroke="#22c55e" strokeWidth="1" strokeDasharray="3,2" opacity="0.7" />
+              <Callout cx={calloutX} cy={dotY - 10}
+                lines={['Roll Center', `avg ${mc.y.toFixed(1)}"`, `RC-R ${rf.rcHeight?.toFixed(1)}"`, `RC-L ${lf.rcHeight?.toFixed(1)}"`]}
+                color="#22c55e" anchor="start" />
+            </>
+          );
+        })()}
 
-        {/* ── Moment arm line (CG to RC) ────────────────────────────────── */}
-        {mc && (
-          <>
-            <line x1={tx(0)} y1={ty(mc.y)} x2={tx(0)} y2={ty(cg.y)}
-              stroke="#f59e0b" strokeWidth="2" strokeDasharray="5,3" opacity="0.8" />
-            {/* label at midpoint, offset left */}
-            <text
-              x={tx(0) - 10} y={(ty(mc.y) + ty(cg.y)) / 2 + 4}
-              textAnchor="end" fill="#f59e0b" fontSize="10" fontFamily="monospace" fontWeight="600">
-              {Math.abs(cgH - mc.y).toFixed(1)}" arm
-            </text>
-          </>
-        )}
+        {/* ── CG dot — callout to the LEFT, leader line from dot outward ─── */}
+        {(() => {
+          const dotX = tx(0), dotY = ty(cg.y);
+          const calloutX = dotX - 130;
+          return (
+            <>
+              <Dot p={cg} fill="#fbbf24" r={7} stroke="#0f172a" sw={2} />
+              <line x1={dotX - 10} y1={dotY} x2={calloutX + 2} y2={dotY}
+                stroke="#fbbf24" strokeWidth="1" strokeDasharray="3,2" opacity="0.7" />
+              <Callout cx={calloutX} cy={dotY - 10}
+                lines={['CG (est)', `${cgH.toFixed(1)}"`, `arm ${mc ? Math.abs(cgH - mc.y).toFixed(1) + '"' : '—'}`]}
+                color="#fbbf24" anchor="end" />
+            </>
+          );
+        })()}
 
         {/* ── FVSA labels — top left/right corners ─────────────────────── */}
         {lf.fvsa != null && (
