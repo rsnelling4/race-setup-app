@@ -125,8 +125,127 @@ function carLabel(session, geoProfiles) {
   return geo ? (geo.title || 'Unnamed car') : 'Model default (P71)';
 }
 
+// ─── Physics-derived prediction (no AI — pure geometry/math) ─────────────────
+// Returns a plain-English prediction of what the car should be doing based solely
+// on the setup inputs and physics model output. Driver confirms or overrides this
+// before the AI analysis runs, so the AI knows whether the model matched reality.
+function buildPrediction(session, physics) {
+  if (!physics) return null;
+  const c = physics.corners;
+  const rf = c?.RF;
+  const lf = c?.LF;
+  const rr = c?.RR;
+  const lr = c?.LR;
+
+  const lines = [];
+
+  // ── RF camber chain ──────────────────────────────────────────────────────
+  if (rf?.groundCamber != null) {
+    const gc = rf.groundCamber;
+    const ideal = rf.idealGroundCamber ?? -2.0;
+    const dev = gc - ideal; // positive = more positive (insufficient neg camber)
+    if (dev > 0.25) {
+      lines.push(`RF contact patch: ground camber is ${gc.toFixed(2)}° vs ideal ${ideal.toFixed(1)}°. ` +
+        `The outside (wall-side) edge is carrying more load than ideal — ` +
+        `expect the RF outside tread zone to be ${Math.round(dev * 8)}–${Math.round(dev * 14)}°F hotter than the inside edge.`);
+    } else if (dev < -0.25) {
+      lines.push(`RF contact patch: ground camber is ${gc.toFixed(2)}° vs ideal ${ideal.toFixed(1)}°. ` +
+        `The inside edge is overloaded — ` +
+        `expect the RF inside tread zone to be ${Math.round(Math.abs(dev) * 6)}–${Math.round(Math.abs(dev) * 12)}°F hotter than the outside edge.`);
+    } else {
+      lines.push(`RF contact patch: ground camber ${gc.toFixed(2)}° is within 0.25° of ideal (${ideal.toFixed(1)}°). ` +
+        `Temperature spread across the RF tread should be relatively even (under 10°F I-to-O difference).`);
+    }
+  }
+
+  // ── RF pressure ──────────────────────────────────────────────────────────
+  if (rf?.hp != null && rf?.optHotPsi != null) {
+    const psiDev = rf.hp - rf.optHotPsi;
+    const gripLoss = Math.abs(psiDev) * 0.6;
+    if (Math.abs(psiDev) > 1.5) {
+      const dir = psiDev > 0 ? 'over-inflated' : 'under-inflated';
+      const effect = psiDev > 0
+        ? 'contact patch center bulges and overheats; tread middle will be hotter than edges'
+        : 'contact patch edges carry more load; tread edges will be hotter than middle';
+      lines.push(`RF pressure: running ${rf.hp.toFixed(1)} PSI hot vs load-optimal ${rf.optHotPsi.toFixed(1)} PSI ` +
+        `(${Math.abs(psiDev).toFixed(1)} PSI ${psiDev > 0 ? 'high' : 'low'}, ~${gripLoss.toFixed(1)}% grip penalty). ` +
+        `${dir.charAt(0).toUpperCase() + dir.slice(1)}: ${effect}.`);
+    } else {
+      lines.push(`RF pressure: ${rf.hp.toFixed(1)} PSI hot is within 1.5 PSI of load-optimal (${rf.optHotPsi.toFixed(1)} PSI). ` +
+        `Pressure should not be a limiting factor at the RF this session.`);
+    }
+  }
+
+  // ── LLTD / handling prediction ───────────────────────────────────────────
+  const frontLLTD = physics.ss?.frontLLTD;
+  if (frontLLTD != null) {
+    const target = 0.46;
+    const dev = frontLLTD - target;
+    if (dev > 0.04) {
+      lines.push(`Front LLTD is ${(frontLLTD * 100).toFixed(1)}% (target 46%). ` +
+        `Front is carrying more load transfer than the rear — ` +
+        `this geometry biases the car toward understeer/push in the center of the corner.`);
+    } else if (dev < -0.04) {
+      lines.push(`Front LLTD is ${(frontLLTD * 100).toFixed(1)}% (target 46%). ` +
+        `Rear is carrying disproportionate load transfer — ` +
+        `this geometry biases the car toward oversteer/loose behavior, especially on exit.`);
+    } else {
+      lines.push(`Front LLTD is ${(frontLLTD * 100).toFixed(1)}% (target 46%). ` +
+        `Load transfer balance is near target — neutral handling bias from LLTD alone.`);
+    }
+  }
+
+  // ── RF vs RR pressure spread (push indicator) ────────────────────────────
+  if (rf?.hp != null && rr?.hp != null) {
+    const spread = rf.hp - rr.hp;
+    if (spread >= 10) {
+      lines.push(`RF-to-RR hot PSI spread is ${spread.toFixed(1)} PSI (${rf.hp.toFixed(1)} vs ${rr.hp.toFixed(1)}). ` +
+        `A spread ≥ 10 PSI stiffens the RF contact patch relative to the RR — ` +
+        `front dominates, which adds to push/understeer in the middle of the corner.`);
+    }
+  }
+
+  // ── LR pressure floor ────────────────────────────────────────────────────
+  if (lr?.hp != null && lr.hp < 18) {
+    lines.push(`LR hot PSI is ${lr.hp.toFixed(1)} — below the 18 PSI safety floor. ` +
+      `Expect abnormal wear on the LR inside shoulder and potential handling instability under throttle.`);
+  }
+
+  // ── Overall grip estimate ────────────────────────────────────────────────
+  const gripScores = ['RF', 'LF', 'RR', 'LR'].map(p => c?.[p]?.adjustableScore).filter(v => v != null);
+  if (gripScores.length === 4) {
+    const rfGrip = c.RF.adjustableScore * 100;
+    const avgGrip = (gripScores.reduce((a, b) => a + b, 0) / gripScores.length) * 100;
+    lines.push(`Predicted grip: RF at ${rfGrip.toFixed(1)}%, car average ${avgGrip.toFixed(1)}%. ` +
+      `The RF is the primary loaded corner — it limits overall lap performance.`);
+  }
+
+  // ── Handling summary sentence ────────────────────────────────────────────
+  if (frontLLTD != null && rf?.groundCamber != null) {
+    const lltdDev = frontLLTD - 0.46;
+    const rfCamberDev = rf.groundCamber - (rf.idealGroundCamber ?? -2.0);
+    let summary = '';
+    if (rfCamberDev > 0.3 && lltdDev > 0.03) {
+      summary = 'Geometry prediction: push/understeer, most likely felt in the center of the corner. RF is both under-cambered and carrying excess load transfer.';
+    } else if (rfCamberDev > 0.3) {
+      summary = 'Geometry prediction: RF is under-cambered. The handling may feel like a front-end push as the RF outside edge slides rather than grips.';
+    } else if (rfCamberDev < -0.3) {
+      summary = 'Geometry prediction: RF is over-cambered. The car may feel stable in the corner but RF grip will fall off as the inside edge overheats.';
+    } else if (lltdDev > 0.04) {
+      summary = 'Geometry prediction: front-biased load transfer (push tendency). RF camber is near ideal so handling character depends on the driver sensitivity to front LLTD.';
+    } else if (lltdDev < -0.04) {
+      summary = 'Geometry prediction: rear-biased load transfer (loose/oversteer tendency). Evaluate whether driver reports exit looseness.';
+    } else {
+      summary = 'Geometry prediction: setup is near targets — no strong handling bias predicted from camber or LLTD alone.';
+    }
+    lines.push(summary);
+  }
+
+  return lines;
+}
+
 // ─── AI prompt ────────────────────────────────────────────────────────────────
-function buildPrompt(event, selectedSessions, geoProfiles) {
+function buildPrompt(event, selectedSessions, geoProfiles, confirmations) {
   const lines = [
     `You are a race car setup engineer specializing in the 2008 Ford Crown Victoria P71 on a left-turn oval.`,
     `Analyze the session data below with the depth of a crew chief who knows this car's physics chain cold.`,
@@ -192,6 +311,7 @@ function buildPrompt(event, selectedSessions, geoProfiles) {
     const inflation = Number(session.inflationTemp) || 68;
     let physics = null;
     try { physics = analyzeSetup(simSetup, ambient, inflation); } catch { /* ignore */ }
+    const conf = confirmations?.[session.id];
 
     lines.push(`${'─'.repeat(60)}`);
     lines.push(`SESSION ${idx + 1}: ${session.name || `Practice ${idx + 1}`}  |  Car: ${carName}`);
@@ -252,6 +372,32 @@ function buildPrompt(event, selectedSessions, geoProfiles) {
       lines.push(``);
     }
 
+    // ── Driver confirmation of physics model prediction ─────────────────────
+    if (conf) {
+      lines.push(`  DRIVER CONFIRMATION OF MODEL PREDICTION:`);
+      if (conf.verdict === 'yes') {
+        lines.push(`    Driver confirmed: the car behaved EXACTLY as the model predicted.`);
+        lines.push(`    This validates the geometry and pressure calculations for this session.`);
+        lines.push(`    Recommendations should be grounded entirely in the physics model numbers.`);
+      } else if (conf.verdict === 'partial') {
+        lines.push(`    Driver confirmed: the car PARTIALLY matched the model prediction.`);
+        if (conf.override?.trim()) {
+          lines.push(`    What was different: "${conf.override.trim()}"`);
+        }
+        lines.push(`    Treat the model numbers as directionally correct but investigate the discrepancy.`);
+        lines.push(`    Where driver feedback contradicts the model, driver feedback is ground truth.`);
+      } else if (conf.verdict === 'no') {
+        lines.push(`    Driver DISAGREED with the model prediction.`);
+        if (conf.override?.trim()) {
+          lines.push(`    What actually happened: "${conf.override.trim()}"`);
+        }
+        lines.push(`    CRITICAL: the model prediction did not match reality. This is a calibration signal.`);
+        lines.push(`    Driver feedback is the ground truth. Diagnose WHY the model diverged before issuing recommendations.`);
+        lines.push(`    Possible causes: unmeasured alignment, incorrect setup input, track surface anomaly, driver technique.`);
+      }
+      lines.push(``);
+    }
+
     if (physics) {
       const c = physics.corners;
       lines.push(`  PHYSICS MODEL (calculated — not based on user setup assumptions):`);
@@ -285,6 +431,15 @@ function buildPrompt(event, selectedSessions, geoProfiles) {
   if (cars.length > 1) {
     lines.push(`NOTE: This analysis covers ${cars.length} different cars: ${cars.join(', ')}. Analyze each car separately, then compare across cars where useful.`);
   }
+  const hasConfirmations = confirmations && Object.keys(confirmations).length > 0;
+  if (hasConfirmations) {
+    lines.push(`DRIVER CONFIRMATION NOTE: Each session includes a "DRIVER CONFIRMATION OF MODEL PREDICTION" block.`);
+    lines.push(`This tells you whether the driver's actual experience matched what the physics model predicted.`);
+    lines.push(`- If verdict is "confirmed": model is calibrated. Use physics numbers as ground truth.`);
+    lines.push(`- If verdict is "partial": model is directionally right but something is off. Investigate the discrepancy first.`);
+    lines.push(`- If verdict is "disagreed": driver experience contradicts the model. Driver is ground truth. Diagnose the gap before recommending.`);
+    lines.push(`Your recommendations MUST reference the confirmation verdict and explain how it shapes your confidence in each recommendation.`);
+  }
   lines.push(``);
   lines.push(`For each session, walk through the following in order:`);
   lines.push(``);
@@ -302,6 +457,8 @@ function buildPrompt(event, selectedSessions, geoProfiles) {
   lines.push(`  - Name the primary handling condition (push/understeer, loose/oversteer, tight entry, loose exit, etc.).`);
   lines.push(`  - Tie it to the physics: which corner is causing it and what in the camber/pressure/LLTD chain explains it?`);
   lines.push(`  - If front LLTD deviates from 46%, explain the implication for RF load and what that does to optimal PSI.`);
+  lines.push(`  - Reference the driver confirmation verdict: did the model correctly predict what the driver felt?`);
+  lines.push(`    If the model was wrong, state what the gap reveals about the setup or the model's assumptions.`);
   lines.push(``);
   lines.push(`RANKED NEXT-SESSION RECOMMENDATIONS:`);
   lines.push(`  Give exactly 3–5 changes, ranked by expected grip gain. For each:`);
@@ -1035,16 +1192,66 @@ function ApiKeyPanel({ apiKey, setApiKey }) {
   );
 }
 
+// ─── Prediction confirm card ──────────────────────────────────────────────────
+function PredictionConfirmCard({ session, prediction, confirmation, onChange }) {
+  const sessionName = session.name || 'Unnamed session';
+  const { verdict = '', override = '' } = confirmation || {};
+
+  return (
+    <div className="td-predict-card">
+      <div className="td-predict-header">
+        <span className="td-predict-session">{sessionName}</span>
+        <span className="td-predict-label">Model prediction — confirm before analysis</span>
+      </div>
+      <div className="td-predict-lines">
+        {prediction.map((line, i) => (
+          <p key={i} className="td-predict-line">{line}</p>
+        ))}
+      </div>
+      <div className="td-predict-confirm">
+        <span className="td-predict-q">Did the car behave as predicted?</span>
+        <div className="td-predict-btns">
+          {[
+            { value: 'yes',     label: 'Yes — matches' },
+            { value: 'partial', label: 'Partially' },
+            { value: 'no',      label: 'No — different' },
+          ].map(opt => (
+            <button
+              key={opt.value}
+              className={`td-predict-btn${verdict === opt.value ? ' selected' : ''}`}
+              onClick={() => onChange({ verdict: opt.value, override })}>
+              {opt.label}
+            </button>
+          ))}
+        </div>
+        {(verdict === 'partial' || verdict === 'no') && (
+          <textarea
+            className="td-predict-override"
+            placeholder={verdict === 'no'
+              ? 'What actually happened? (e.g. "car was loose on exit, not pushing in the center")'
+              : 'What was different? (e.g. "push was only on entry, not mid-corner")'}
+            value={override}
+            onChange={e => onChange({ verdict, override: e.target.value })}
+            rows={2}
+          />
+        )}
+      </div>
+    </div>
+  );
+}
+
 // ─── Analysis panel ───────────────────────────────────────────────────────────
 function AnalysisPanel({ event, allSessions, geoProfiles, apiKey }) {
-  // Default: all sessions selected
-  const [selected, setSelected] = useState(() => new Set(allSessions.map(s => s.id)));
-  const [status, setStatus]     = useState('idle');
-  const [aiText, setAiText]     = useState('');
-  const [errMsg, setErrMsg]     = useState('');
+  const [selected, setSelected]         = useState(() => new Set(allSessions.map(s => s.id)));
+  // phase: 'idle' | 'confirming' | 'running' | 'done' | 'error'
+  const [phase, setPhase]               = useState('idle');
+  const [aiText, setAiText]             = useState('');
+  const [errMsg, setErrMsg]             = useState('');
   const [physicsResults, setPhysicsResults] = useState(null);
+  const [predictions, setPredictions]   = useState(null); // { sessionId: [...lines] }
+  // confirmations: { sessionId: { verdict: 'yes'|'partial'|'no', override: string } }
+  const [confirmations, setConfirmations] = useState({});
 
-  // Sync selection when sessions list changes
   useEffect(() => {
     setSelected(prev => {
       const ids = new Set(allSessions.map(s => s.id));
@@ -1065,33 +1272,58 @@ function AnalysisPanel({ event, allSessions, geoProfiles, apiKey }) {
 
   const selectedSessions = allSessions.filter(s => selected.has(s.id));
 
-  const analyze = useCallback(async () => {
+  // Phase 1: compute physics + predictions, show confirmation cards
+  function predict() {
     if (selectedSessions.length === 0) return;
-    setStatus('running');
-    setAiText('');
-    setErrMsg('');
-
     const phys = runPhysicsAnalysis(selectedSessions);
     setPhysicsResults(phys);
 
+    // Build a lookup by sessionId so index desync from .filter(Boolean) is avoided
+    const physById = Object.fromEntries(phys.map(p => [p.sessionId, p]));
+    const preds = {};
+    selectedSessions.forEach(session => {
+      const lines = buildPrediction(session, physById[session.id] ?? null);
+      if (lines && lines.length > 0) preds[session.id] = lines;
+    });
+    setPredictions(preds);
+    setConfirmations({});
+    setAiText('');
+    setErrMsg('');
+    setPhase('confirming');
+  }
+
+  // Phase 2: run AI with confirmation data
+  const runAnalysis = useCallback(async () => {
+    setPhase('running');
     if (apiKey) {
       try {
-        const text = await callGroq(apiKey, buildPrompt(event, selectedSessions, geoProfiles));
+        const text = await callGroq(apiKey, buildPrompt(event, selectedSessions, geoProfiles, confirmations));
         setAiText(text);
-        setStatus('done');
+        setPhase('done');
       } catch (e) {
         setErrMsg(e.message);
-        setStatus('error');
+        setPhase('error');
       }
     } else {
-      setStatus('done');
+      setPhase('done');
     }
-  }, [event, selectedSessions, geoProfiles, apiKey]);
+  }, [event, selectedSessions, geoProfiles, apiKey, confirmations]);
+
+  function updateConfirmation(sessionId, data) {
+    setConfirmations(prev => ({ ...prev, [sessionId]: data }));
+  }
+
+  // All selected sessions that have predictions must have a verdict before continuing
+  const sessionsWithPredictions = selectedSessions.filter(s => predictions?.[s.id]);
+  const allConfirmed = sessionsWithPredictions.length > 0
+    && sessionsWithPredictions.every(s => confirmations[s.id]?.verdict);
+
+  const isRunning = phase === 'running';
 
   return (
     <div className="td-analysis-panel">
-      {/* Session selector */}
-      {allSessions.length > 0 && (
+      {/* Session selector — only shown before predictions */}
+      {phase === 'idle' && allSessions.length > 0 && (
         <div className="td-session-selector">
           <div className="td-selector-header">
             <span className="td-ss-label" style={{ marginBottom: 0 }}>Sessions to analyze</span>
@@ -1121,23 +1353,65 @@ function AnalysisPanel({ event, allSessions, geoProfiles, apiKey }) {
         </div>
       )}
 
-      <button
-        className={`td-analyze-btn${status === 'running' ? ' running' : ''}`}
-        onClick={analyze}
-        disabled={selectedSessions.length === 0 || status === 'running'}>
-        {status === 'running'
-          ? 'Analyzing…'
-          : `Analyze ${selectedSessions.length} Session${selectedSessions.length !== 1 ? 's' : ''}`}
-      </button>
-      {selectedSessions.length === 0 && <p className="td-analysis-note">Select at least one session above.</p>}
+      {/* Step 1 button */}
+      {phase === 'idle' && (
+        <>
+          <button
+            className="td-analyze-btn"
+            onClick={predict}
+            disabled={selectedSessions.length === 0}>
+            {`Predict & Confirm — ${selectedSessions.length} Session${selectedSessions.length !== 1 ? 's' : ''}`}
+          </button>
+          {selectedSessions.length === 0 && <p className="td-analysis-note">Select at least one session above.</p>}
+        </>
+      )}
 
-      {status === 'error' && (
+      {/* Step 2: prediction confirmation cards */}
+      {phase === 'confirming' && (
+        <div className="td-predict-section">
+          <div className="td-predict-intro">
+            <strong>Step 1 of 2 — Confirm Model Predictions</strong>
+            <p>Based on your setup inputs, geometry, and track conditions, here is what the physics model calculates the car should be doing. Confirm or correct each prediction before the AI analysis runs.</p>
+          </div>
+          {sessionsWithPredictions.map(session => (
+            <PredictionConfirmCard
+              key={session.id}
+              session={session}
+              prediction={predictions[session.id]}
+              confirmation={confirmations[session.id]}
+              onChange={data => updateConfirmation(session.id, data)}
+            />
+          ))}
+          {sessionsWithPredictions.length === 0 && (
+            <p className="td-analysis-note">No physics data available for selected sessions.</p>
+          )}
+          <div className="td-predict-actions">
+            <button className="td-analyze-btn" onClick={runAnalysis} disabled={!allConfirmed || isRunning}>
+              {isRunning ? 'Analyzing…' : 'Run Analysis'}
+            </button>
+            {!allConfirmed && sessionsWithPredictions.length > 0 && (
+              <p className="td-analysis-note">Confirm each session prediction above before running analysis.</p>
+            )}
+            <button className="td-sel-btn" style={{ marginTop: 8 }} onClick={() => setPhase('idle')}>
+              Back
+            </button>
+          </div>
+        </div>
+      )}
+
+      {/* Running state */}
+      {isRunning && (
+        <button className="td-analyze-btn running" disabled>Analyzing…</button>
+      )}
+
+      {phase === 'error' && (
         <div className="td-analysis-error">
           <strong>Groq API error:</strong> {errMsg}<br />Physics model results shown below.
         </div>
       )}
 
-      {physicsResults && physicsResults.length > 0 && (
+      {/* Physics model results — shown after confirmation step */}
+      {physicsResults && physicsResults.length > 0 && phase !== 'idle' && (
         <div className="td-physics-results">
           <div className="td-results-heading">Physics Model Results</div>
           {physicsResults.map((res, i) => (
@@ -1146,7 +1420,7 @@ function AnalysisPanel({ event, allSessions, geoProfiles, apiKey }) {
         </div>
       )}
 
-      {selectedSessions.some(s => Object.values(s.tireTemps || {}).some(t => t.inside && t.middle && t.outside)) && (
+      {selectedSessions.some(s => Object.values(s.tireTemps || {}).some(t => t.inside && t.middle && t.outside)) && phase !== 'idle' && (
         <div className="td-physics-results">
           <div className="td-results-heading">Tire Temperature Analysis</div>
           {selectedSessions.map(session => (
@@ -1158,7 +1432,7 @@ function AnalysisPanel({ event, allSessions, geoProfiles, apiKey }) {
       {aiText && (
         <div className="td-ai-results">
           <div className="td-results-heading">
-            Groq Analysis
+            AI Analysis
             <span className="td-results-model">{GROQ_MODEL}</span>
           </div>
           <SimpleMarkdown text={aiText} />
