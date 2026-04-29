@@ -20,12 +20,8 @@ import './App.css';
 function deepClone(o) { return JSON.parse(JSON.stringify(o)); }
 
 const TABS = [
-  { id: 'tires',      label: 'Tire Temperatures' },
-  { id: 'handling',   label: 'Handling Diagnosis' },
   { id: 'shocks',     label: 'Shocks & Struts' },
-  { id: 'simulation', label: 'Race Simulation' },
   { id: 'optimize',   label: 'Optimizer' },
-  { id: 'figure8',    label: 'Figure 8' },
   { id: 'f8optimize', label: 'F8 Optimizer' },
   { id: 'mathref',   label: 'Simulation Math' },
   { id: 'suggested', label: 'Suggested Setup' },
@@ -35,8 +31,14 @@ const TABS = [
   { id: 'settings',     label: 'Settings' },
 ];
 
+// Archived tabs — hidden from nav but code preserved:
+// { id: 'tires',      label: 'Tire Temperatures' }
+// { id: 'handling',   label: 'Handling Diagnosis' }
+// { id: 'simulation', label: 'Race Simulation' }
+// { id: 'figure8',    label: 'Figure 8' }
+
 function App() {
-  const [activeTab, setActiveTab] = useState('tires');
+  const [activeTab, setActiveTab] = useState('trackday');
   const [menuOpen, setMenuOpen] = useState(false);
 
   const selectTab = (id) => { setActiveTab(id); setMenuOpen(false); };
@@ -125,82 +127,9 @@ function App() {
       </nav>
 
       <main className="app-main">
-        {activeTab === 'tires' && (
-          <div className="tire-section">
-            <div className="section-header">
-              <h2>Enter Tire Temperatures</h2>
-              <p className="section-description">
-                Use your pyrometer to measure inside, middle, and outside temperatures for each tire. Inside will be the edge of tire closest to the motor. Outside will be the edge of tire furthest from the motor.
-              </p>
-            </div>
-            <div className="tire-grid">
-              <div className="grid-label front-label">FRONT</div>
-              <TireInput position="LF" label="Left Front" data={tireData.LF} onChange={handleTireChange} />
-              <TireInput position="RF" label="Right Front" data={tireData.RF} onChange={handleTireChange} />
-              <TireInput position="LR" label="Left Rear" data={tireData.LR} onChange={handleTireChange} />
-              <TireInput position="RR" label="Right Rear" data={tireData.RR} onChange={handleTireChange} />
-              <div className="grid-label rear-label">REAR</div>
-            </div>
-            <div className="action-buttons">
-              <button className="analyze-button" onClick={handleAnalyze}>Analyze Tires</button>
-              <button className="clear-button" onClick={handleClear}>Clear All</button>
-            </div>
-            {analysis && <TireResults analysis={analysis} />}
-            <div className="reference-guide">
-              <h3>Quick Reference</h3>
-              <div className="reference-grid">
-                <div className="reference-card">
-                  <h4>General Tire Wear</h4>
-                  <p>The hotter the tire, the quicker it will wear.</p>
-                  <p>The hottest tire on the car is the one being worked the most; the coolest is the least worked.</p>
-                  <p>Focus adjustments on the most overworked or least worked corner first.</p>
-                </div>
-                <div className="reference-card">
-                  <h4>Camber Issues</h4>
-                  <p>Too much NEGATIVE camber: excessively higher temperature at the INSIDE edges.</p>
-                  <p>Too much POSITIVE camber: excessively higher temperature at the OUTSIDE edges.</p>
-                </div>
-                <div className="reference-card">
-                  <h4>Inflation Issues</h4>
-                  <p>OVER inflated: higher middle temperature than inside &amp; outside edges.</p>
-                  <p>UNDER inflated: lower middle temperature than inside &amp; outside edges.</p>
-                </div>
-                <div className="reference-card">
-                  <h4>Toe Issues (Front Tires)</h4>
-                  <p>Too much toe OUT: higher temperatures on both INSIDE edges.</p>
-                  <p>Too much toe IN: higher temperatures on both OUTSIDE edges.</p>
-                </div>
-                <div className="reference-card">
-                  <h4>Handling &amp; Temperature Split</h4>
-                  <p>RF tire HOTTER by &gt;10°F over RR: indicates a tight condition.</p>
-                  <p>RF tire COLDER by &gt;10°F over RR: indicates a loose condition.</p>
-                </div>
-                <div className="reference-card">
-                  <h4>Overall Workload</h4>
-                  <p>HIGHEST average temperature: corner of the car being most worked.</p>
-                  <p>LOWEST average temperature: corner of the car being least worked.</p>
-                </div>
-                <div className="reference-card">
-                  <h4>Ideal Inside-Outside Spread</h4>
-                  <p>5-20°F with inside slightly hotter</p>
-                </div>
-              </div>
-            </div>
-          </div>
-        )}
-
-        {activeTab === 'handling' && (
-          <HandlingDiagnosis setup={setup} setSetup={setSetup} ambient={ambient} setAmbient={setAmbient} inflationTemp={inflationTemp} setInflationTemp={setInflationTemp} />
-        )}
         {activeTab === 'shocks' && <CrownVicShocks />}
-        {activeTab === 'simulation' && (
-          <RaceSimulation setup={setup} setSetup={setSetup} ambient={ambient} setAmbient={setAmbient} inflationTemp={inflationTemp} setInflationTemp={setInflationTemp} />
-        )}
         {activeTab === 'optimize' && (
           <SetupOptimizer setup={setup} setSetup={setSetup} ambient={ambient} setAmbient={setAmbient} inflationTemp={inflationTemp} setInflationTemp={setInflationTemp} />
-        )}
-        {activeTab === 'figure8' && (
-          <Figure8Simulation setup={setup} setSetup={setSetup} ambient={ambient} setAmbient={setAmbient} inflationTemp={inflationTemp} setInflationTemp={setInflationTemp} />
         )}
         {activeTab === 'f8optimize' && (
           <Figure8Optimizer setup={setup} setSetup={setSetup} ambient={ambient} setAmbient={setAmbient} inflationTemp={inflationTemp} setInflationTemp={setInflationTemp} />
