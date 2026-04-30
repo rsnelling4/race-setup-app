@@ -473,7 +473,34 @@ function hotPressure(coldPsi, tireTemp, inflationTemp = COLD_PSI_TEMP) {
 
 // ============ SHOCK → ROLL STIFFNESS ============
 // Rating 0 = stiffest, 10 = softest → roll contribution = 10 - rating
-function shockStiffness(setup) {
+// geoCtx — resolved geometry for a specific car profile, threaded through calc functions.
+// Produced by resolveGeoCtx() in analyzeSetup; defaults to VEH constants when null.
+function tireLoadsCtx(lateralG, springLLTD, geoCtx) {
+  if (!geoCtx) return tireLoads(lateralG, springLLTD);
+  const { rcF, rcR, tw, jounceRF, droopLF } = geoCtx; // eslint-disable-line no-unused-vars
+  const mFront = VEH.weight * VEH.frontBias;
+  const mRear  = VEH.weight * (1 - VEH.frontBias);
+  const geoFront = mFront * lateralG * rcF / tw;
+  const geoRear  = mRear  * lateralG * rcR / tw;
+  const avgRCH = VEH.frontBias * rcF + (1 - VEH.frontBias) * rcR;
+  const elasticTotal = VEH.weight * lateralG * (VEH.cgHeight - avgRCH) / tw;
+  const elasticFront = elasticTotal * springLLTD;
+  const elasticRear  = elasticTotal * (1 - springLLTD);
+  const rollRad = lateralG * 3.1 * Math.PI / 180;
+  const arbFront = ARB.frontRollStiffness * rollRad / tw;
+  const ltFront = geoFront + elasticFront + arbFront;
+  const ltRear  = geoRear  + elasticRear;
+  const fStatic = VEH.weight * VEH.frontBias / 2;
+  const rStatic = VEH.weight * (1 - VEH.frontBias) / 2;
+  return {
+    LF: Math.max(50, fStatic - ltFront),
+    RF: fStatic + ltFront,
+    LR: Math.max(50, rStatic - ltRear),
+    RR: rStatic + ltRear,
+  };
+}
+
+function shockStiffness(setup, geoCtx) {
   // Front spring: average LF+RF (may differ when different assemblies are used on each side).
   // Supports both new per-corner format { LF, RF, LR, RR } and legacy { front, rear }.
   const springLF = setup.springs?.LF ?? setup.springs?.front ?? BASE_SPRING_FRONT;
@@ -486,7 +513,7 @@ function shockStiffness(setup) {
   // Load-weighted damper LLTD: RF (outside) carries more load in left turns and does more
   // transient work than LF (inside). Weight each shock's contribution by its corner's share
   // of the axle load at OVAL_CORNER_G using springLLTD only (no circularity — dampers not involved).
-  const cornerLoads = tireLoads(OVAL_CORNER_G, springLLTD);
+  const cornerLoads = tireLoadsCtx(OVAL_CORNER_G, springLLTD, geoCtx);
   const frontAxle = cornerLoads.LF + cornerLoads.RF;
   const rearAxle  = cornerLoads.LR + cornerLoads.RR;
   const rfFrac = cornerLoads.RF / frontAxle;   // ~0.62 — outside front carries more
@@ -625,12 +652,12 @@ const CORNERS = ['LF', 'RF', 'LR', 'RR'];
 const OUTSIDE = { LF: false, RF: true, LR: false, RR: true };
 const IS_FRONT = { LF: true, RF: true, LR: false, RR: false };
 
-function calcPerformance(setup, tires, inflationTemp = COLD_PSI_TEMP) {
+function calcPerformance(setup, tires, inflationTemp = COLD_PSI_TEMP, geoCtx = null) {
   const refG = 1.0;
-  const ss = shockStiffness(setup);
-  const loads = tireLoads(refG, ss.springLLTD);
+  const ss = shockStiffness(setup, geoCtx);
+  const loads = tireLoadsCtx(refG, ss.springLLTD, geoCtx);
   // Pressure optimum uses actual cornering G — 1G loads give absurd optPsi (52 PSI RF, 14 PSI LF)
-  const cornerLoads = tireLoads(OVAL_CORNER_G, ss.springLLTD);
+  const cornerLoads = tireLoadsCtx(OVAL_CORNER_G, ss.springLLTD, geoCtx);
   const roll = bodyRoll(refG, rollStiffness(setup));
 
   // Toe and caster from setup (with defaults for backward compat)
@@ -678,9 +705,11 @@ function calcPerformance(setup, tires, inflationTemp = COLD_PSI_TEMP) {
       //   1.1° / 3.1° = 0.355°/° roll.
       // Droop coefficient measured 2026-04-22: LF 2.0 deg/in × 0.383 in/deg-roll = 0.766
       //   RF 0.857 deg/in × 0.383 = 0.328. Average 0.547. Use LF value for inside droop.
+      const jounceRF = geoCtx?.jounceRF ?? 0.355;
+      const droopLF  = geoCtx?.droopLF  ?? 0.547;
       const bodyRollCamber = outside
-        ? -(cornerRoll * 0.355) // RF in jounce: SLA gains negative camber (0.355°/° roll)
-        :  (cornerRoll * 0.547); // LF in droop: measured 0.766 LF / 0.328 RF, avg 0.547°/° roll
+        ? -(cornerRoll * jounceRF)
+        :  (cornerRoll * droopLF);
       // KPI camber: steering adds +positive on outside (RF), -negative on inside (LF).
       // Formula: KPI_deg × (1 - cos(steerAngle)). At 10° steer: 9.5° × 0.01519 ≈ +0.144°
       const kpiCamber = outside ? GEOM.kpiCamberGain : -GEOM.kpiCamberGain;
@@ -747,9 +776,9 @@ function calcPerformance(setup, tires, inflationTemp = COLD_PSI_TEMP) {
 }
 
 // ============ WORK FACTORS (for thermal model) ============
-function calcWorkFactors(setup) {
-  const ss = shockStiffness(setup);
-  const loads = tireLoads(1.0, ss.springLLTD);
+function calcWorkFactors(setup, geoCtx) {
+  const ss = shockStiffness(setup, geoCtx);
+  const loads = tireLoadsCtx(1.0, ss.springLLTD, geoCtx);
   const avgLoad = VEH.weight / 4;
   return {
     LF: loads.LF / avgLoad,
@@ -1137,51 +1166,28 @@ export function simulateRace(setup, ambientTemp = 65, numLaps = 25, inflationTem
 // When a field is omitted or null, the hardcoded VEH constant is used.
 export function analyzeSetup(setup, ambientTemp = 65, inflationTemp = COLD_PSI_TEMP, geoOverrides = null) {
   const geo = geoOverrides || {};
-  // Resolve geometry — use measured values when provided, fall back to hardcoded VEH constants
-  const rcHeightFront   = (geo.rcHeightFront    != null ? geo.rcHeightFront    : VEH.rollCenterHeight     * 12) / 12; // ft
-  const rcHeightRear    = (geo.rcHeightRear     != null ? geo.rcHeightRear     : VEH.rollCenterHeightRear * 12) / 12; // ft
-  const trackWidthFt    = (geo.trackWidthFront  != null ? geo.trackWidthFront  : VEH.trackWidth           * 12) / 12; // ft
-  const jounceCoeffRF   =  geo.slaJounceCoeffRF != null ? geo.slaJounceCoeffRF : 0.355; // °/° roll
-  const droopCoeffLF    =  geo.slaDroopCoeffLF  != null ? geo.slaDroopCoeffLF  : 0.547; // °/° roll
+  // Resolve geometry — use measured values when provided, fall back to hardcoded VEH constants.
+  // Bundle into geoCtx so every downstream function (calcPerformance, calcWorkFactors, shockStiffness)
+  // uses the same measured values consistently — including testGain() recommendation calculations.
+  const geoCtx = geoOverrides ? {
+    rcF:      (geo.rcHeightFront   != null ? geo.rcHeightFront   : VEH.rollCenterHeight     * 12) / 12, // ft
+    rcR:      (geo.rcHeightRear    != null ? geo.rcHeightRear    : VEH.rollCenterHeightRear * 12) / 12, // ft
+    tw:       (geo.trackWidthFront != null ? geo.trackWidthFront : VEH.trackWidth           * 12) / 12, // ft
+    jounceRF: geo.slaJounceCoeffRF != null ? geo.slaJounceCoeffRF : 0.355, // °/° roll
+    droopLF:  geo.slaDroopCoeffLF  != null ? geo.slaDroopCoeffLF  : 0.547, // °/° roll
+  } : null;
 
-  // If geometry overrides are provided, compute local load transfer using measured RCH / track width
-  // instead of the hardcoded VEH constants. tireLoads() uses VEH globals, so we compute inline here.
-  function tireLoadsGeo(lateralG, springLLTD) {
-    if (!geoOverrides) return tireLoads(lateralG, springLLTD);
-    const mFront = VEH.weight * VEH.frontBias;
-    const mRear  = VEH.weight * (1 - VEH.frontBias);
-    const geoFront = mFront * lateralG * rcHeightFront / trackWidthFt;
-    const geoRear  = mRear  * lateralG * rcHeightRear  / trackWidthFt;
-    const avgRCH = VEH.frontBias * rcHeightFront + (1 - VEH.frontBias) * rcHeightRear;
-    const elasticTotal = VEH.weight * lateralG * (VEH.cgHeight - avgRCH) / trackWidthFt;
-    const elasticFront = elasticTotal * springLLTD;
-    const elasticRear  = elasticTotal * (1 - springLLTD);
-    const rollDeg = lateralG * 3.1;
-    const rollRad = rollDeg * Math.PI / 180;
-    const arbFront = ARB.frontRollStiffness * rollRad / trackWidthFt; // track width in ft matches VEH.trackWidth units
-    const ltFront = geoFront + elasticFront + arbFront;
-    const ltRear  = geoRear  + elasticRear;
-    const fStatic = VEH.weight * VEH.frontBias / 2;
-    const rStatic = VEH.weight * (1 - VEH.frontBias) / 2;
-    return {
-      LF: Math.max(50, fStatic - ltFront),
-      RF: fStatic + ltFront,
-      LR: Math.max(50, rStatic - ltRear),
-      RR: rStatic + ltRear,
-    };
-  }
-
-  const ss = shockStiffness(setup);
-  const loads = tireLoadsGeo(1.0, ss.springLLTD);
+  const ss = shockStiffness(setup, geoCtx);
+  const loads = tireLoadsCtx(1.0, ss.springLLTD, geoCtx);
   // Use actual cornering G for pressure targets — 1G gives absurd RF/LF optPsi
-  const cornerLoads = tireLoadsGeo(OVAL_CORNER_G, ss.springLLTD);
+  const cornerLoads = tireLoadsCtx(OVAL_CORNER_G, ss.springLLTD, geoCtx);
   const avgLoad = VEH.weight / 4;
   const roll = bodyRoll(1.0, rollStiffness(setup));
   const toe = setup.toe !== undefined ? setup.toe : -0.25;
   const caster = setup.caster || { LF: 3.5, RF: 5.0 };
 
   // Steady-state equilibrium temps from thermal model
-  const workFactors = calcWorkFactors(setup);
+  const workFactors = calcWorkFactors(setup, geoCtx);
   const refTires = {};
   for (const c of CORNERS) {
     const wf = workFactors[c];
@@ -1225,7 +1231,9 @@ export function analyzeSetup(setup, ambientTemp = 65, inflationTemp = COLD_PSI_T
       // Caster gain: RF (outside) gains negative, LF (inside) gains positive — geometric.
       casterGain = outside ? -(caster[c] * CASTER_COEFF_RF) : (caster[c] * CASTER_COEFF_LF);
       // SLA body roll camber at actual corner apex (cornerRoll = roll × OVAL_RACING_G).
-      bodyRollCamber = outside ? -(cornerRoll * jounceCoeffRF) : (cornerRoll * droopCoeffLF);
+      bodyRollCamber = outside
+        ? -(cornerRoll * (geoCtx?.jounceRF ?? 0.355))
+        :  (cornerRoll * (geoCtx?.droopLF  ?? 0.547));
       // KPI camber: +positive on outside (RF), -negative on inside (LF). ≈ ±0.144°.
       kpiCamber = outside ? GEOM.kpiCamberGain : -GEOM.kpiCamberGain;
       effectiveCamber = setup.camber[c] + casterGain + bodyRollCamber + kpiCamber;
@@ -1316,7 +1324,7 @@ export function analyzeSetup(setup, ambientTemp = 65, inflationTemp = COLD_PSI_T
   const toeDrag = toeDragFactor(toe);
 
   // Current metric + lap time (using equilibrium temps)
-  const metric = calcPerformance(setup, refTires, inflationTemp);
+  const metric = calcPerformance(setup, refTires, inflationTemp, geoCtx);
   const lapTime = metricToLapTime(metric);
 
   // Recommendations
@@ -1326,7 +1334,8 @@ export function analyzeSetup(setup, ambientTemp = 65, inflationTemp = COLD_PSI_T
     mutate(s);
     // Recompute equilibrium temps for mutated setup — load shifts (from shock changes etc.)
     // cascade into temperature, which feeds tempGripFactor. Using stale refTires would miss this.
-    return lapTime - metricToLapTime(calcPerformance(s, eqTires(s, ambientTemp, calcWorkFactors), inflationTemp));
+    // Pass geoCtx so recommendations are computed with the same measured geometry as the main analysis.
+    return lapTime - metricToLapTime(calcPerformance(s, eqTires(s, ambientTemp, (setup_) => calcWorkFactors(setup_, geoCtx)), inflationTemp, geoCtx));
   };
   const recs = [];
 
@@ -1450,7 +1459,7 @@ export function analyzeSetup(setup, ambientTemp = 65, inflationTemp = COLD_PSI_T
     const m2 = rec.id.match(/^([a-z]{2})-shock$/);
     if (m2) optSetup.shocks[m2[1].toUpperCase()] = rec.optimalVal;
   }
-  const optMetric = calcPerformance(optSetup, eqTires(optSetup, ambientTemp, calcWorkFactors), inflationTemp);
+  const optMetric = calcPerformance(optSetup, eqTires(optSetup, ambientTemp, (s) => calcWorkFactors(s, geoCtx)), inflationTemp, geoCtx);
   const optLapTime = metricToLapTime(optMetric);
 
   return {
