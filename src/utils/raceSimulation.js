@@ -477,15 +477,45 @@ function hotPressure(coldPsi, tireTemp, inflationTemp = COLD_PSI_TEMP) {
 // Produced by resolveGeoCtx() in analyzeSetup; defaults to VEH constants when null.
 function tireLoadsCtx(lateralG, springLLTD, geoCtx) {
   if (!geoCtx) return tireLoads(lateralG, springLLTD);
-  const { rcF, rcR, tw, jounceRF, droopLF } = geoCtx; // eslint-disable-line no-unused-vars
+  const { rcF, rcR, tw, rearSpringBase, icLateralFront } = geoCtx; // eslint-disable-line no-unused-vars
   const mFront = VEH.weight * VEH.frontBias;
   const mRear  = VEH.weight * (1 - VEH.frontBias);
-  const geoFront = mFront * lateralG * rcF / tw;
+
+  // Geometric load transfer — IC lateral position shifts the effective moment arm.
+  // When the IC is located laterally from the centerline, the resultant force vector
+  // (centrifugal + gravity) has a longer moment arm to the roll center line.
+  // Effective front moment arm length = sqrt(rcF² + icLateral²).
+  // When icLateralFront is not measured, fall back to using rcF (vertical arm only).
+  const frontMomentArm = icLateralFront != null
+    ? Math.sqrt(rcF * rcF + icLateralFront * icLateralFront)
+    : rcF;
+  const geoFront = mFront * lateralG * frontMomentArm / tw;
   const geoRear  = mRear  * lateralG * rcR / tw;
+
   const avgRCH = VEH.frontBias * rcF + (1 - VEH.frontBias) * rcR;
   const elasticTotal = VEH.weight * lateralG * (VEH.cgHeight - avgRCH) / tw;
-  const elasticFront = elasticTotal * springLLTD;
-  const elasticRear  = elasticTotal * (1 - springLLTD);
+
+  // Rear elastic load transfer — if spring base width is measured, use it to compute
+  // rear roll stiffness directly: k_roll_rear = k_spring × (springBase/2)².
+  // Wider spring base increases rear roll resistance independent of spring rate.
+  // When measured, replace the proportional rear elastic share with a physically correct split.
+  let elasticFront, elasticRear;
+  if (rearSpringBase != null) {
+    const springR = BASE_SPRING_REAR * 12; // lbs/ft
+    const halfBase = rearSpringBase / 2;   // ft
+    const rearRollStiffness = springR * halfBase * halfBase; // lb-ft/rad (spring base torque arm)
+    // Front roll stiffness from spring rate (normalized to same units)
+    const springLF = BASE_SPRING_FRONT * 12;
+    const halfTw   = tw / 2;
+    const frontRollStiffness = springLF * halfTw * halfTw;
+    const measuredLLTD = frontRollStiffness / (frontRollStiffness + rearRollStiffness);
+    elasticFront = elasticTotal * measuredLLTD;
+    elasticRear  = elasticTotal * (1 - measuredLLTD);
+  } else {
+    elasticFront = elasticTotal * springLLTD;
+    elasticRear  = elasticTotal * (1 - springLLTD);
+  }
+
   const rollRad = lateralG * 3.1 * Math.PI / 180;
   const arbFront = ARB.frontRollStiffness * rollRad / tw;
   const ltFront = geoFront + elasticFront + arbFront;
@@ -1170,11 +1200,13 @@ export function analyzeSetup(setup, ambientTemp = 65, inflationTemp = COLD_PSI_T
   // Bundle into geoCtx so every downstream function (calcPerformance, calcWorkFactors, shockStiffness)
   // uses the same measured values consistently — including testGain() recommendation calculations.
   const geoCtx = geoOverrides ? {
-    rcF:      (geo.rcHeightFront   != null ? geo.rcHeightFront   : VEH.rollCenterHeight     * 12) / 12, // ft
-    rcR:      (geo.rcHeightRear    != null ? geo.rcHeightRear    : VEH.rollCenterHeightRear * 12) / 12, // ft
-    tw:       (geo.trackWidthFront != null ? geo.trackWidthFront : VEH.trackWidth           * 12) / 12, // ft
-    jounceRF: geo.slaJounceCoeffRF != null ? geo.slaJounceCoeffRF : 0.355, // °/° roll
-    droopLF:  geo.slaDroopCoeffLF  != null ? geo.slaDroopCoeffLF  : 0.547, // °/° roll
+    rcF:            (geo.rcHeightFront   != null ? geo.rcHeightFront   : VEH.rollCenterHeight     * 12) / 12, // ft
+    rcR:            (geo.rcHeightRear    != null ? geo.rcHeightRear    : VEH.rollCenterHeightRear * 12) / 12, // ft
+    tw:             (geo.trackWidthFront != null ? geo.trackWidthFront : VEH.trackWidth           * 12) / 12, // ft
+    jounceRF:       geo.slaJounceCoeffRF  != null ? geo.slaJounceCoeffRF  : 0.355,  // °/° roll
+    droopLF:        geo.slaDroopCoeffLF   != null ? geo.slaDroopCoeffLF   : 0.547,  // °/° roll
+    rearSpringBase: geo.rearSpringBase    != null ? geo.rearSpringBase / 12 : null,  // ft (null = use spring ratio only)
+    icLateralFront: geo.icLateralFront    != null ? geo.icLateralFront / 12 : null,  // ft (null = use rcF as moment arm)
   } : null;
 
   const ss = shockStiffness(setup, geoCtx);
@@ -1185,6 +1217,38 @@ export function analyzeSetup(setup, ambientTemp = 65, inflationTemp = COLD_PSI_T
   const roll = bodyRoll(1.0, rollStiffness(setup));
   const toe = setup.toe !== undefined ? setup.toe : -0.25;
   const caster = setup.caster || { LF: 3.5, RF: 5.0 };
+
+  // ── Desired roll angle per axle end (Circle Track balance method) ──
+  // A balanced setup means both ends want to roll to the same angle at a given lateral G.
+  // When front and rear desired roll angles match, weight transfer is proportionate and
+  // tires run at ideal temperatures end-to-end. Mismatch > 1° indicates structural imbalance.
+  //
+  // Formula: desiredRollAngle_deg = (axleMass × lateralG × rollMomentArm) / rollStiffness_lbft_per_rad
+  //   rollMomentArm = CG height minus roll center height (ft)
+  //   rollStiffness_lbft_per_rad: computed from spring rate × (half track or half spring base)²
+  //
+  // Front roll stiffness: spring rate × (half track width)²
+  //   Uses average of LF+RF spring rate (may differ). Track width = tw (measured or VEH default).
+  const rcF_ds = geoCtx?.rcF ?? VEH.rollCenterHeight;
+  const rcR_ds = geoCtx?.rcR ?? VEH.rollCenterHeightRear;
+  const tw_ds  = geoCtx?.tw  ?? VEH.trackWidth;
+  const springLF_ds = (setup.springs?.LF ?? setup.springs?.front ?? BASE_SPRING_FRONT) * 12; // lbs/ft
+  const springRF_ds = (setup.springs?.RF ?? setup.springs?.front ?? BASE_SPRING_FRONT) * 12;
+  const springR_ds  = (setup.springs?.LR ?? setup.springs?.rear  ?? BASE_SPRING_REAR)  * 12;
+  const frontRollStiffness = ((springLF_ds + springRF_ds) / 2) * Math.pow(tw_ds / 2, 2); // lb-ft/rad
+  // Rear: use measured spring base if available, otherwise use track width (conservative for solid axle)
+  const rearHalfBase = geoCtx?.rearSpringBase != null ? geoCtx.rearSpringBase / 2 : tw_ds / 2;
+  const rearRollStiffness  = springR_ds * Math.pow(rearHalfBase, 2); // lb-ft/rad
+  // Include ARB in front roll stiffness (it resists front roll directly)
+  const frontRollStiffnessTotal = frontRollStiffness + ARB.frontRollStiffness;
+  const mFront_ds = VEH.mass * VEH.frontBias * G; // lbs (sprung mass approximation)
+  const mRear_ds  = VEH.mass * (1 - VEH.frontBias) * G;
+  const frontMomentArm_ds = VEH.cgHeight - rcF_ds; // ft
+  const rearMomentArm_ds  = VEH.cgHeight - rcR_ds;  // ft
+  // Desired roll angle in degrees at OVAL_CORNER_G (lap-average lateral G for steady-state balance)
+  const desiredRollFront = (mFront_ds * OVAL_CORNER_G * frontMomentArm_ds / frontRollStiffnessTotal) * (180 / Math.PI);
+  const desiredRollRear  = (mRear_ds  * OVAL_CORNER_G * rearMomentArm_ds  / rearRollStiffness)       * (180 / Math.PI);
+  const rollAngleImbalance = Math.abs(desiredRollFront - desiredRollRear);
 
   // Steady-state equilibrium temps from thermal model
   const workFactors = calcWorkFactors(setup, geoCtx);
@@ -1467,6 +1531,7 @@ export function analyzeSetup(setup, ambientTemp = 65, inflationTemp = COLD_PSI_T
     toeGrip, toeDrag, toe,
     lapTime, optLapTime, totalGain: lapTime - optLapTime,
     recs, caster,
+    desiredRollFront, desiredRollRear, rollAngleImbalance,
   };
 }
 

@@ -25,6 +25,7 @@ function buildGeoOverrides(geo) {
   const overrides = {};
   if (geo.trackWidth?.front) overrides.trackWidthFront = Number(geo.trackWidth.front);
   if (geo.rearRollCenter) overrides.rcHeightRear = Number(geo.rearRollCenter);
+  if (geo.rearSpringBase) overrides.rearSpringBase = Number(geo.rearSpringBase);
   const rf = computeGeometry(geo, 'RF');
   const lf = computeGeometry(geo, 'LF');
   if (rf?.rcHeight != null && lf?.rcHeight != null) {
@@ -33,6 +34,14 @@ function buildGeoOverrides(geo) {
     overrides.rcHeightFront = rf.rcHeight;
   } else if (lf?.rcHeight != null) {
     overrides.rcHeightFront = lf.rcHeight;
+  }
+  // IC lateral position — average of RF and LF (signed: positive = outboard of CL)
+  if (rf?.ic?.x != null && lf?.ic?.x != null) {
+    overrides.icLateralFront = (Math.abs(rf.ic.x) + Math.abs(lf.ic.x)) / 2;
+  } else if (rf?.ic?.x != null) {
+    overrides.icLateralFront = Math.abs(rf.ic.x);
+  } else if (lf?.ic?.x != null) {
+    overrides.icLateralFront = Math.abs(lf.ic.x);
   }
   const wheelDispPerDegRoll = 0.383;
   if (rf?.fvsa != null && rf.fvsa > 0) overrides.slaJounceCoeffRF = (57.3 / rf.fvsa) * wheelDispPerDegRoll;
@@ -130,6 +139,7 @@ const TIPS = {
   frontGripShare: 'The front axle\'s share of total cornering grip based on current tire temperatures and pressures. 55% ideal matches the car\'s front weight bias. The gauge above shows a pressure-adjusted version of this number used to calculate the needle position — the two will differ slightly when pressures are off-target.',
   bodyRoll: 'Estimated chassis lean angle at 1G of lateral force. More roll tilts the solid rear axle and degrades camber on both rear tires. Target under 3° for this suspension geometry.',
   balanceScore: 'Combined grip penalty from front/rear imbalance. 100% = perfectly balanced. Score drops when the front and rear axles contribute unequal grip, causing understeer or oversteer.',
+  rollAngleBalance: 'The angle each suspension end wants to roll to at steady-state cornering load. A balanced setup means both ends desire the same roll angle — when matched, weight transfer is proportionate and tire temperatures are even front-to-rear. Imbalance >1° indicates the front and rear are fighting each other structurally: the stiffer end resists roll more, overloading its outside tire. Source: Circle Track Magazine roll angle balance method.',
   toeCurrent: 'Current toe setting. Toe-out (negative) points the front tires slightly away from center, sharpening turn-in response. Toe-in (positive) improves straight-line stability but dulls corner entry.',
   toeOptimal: 'Model optimum: ¼" toe-out. This is the peak of the turn-in grip curve for this car — enough to sharpen initial steering response without excessive tire scrub or drag.',
   turnInGrip: 'Grip multiplier from toe angle. Peaks near ¼"–⅜" toe-out and falls off with excessive toe in either direction. 100% = best achievable toe grip.',
@@ -808,6 +818,7 @@ export default function SetupOptimizer({ setup, setSetup, ambient, setAmbient, i
     corners, ss, roll, frontGripPct, balancePenalty,
     toeGrip, toeDrag, toe,
     lapTime, optLapTime, totalGain, recs,
+    desiredRollFront, desiredRollRear, rollAngleImbalance,
   } = analysis;
 
   const gap = lapTime - TARGET;
@@ -1007,6 +1018,35 @@ export default function SetupOptimizer({ setup, setSetup, ambient, setAmbient, i
             <div className="opt-stat-pair">
               <Tooltip text={TIPS.bodyRoll}><span>Body roll @ 1G</span></Tooltip><span>{roll.toFixed(1)}°</span>
             </div>
+            {(
+              <div className="opt-roll-balance">
+                <Tooltip text={TIPS.rollAngleBalance}>
+                  <span className="opt-factor-title" style={{ fontSize: '0.78rem', marginBottom: 4, display: 'block' }}>Roll Angle Balance</span>
+                </Tooltip>
+                <div className="opt-stat-pair">
+                  <span>Front desired roll</span>
+                  <span>{desiredRollFront.toFixed(2)}°</span>
+                </div>
+                <div className="opt-stat-pair">
+                  <span>Rear desired roll</span>
+                  <span>{desiredRollRear.toFixed(2)}°</span>
+                </div>
+                <div className="opt-stat-pair">
+                  <span>Imbalance</span>
+                  <span style={{
+                    color: rollAngleImbalance < 1.0
+                      ? 'var(--green)'
+                      : rollAngleImbalance < 2.0
+                        ? 'var(--yellow)'
+                        : 'var(--red)',
+                    fontWeight: 600,
+                  }}>
+                    {rollAngleImbalance.toFixed(2)}°
+                    {rollAngleImbalance < 1.0 ? ' ✓' : rollAngleImbalance < 2.0 ? ' !' : ' ✗'}
+                  </span>
+                </div>
+              </div>
+            )}
             <ScoreBar value={balancePenalty} label="Balance score" tip={TIPS.balanceScore} />
           </div>
 

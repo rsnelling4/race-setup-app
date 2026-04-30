@@ -35,6 +35,7 @@ const EMPTY_GEO = {
   notes: '',
   trackWidth:      { front: '', rear: '' },
   rearRollCenter:  '',
+  rearSpringBase:  '',
   lowerBallJoint:  { LF: '', RF: '' },
   upperBallJoint:  { LF: '', RF: '' },
   lowerArmPivot:   { LF: '', RF: '' },
@@ -102,6 +103,7 @@ function formatGeo(car) {
     '',
     `Track width (front): ${v(car.trackWidth.front)}"   rear: ${v(car.trackWidth.rear)}"`,
     `Rear roll center height (Watts pivot): ${v(car.rearRollCenter)}"`,
+    `Rear spring base width: ${v(car.rearSpringBase)}"`,
     '',
     'Front SLA ball joint heights from floor:',
     `  LF lower BJ: ${v(car.lowerBallJoint.LF)}"   RF lower BJ: ${v(car.lowerBallJoint.RF)}"`,
@@ -520,6 +522,10 @@ function GeoEditor({ editing, setEditing }) {
         <Field label="Watts link center pivot height from floor (inches)"
           hint="Car at ride height with driver weight (~200 lbs on seat). Find the large center pivot bolt on the Watts link — it sits on a bracket centered on top of the rear axle housing, connecting the two horizontal arms. Measure from the bolt centerline straight down to the floor.">
           <NumIn value={editing.rearRollCenter} onChange={v => set('rearRollCenter', v)} placeholder="e.g. 14.5" step="0.125" />
+        </Field>
+        <Field label="Rear spring base width (inches)"
+          hint="Distance between the centers of the two rear coil spring perches on the axle housing. On a P71 solid axle, measure along the axle tube from the center of the left spring perch to the center of the right spring perch. Wider spring base = more rear roll resistance independent of spring rate.">
+          <NumIn value={editing.rearSpringBase} onChange={v => set('rearSpringBase', v)} placeholder="e.g. 42" step="0.25" />
         </Field>
       </div>
 

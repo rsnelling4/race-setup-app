@@ -145,6 +145,9 @@ function buildGeoOverrides(geo) {
   // Rear roll center (Watts pivot height)
   if (geo.rearRollCenter) overrides.rcHeightRear = Number(geo.rearRollCenter);
 
+  // Rear spring base width
+  if (geo.rearSpringBase) overrides.rearSpringBase = Number(geo.rearSpringBase);
+
   // Front roll center height — computed from SLA hardpoints via computeGeometry()
   const rf = computeGeometry(geo, 'RF');
   const lf = computeGeometry(geo, 'LF');
@@ -154,6 +157,15 @@ function buildGeoOverrides(geo) {
     overrides.rcHeightFront = rf.rcHeight;
   } else if (lf?.rcHeight != null) {
     overrides.rcHeightFront = lf.rcHeight;
+  }
+
+  // IC lateral position — average of RF and LF (distance from centerline, inches)
+  if (rf?.ic?.x != null && lf?.ic?.x != null) {
+    overrides.icLateralFront = (Math.abs(rf.ic.x) + Math.abs(lf.ic.x)) / 2;
+  } else if (rf?.ic?.x != null) {
+    overrides.icLateralFront = Math.abs(rf.ic.x);
+  } else if (lf?.ic?.x != null) {
+    overrides.icLateralFront = Math.abs(lf.ic.x);
   }
 
   // SLA jounce/droop coefficients from FVSA
