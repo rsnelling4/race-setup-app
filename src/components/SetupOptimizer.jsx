@@ -421,7 +421,7 @@ const CALC = {
 };
 const OVAL_RACING_G_CALC = 0.813; // instantaneous apex G — must match raceSimulation.js OVAL_RACING_G
 
-function CamberCalc({ roll, setupCaster }) {
+function CamberCalc({ roll, setupCaster, geoOverrides }) {
   const cornerRoll = roll * OVAL_RACING_G_CALC;
 
   const [caster, setCaster] = useState({
@@ -429,8 +429,13 @@ function CamberCalc({ roll, setupCaster }) {
     RF: setupCaster?.RF ?? 5.0,
   });
 
+  // Use measured FVSA-derived coefficients when geometry is loaded
+  const jounceRF = geoOverrides?.slaJounceCoeffRF ?? CALC.RF.rollCoeff;
+  const droopLF  = geoOverrides?.slaDroopCoeffLF  ?? CALC.LF.rollCoeff;
+
   const compute = (c) => {
-    const { outside, casterCoeff, rollCoeff } = CALC[c];
+    const { outside, casterCoeff } = CALC[c];
+    const rollCoeff = c === 'RF' ? jounceRF : droopLF;
     // Convert ground-frame ideal → chassis-relative ideal effective camber
     // RF: ground = effective + cornerRoll → effective = idealGround - cornerRoll
     // LF: ground = effective - cornerRoll → effective = idealGround + cornerRoll
@@ -455,6 +460,11 @@ function CamberCalc({ roll, setupCaster }) {
         Enter caster → model returns the static setting that hits the ideal effective camber
         at mid-corner. Body roll uses your current setup stiffness
         ({cornerRoll.toFixed(2)}° in corners).
+        {geoOverrides?.slaJounceCoeffRF != null && (
+          <span className="opt-geo-note" style={{ display: 'block', marginTop: 4 }}>
+            Using measured jounce coefficients — RF {jounceRF.toFixed(3)}°/° · LF {droopLF.toFixed(3)}°/° (from FVSA)
+          </span>
+        )}
       </p>
       <div className="opt-calc-grid">
         {['LF', 'RF'].map(c => {
@@ -956,7 +966,7 @@ export default function SetupOptimizer({ setup, setSetup, ambient, setAmbient, i
       {/* ── Camber Calculator ── */}
       <div className="opt-section">
         <h3 className="opt-section-title">Camber Calculator</h3>
-        <CamberCalc roll={roll} setupCaster={setup.caster} />
+        <CamberCalc roll={roll} setupCaster={setup.caster} geoOverrides={geoOverrides} />
       </div>
 
       {/* ── Per-corner analysis ── */}
