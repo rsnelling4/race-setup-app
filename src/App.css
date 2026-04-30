@@ -2759,6 +2759,36 @@
   gap: 24px;
 }
 
+/* Geometry profile selector */
+.opt-geo-selector {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: wrap;
+  padding: 10px 14px;
+  background: var(--surface-2);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+}
+.opt-geo-label {
+  font-size: 0.82rem;
+  color: var(--text-muted);
+  white-space: nowrap;
+}
+.opt-geo-select {
+  background: var(--surface-1);
+  border: 1px solid var(--border);
+  border-radius: 5px;
+  color: var(--text-primary);
+  font-size: 0.85rem;
+  padding: 4px 8px;
+}
+.opt-geo-note {
+  font-size: 0.78rem;
+  color: var(--text-muted);
+  font-family: monospace;
+}
+
 /* Header */
 .opt-header {
   display: flex;

@@ -1,6 +1,8 @@
 import { useMemo, useState, useRef } from 'react';
 import { analyzeSetup, DEFAULT_SETUP, RECOMMENDED_SETUP, PETE_SETUP, DYLAN_SETUP, JOSH_SETUP, JOEY_SETUP } from '../utils/raceSimulation';
 import { REAR_SHOCKS, FRONT_STRUTS, shockLabel } from '../data/shockOptions';
+import { computeGeometry } from './GeometryVisualizer';
+import { useSync } from '../utils/SyncContext';
 import NumericInput from './NumericInput';
 
 const CORNERS = ['LF', 'RF', 'LR', 'RR'];
@@ -17,6 +19,26 @@ const RANGE_MAX = 17.8;
 function deepClone(o) { return JSON.parse(JSON.stringify(o)); }
 
 function pct(v) { return (v * 100).toFixed(1) + '%'; }
+
+function buildGeoOverrides(geo) {
+  if (!geo) return null;
+  const overrides = {};
+  if (geo.trackWidth?.front) overrides.trackWidthFront = Number(geo.trackWidth.front);
+  if (geo.rearRollCenter) overrides.rcHeightRear = Number(geo.rearRollCenter);
+  const rf = computeGeometry(geo, 'RF');
+  const lf = computeGeometry(geo, 'LF');
+  if (rf?.rcHeight != null && lf?.rcHeight != null) {
+    overrides.rcHeightFront = (rf.rcHeight + lf.rcHeight) / 2;
+  } else if (rf?.rcHeight != null) {
+    overrides.rcHeightFront = rf.rcHeight;
+  } else if (lf?.rcHeight != null) {
+    overrides.rcHeightFront = lf.rcHeight;
+  }
+  const wheelDispPerDegRoll = 0.383;
+  if (rf?.fvsa != null && rf.fvsa > 0) overrides.slaJounceCoeffRF = (57.3 / rf.fvsa) * wheelDispPerDegRoll;
+  if (lf?.fvsa != null && lf.fvsa > 0) overrides.slaDroopCoeffLF  = (57.3 / lf.fvsa) * wheelDispPerDegRoll;
+  return Object.keys(overrides).length > 0 ? overrides : null;
+}
 
 function scoreColor(v) {
   if (v >= 0.99) return 'var(--green)';
@@ -767,7 +789,11 @@ function CompactSetupForm({ setup, onChange }) {
 }
 
 export default function SetupOptimizer({ setup, setSetup, ambient, setAmbient, inflationTemp, setInflationTemp }) {
-  const analysis = useMemo(() => analyzeSetup(setup, ambient, inflationTemp), [setup, ambient, inflationTemp]);
+  const { geometry: geoProfiles = [] } = useSync();
+  const [selectedGeoId, setSelectedGeoId] = useState(null);
+  const selectedGeo = selectedGeoId != null ? geoProfiles.find(g => g.id === selectedGeoId) : null;
+  const geoOverrides = useMemo(() => buildGeoOverrides(selectedGeo), [selectedGeo]);
+  const analysis = useMemo(() => analyzeSetup(setup, ambient, inflationTemp, geoOverrides), [setup, ambient, inflationTemp, geoOverrides]);
   const {
     corners, ss, roll, frontGripPct, balancePenalty,
     toeGrip, toeDrag, toe,
@@ -798,6 +824,30 @@ export default function SetupOptimizer({ setup, setSetup, ambient, setAmbient, i
 
   return (
     <div className="opt-page">
+
+      {/* ── Geometry profile selector ── */}
+      {geoProfiles.length > 0 && (
+        <div className="opt-geo-selector">
+          <label className="opt-geo-label">Car geometry profile:</label>
+          <select
+            className="opt-geo-select"
+            value={selectedGeoId ?? ''}
+            onChange={e => setSelectedGeoId(e.target.value ? Number(e.target.value) : null)}
+          >
+            <option value="">Model default (hardcoded P71 estimates)</option>
+            {geoProfiles.map(g => (
+              <option key={g.id} value={g.id}>{g.title || `Profile ${g.id}`}</option>
+            ))}
+          </select>
+          {selectedGeo && (
+            <span className="opt-geo-note">
+              Using measured: RCH {selectedGeo.rearRollCenter ? `rear ${selectedGeo.rearRollCenter}"` : ''}
+              {geoOverrides?.rcHeightFront != null ? ` · front ${geoOverrides.rcHeightFront.toFixed(1)}"` : ''}
+              {geoOverrides?.slaJounceCoeffRF != null ? ` · jounce RF ${geoOverrides.slaJounceCoeffRF.toFixed(3)}°/°` : ''}
+            </span>
+          )}
+        </div>
+      )}
 
       {/* ── Header ── */}
       <div className="opt-header">

@@ -1126,11 +1126,55 @@ export function simulateRace(setup, ambientTemp = 65, numLaps = 25, inflationTem
 
 // ============ SETUP ANALYZER ============
 // Returns real-time per-corner analysis, balance, toe, and ranked recommendations.
-export function analyzeSetup(setup, ambientTemp = 65, inflationTemp = COLD_PSI_TEMP) {
+// Optional geoOverrides shape:
+// {
+//   rcHeightFront:    number (inches),  // measured front roll center height
+//   rcHeightRear:     number (inches),  // measured rear roll center height (Watts pivot)
+//   trackWidthFront:  number (inches),  // measured front track width
+//   slaJounceCoeffRF: number (°/°roll), // from 57.3/fvsa_rf × wheelDisp/degRoll
+//   slaDroopCoeffLF:  number (°/°roll), // from 57.3/fvsa_lf × wheelDisp/degRoll
+// }
+// When a field is omitted or null, the hardcoded VEH constant is used.
+export function analyzeSetup(setup, ambientTemp = 65, inflationTemp = COLD_PSI_TEMP, geoOverrides = null) {
+  const geo = geoOverrides || {};
+  // Resolve geometry — use measured values when provided, fall back to hardcoded VEH constants
+  const rcHeightFront   = (geo.rcHeightFront    != null ? geo.rcHeightFront    : VEH.rollCenterHeight     * 12) / 12; // ft
+  const rcHeightRear    = (geo.rcHeightRear     != null ? geo.rcHeightRear     : VEH.rollCenterHeightRear * 12) / 12; // ft
+  const trackWidthFt    = (geo.trackWidthFront  != null ? geo.trackWidthFront  : VEH.trackWidth           * 12) / 12; // ft
+  const jounceCoeffRF   =  geo.slaJounceCoeffRF != null ? geo.slaJounceCoeffRF : 0.355; // °/° roll
+  const droopCoeffLF    =  geo.slaDroopCoeffLF  != null ? geo.slaDroopCoeffLF  : 0.547; // °/° roll
+
+  // If geometry overrides are provided, compute local load transfer using measured RCH / track width
+  // instead of the hardcoded VEH constants. tireLoads() uses VEH globals, so we compute inline here.
+  function tireLoadsGeo(lateralG, springLLTD) {
+    if (!geoOverrides) return tireLoads(lateralG, springLLTD);
+    const mFront = VEH.weight * VEH.frontBias;
+    const mRear  = VEH.weight * (1 - VEH.frontBias);
+    const geoFront = mFront * lateralG * rcHeightFront / trackWidthFt;
+    const geoRear  = mRear  * lateralG * rcHeightRear  / trackWidthFt;
+    const avgRCH = VEH.frontBias * rcHeightFront + (1 - VEH.frontBias) * rcHeightRear;
+    const elasticTotal = VEH.weight * lateralG * (VEH.cgHeight - avgRCH) / trackWidthFt;
+    const elasticFront = elasticTotal * springLLTD;
+    const elasticRear  = elasticTotal * (1 - springLLTD);
+    const rollDeg = lateralG * 3.1;
+    const rollRad = rollDeg * Math.PI / 180;
+    const arbFront = ARB.frontRollStiffness * rollRad / trackWidthFt; // track width in ft matches VEH.trackWidth units
+    const ltFront = geoFront + elasticFront + arbFront;
+    const ltRear  = geoRear  + elasticRear;
+    const fStatic = VEH.weight * VEH.frontBias / 2;
+    const rStatic = VEH.weight * (1 - VEH.frontBias) / 2;
+    return {
+      LF: Math.max(50, fStatic - ltFront),
+      RF: fStatic + ltFront,
+      LR: Math.max(50, rStatic - ltRear),
+      RR: rStatic + ltRear,
+    };
+  }
+
   const ss = shockStiffness(setup);
-  const loads = tireLoads(1.0, ss.springLLTD);
+  const loads = tireLoadsGeo(1.0, ss.springLLTD);
   // Use actual cornering G for pressure targets — 1G gives absurd RF/LF optPsi
-  const cornerLoads = tireLoads(OVAL_CORNER_G, ss.springLLTD);
+  const cornerLoads = tireLoadsGeo(OVAL_CORNER_G, ss.springLLTD);
   const avgLoad = VEH.weight / 4;
   const roll = bodyRoll(1.0, rollStiffness(setup));
   const toe = setup.toe !== undefined ? setup.toe : -0.25;
@@ -1181,7 +1225,7 @@ export function analyzeSetup(setup, ambientTemp = 65, inflationTemp = COLD_PSI_T
       // Caster gain: RF (outside) gains negative, LF (inside) gains positive — geometric.
       casterGain = outside ? -(caster[c] * CASTER_COEFF_RF) : (caster[c] * CASTER_COEFF_LF);
       // SLA body roll camber at actual corner apex (cornerRoll = roll × OVAL_RACING_G).
-      bodyRollCamber = outside ? -(cornerRoll * 0.355) : (cornerRoll * 0.547); // measured droop coeff
+      bodyRollCamber = outside ? -(cornerRoll * jounceCoeffRF) : (cornerRoll * droopCoeffLF);
       // KPI camber: +positive on outside (RF), -negative on inside (LF). ≈ ±0.144°.
       kpiCamber = outside ? GEOM.kpiCamberGain : -GEOM.kpiCamberGain;
       effectiveCamber = setup.camber[c] + casterGain + bodyRollCamber + kpiCamber;

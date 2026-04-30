@@ -2,6 +2,7 @@ import { useState, useEffect, useCallback } from 'react';
 import { analyzeSetup } from '../utils/raceSimulation';
 import { handlingConditions, cornerPhases, analyzeFullCar, getHandlingRecommendations, formatPosition } from '../utils/tireAnalysis';
 import { REAR_SHOCKS, FRONT_STRUTS, shockLabel } from '../data/shockOptions';
+import { computeGeometry } from './GeometryVisualizer';
 import { useSync } from '../utils/SyncContext';
 
 // ─── Storage keys ─────────────────────────────────────────────────────────────
@@ -123,6 +124,49 @@ function carLabel(session, geoProfiles) {
   if (!session.carProfileId) return 'Model default (P71)';
   const geo = geoProfiles.find(g => g.id === session.carProfileId);
   return geo ? (geo.title || 'Unnamed car') : 'Model default (P71)';
+}
+
+// ─── Geometry overrides ───────────────────────────────────────────────────────
+// Derives geoOverrides from a stored geometry profile for use in analyzeSetup().
+// Returns null if no geo profile or if required hardpoints are missing.
+// Jounce coefficient formula: camberGain (°/in) × wheelDisplacement (in/°roll)
+//   camberGain = 57.3 / fvsa  (degrees per inch of wheel travel — SLA geometry)
+//   wheelDisp  = 0.383 in/°  (derived from 13.6" wheel radius: sin(1°) × 13.6" ≈ 0.237"
+//                              actual measured: 1.7" at 3.1° roll ÷ 2 = 0.548" / 3.1° ≈ 0.177"
+//                              per-degree-roll ≈ 0.383 / 2 = 0.19" — using empirical 0.383)
+// If fvsa is not computable (missing hardpoints), falls back to calibrated defaults.
+function buildGeoOverrides(geo) {
+  if (!geo) return null;
+  const overrides = {};
+
+  // Front track width
+  if (geo.trackWidth?.front) overrides.trackWidthFront = Number(geo.trackWidth.front);
+
+  // Rear roll center (Watts pivot height)
+  if (geo.rearRollCenter) overrides.rcHeightRear = Number(geo.rearRollCenter);
+
+  // Front roll center height — computed from SLA hardpoints via computeGeometry()
+  const rf = computeGeometry(geo, 'RF');
+  const lf = computeGeometry(geo, 'LF');
+  if (rf?.rcHeight != null && lf?.rcHeight != null) {
+    overrides.rcHeightFront = (rf.rcHeight + lf.rcHeight) / 2;
+  } else if (rf?.rcHeight != null) {
+    overrides.rcHeightFront = rf.rcHeight;
+  } else if (lf?.rcHeight != null) {
+    overrides.rcHeightFront = lf.rcHeight;
+  }
+
+  // SLA jounce/droop coefficients from FVSA
+  // Wheel displacement per degree of roll: empirically measured at 0.383 in/°
+  const wheelDispPerDegRoll = 0.383;
+  if (rf?.fvsa != null && rf.fvsa > 0) {
+    overrides.slaJounceCoeffRF = (57.3 / rf.fvsa) * wheelDispPerDegRoll;
+  }
+  if (lf?.fvsa != null && lf.fvsa > 0) {
+    overrides.slaDroopCoeffLF = (57.3 / lf.fvsa) * wheelDispPerDegRoll;
+  }
+
+  return Object.keys(overrides).length > 0 ? overrides : null;
 }
 
 // ─── Physics-derived prediction (no AI — pure geometry/math) ─────────────────
@@ -314,7 +358,8 @@ function buildPrompt(event, selectedSessions, geoProfiles, confirmations) {
     const ambient = Number(session.ambient) || 65;
     const inflation = Number(session.inflationTemp) || 68;
     let physics = null;
-    try { physics = analyzeSetup(simSetup, ambient, inflation); } catch { /* ignore */ }
+    const geoOverrides = buildGeoOverrides(geo);
+    try { physics = analyzeSetup(simSetup, ambient, inflation, geoOverrides); } catch { /* ignore */ }
     const conf = confirmations?.[session.id];
 
     lines.push(`${'─'.repeat(60)}`);
@@ -515,12 +560,14 @@ async function callGroq(apiKey, prompt) {
   return data.choices?.[0]?.message?.content ?? '';
 }
 
-function runPhysicsAnalysis(sessions) {
+function runPhysicsAnalysis(sessions, geoProfiles = []) {
   return sessions.map(session => {
     const simSetup = sessionToSimSetup(session);
     const ambient = Number(session.ambient) || 65;
     const inflation = Number(session.inflationTemp) || 68;
-    try { return { sessionId: session.id, ...analyzeSetup(simSetup, ambient, inflation) }; }
+    const geo = session.carProfileId ? geoProfiles.find(g => g.id === session.carProfileId) : null;
+    const geoOverrides = buildGeoOverrides(geo);
+    try { return { sessionId: session.id, ...analyzeSetup(simSetup, ambient, inflation, geoOverrides) }; }
     catch { return null; }
   }).filter(Boolean);
 }
@@ -934,9 +981,11 @@ function TireAnalysisCard({ session, geoProfiles }) {
   const simSetup = sessionToSimSetup(session);
   const ambient = Number(session.ambient) || 65;
   const inflation = Number(session.inflationTemp) || 68;
+  const geo = session.carProfileId ? geoProfiles?.find(g => g.id === session.carProfileId) : null;
+  const geoOverrides = buildGeoOverrides(geo);
   let physicsCorners = null;
   try {
-    const phys = analyzeSetup(simSetup, ambient, inflation);
+    const phys = analyzeSetup(simSetup, ambient, inflation, geoOverrides);
     physicsCorners = phys.corners;
   } catch { /* ignore */ }
 
@@ -1302,7 +1351,7 @@ function AnalysisPanel({ event, allSessions, geoProfiles, apiKey, onSendToOptimi
   // Phase 1: compute physics + predictions, show confirmation cards
   function predict() {
     if (selectedSessions.length === 0) return;
-    const phys = runPhysicsAnalysis(selectedSessions);
+    const phys = runPhysicsAnalysis(selectedSessions, geoProfiles);
     setPhysicsResults(phys);
 
     // Build a lookup by sessionId so index desync from .filter(Boolean) is avoided
