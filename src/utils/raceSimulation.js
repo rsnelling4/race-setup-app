@@ -478,8 +478,10 @@ function hotPressure(coldPsi, tireTemp, inflationTemp = COLD_PSI_TEMP) {
 function tireLoadsCtx(lateralG, springLLTD, geoCtx) {
   if (!geoCtx) return tireLoads(lateralG, springLLTD);
   const { rcF, rcR, tw, rearSpringBase, icLateralFront } = geoCtx; // eslint-disable-line no-unused-vars
-  const mFront = VEH.weight * VEH.frontBias;
-  const mRear  = VEH.weight * (1 - VEH.frontBias);
+  const frontBias = geoCtx.frontBias ?? VEH.frontBias;
+  const cgH       = geoCtx.cgHeight  ?? VEH.cgHeight;   // ft
+  const mFront = VEH.weight * frontBias;
+  const mRear  = VEH.weight * (1 - frontBias);
 
   // Geometric load transfer — IC lateral position shifts the effective moment arm.
   // When the IC is located laterally from the centerline, the resultant force vector
@@ -492,8 +494,8 @@ function tireLoadsCtx(lateralG, springLLTD, geoCtx) {
   const geoFront = mFront * lateralG * frontMomentArm / tw;
   const geoRear  = mRear  * lateralG * rcR / tw;
 
-  const avgRCH = VEH.frontBias * rcF + (1 - VEH.frontBias) * rcR;
-  const elasticTotal = VEH.weight * lateralG * (VEH.cgHeight - avgRCH) / tw;
+  const avgRCH = frontBias * rcF + (1 - frontBias) * rcR;
+  const elasticTotal = VEH.weight * lateralG * (cgH - avgRCH) / tw;
 
   // Rear elastic load transfer — if spring base width is measured, use it to compute
   // rear roll stiffness directly: k_roll_rear = k_spring × (springBase/2)².
@@ -503,11 +505,11 @@ function tireLoadsCtx(lateralG, springLLTD, geoCtx) {
   if (rearSpringBase != null) {
     const springR = BASE_SPRING_REAR * 12; // lbs/ft
     const halfBase = rearSpringBase / 2;   // ft
-    const rearRollStiffness = springR * halfBase * halfBase; // lb-ft/rad (spring base torque arm)
-    // Front roll stiffness from spring rate (normalized to same units)
+    const rearRollStiffness = springR * halfBase * halfBase * MR_REAR * MR_REAR; // lb-ft/rad
+    // Front roll stiffness from spring rate with SLA motion ratio
     const springLF = BASE_SPRING_FRONT * 12;
     const halfTw   = tw / 2;
-    const frontRollStiffness = springLF * halfTw * halfTw;
+    const frontRollStiffness = springLF * halfTw * halfTw * MR_FRONT * MR_FRONT;
     const measuredLLTD = frontRollStiffness / (frontRollStiffness + rearRollStiffness);
     elasticFront = elasticTotal * measuredLLTD;
     elasticRear  = elasticTotal * (1 - measuredLLTD);
@@ -561,31 +563,66 @@ function shockStiffness(setup, geoCtx) {
   return { front: f, rear: r, total: f + r, frontLLTD, springLLTD, damperLLTD };
 }
 
-// Body roll angle (degrees) at given lateral G
-// baseRoll = 3.1°/G at baseline stiffness — measured: 3.1° at actual corner G (42 mph on oval)
-function bodyRoll(lateralG, totalStiffness) {
-  const baseRoll = 3.1;     // deg/G at baseline stiffness (measured: 3.1° at corner G)
-  const baseStiff = 28;     // baseline total (user's current: 12+16)
-  return lateralG * baseRoll * baseStiff / Math.max(totalStiffness, 4);
-}
+// Physical roll stiffness (lb-ft/rad) from spring rates and track geometry.
+// Formula (Goodman 2009 §15.5): K_roll = K_wheel × (t/2)²
+//   K_wheel = spring_rate × MR²  (§15.6, wheel rate via motion ratio)
+//
+// P71 front SLA (double A-arm): spring mounts to lower control arm at roughly mid-span.
+//   MR_front ≈ 0.87 — spring displacement / wheel displacement in heave.
+//   Exact value depends on spring pickup point along lower arm; 0.87 is a reasonable estimate
+//   for the P71 geometry and is implicitly confirmed by the 3.1°/G baseline measurement.
+//   TODO: measure spring pickup distance along lower arm to refine this value.
+// P71 rear solid axle (Watts-link): spring sits directly on axle → MR_rear = 1.0.
+//   Rear spring base (contact points on axle) = 37" — if geoCtx provides it, use it;
+//   otherwise falls back to track width (conservative, over-estimates rear roll stiffness).
+//
+// ARB is included in front total (physically resists roll; already in lb-ft/rad units).
+//
+// Baseline validation (475 lbs/in front, 160 lbs/in rear, MR_front=0.87, tw=64"):
+//   K_front_spring = (475×12) × (32/12)² × 0.87² = 5700 × 7.111 × 0.757 = 30,670 lb-ft/rad
+//   K_rear_spring  = (160×12) × (32/12)²          = 1920 × 7.111          = 13,653 lb-ft/rad
+//   K_total_spring = 30,670 + 13,653 = 44,323 lb-ft/rad (baseline index)
+//   This baseline is stored as BASE_K_ROLL_SPRING and used to scale bodyRoll() to 3.1°/G.
+const MR_FRONT = 0.87; // SLA front: spring-to-wheel motion ratio (heave) — estimate, see TODO above
+const MR_REAR  = 1.00; // Solid rear axle: spring at wheel → MR = 1.0
+const BASE_K_ROLL_SPRING = (() => {
+  const tw = VEH.trackWidth; // ft
+  const kFront = (BASE_SPRING_FRONT * 12) * Math.pow(tw / 2, 2) * MR_FRONT * MR_FRONT;
+  const kRear  = (BASE_SPRING_REAR  * 12) * Math.pow(tw / 2, 2) * MR_REAR  * MR_REAR;
+  return kFront + kRear; // lb-ft/rad at baseline springs, excluding ARB
+})();
 
-// Effective roll stiffness combining spring rates (70%) and damper ratings (30%).
-// Springs are the dominant steady-state factor; dampers affect transient weight transfer rate.
-// Calibrated so baseline (475F/160R springs + 4/4/2/2 dampers) returns exactly 28,
-// preserving all existing bodyRoll() calibration.
-function rollStiffness(setup) {
+function rollStiffness(setup, geoCtx) {
   const springLF = setup.springs?.LF ?? setup.springs?.front ?? BASE_SPRING_FRONT;
   const springRF = setup.springs?.RF ?? setup.springs?.front ?? BASE_SPRING_FRONT;
   const springF  = (springLF + springRF) / 2;
   const springR  = setup.springs?.LR ?? setup.springs?.rear  ?? BASE_SPRING_REAR;
-  const ss       = shockStiffness(setup);
-  // Normalize springs to baseline (1.0 = stock P71): both front and rear normalize independently
-  const springScale = (springF / BASE_SPRING_FRONT + springR / BASE_SPRING_REAR) / 2;
-  // Normalize damper total to baseline (28 at 4/4/2/2)
-  const damperNorm  = ss.total / 28;
-  // At baseline: (0.85×1.0 + 0.15×1.0) × 28 = 28 ✓
-  // 85/15 split: springs dominate steady-state roll; dampers are transient, not roll-resisting.
-  return Math.max(4, (0.85 * springScale + 0.15 * damperNorm) * 28);
+  const tw = (geoCtx?.tw ?? VEH.trackWidth); // ft
+  // Rear spring base: measured distance between rear spring contact points on axle.
+  // Narrower than track width — increases rear roll resistance relative to track-width estimate.
+  const rearHalfBase = geoCtx?.rearSpringBase != null ? geoCtx.rearSpringBase / 2 : tw / 2;
+  const mr = geoCtx?.mrFront ?? MR_FRONT; // use measured MR if available
+  const kFront = (springF * 12) * Math.pow(tw / 2, 2) * mr * mr; // lb-ft/rad
+  const kRear  = (springR * 12) * Math.pow(rearHalfBase, 2) * MR_REAR * MR_REAR;
+  return kFront + kRear; // lb-ft/rad, springs only (ARB added separately in bodyRoll)
+}
+
+// Body roll angle (degrees) at given lateral G.
+// Uses physically derived spring roll stiffness (Goodman 2009 §15.5) normalized to the
+// empirically measured baseline: 3.1°/G at stock P71 springs (475F/160R) at actual corner G.
+//
+// The ratio (BASE_K_ROLL_SPRING / K_roll_spring) correctly scales roll angle as spring rates
+// change relative to baseline, preserving the validated 3.1° measurement while using
+// physical spring geometry rather than a normalized index.
+//
+// Dampers do NOT contribute to steady-state roll stiffness — they resist roll velocity,
+// not roll angle. They affect how quickly the car reaches equilibrium, not where it settles.
+function bodyRoll(lateralG, totalStiffness) {
+  // totalStiffness is now K_roll_spring (lb-ft/rad) from rollStiffness().
+  // Ratio to baseline scales the 3.1°/G measurement proportionally.
+  const baseRoll = 3.1; // deg/G at baseline springs (measured: 3.1° at actual corner G)
+  const stiffnessRatio = BASE_K_ROLL_SPRING / Math.max(totalStiffness, 1000);
+  return lateralG * baseRoll * stiffnessRatio;
 }
 
 // ============ ANTI-ROLL BAR ============
@@ -655,7 +692,7 @@ function tireLoads(lateralG, springLLTD) {
   const elasticRear  = elasticTotal * (1 - springLLTD);
 
   // ARB load transfer (front axle only — no rear ARB on P71).
-  // Uses lap-average body roll angle: baseRoll × lateralG × baseStiff / max(stiffness,4)
+  // Uses lap-average body roll angle at baseline spring stiffness (3.1 deg/G × lateralG).
   // Since tireLoads() doesn't receive setup, approximate roll at lateralG using baseline stiffness.
   // This is conservative (stiffer actual setup → less roll → slightly less ARB LT).
   // At OVAL_CORNER_G lateralG: matches the empirically observed 2.5 PSI RF gap exactly.
@@ -688,7 +725,7 @@ function calcPerformance(setup, tires, inflationTemp = COLD_PSI_TEMP, geoCtx = n
   const loads = tireLoadsCtx(refG, ss.springLLTD, geoCtx);
   // Pressure optimum uses actual cornering G — 1G loads give absurd optPsi (52 PSI RF, 14 PSI LF)
   const cornerLoads = tireLoadsCtx(OVAL_CORNER_G, ss.springLLTD, geoCtx);
-  const roll = bodyRoll(refG, rollStiffness(setup));
+  const roll = bodyRoll(refG, rollStiffness(setup, geoCtx));
 
   // Toe and caster from setup (with defaults for backward compat)
   const toe = setup.toe !== undefined ? setup.toe : -0.25;
@@ -1192,6 +1229,11 @@ export function simulateRace(setup, ambientTemp = 65, numLaps = 25, inflationTem
 //   trackWidthFront:  number (inches),  // measured front track width
 //   slaJounceCoeffRF: number (°/°roll), // from 57.3/fvsa_rf × wheelDisp/degRoll
 //   slaDroopCoeffLF:  number (°/°roll), // from 57.3/fvsa_lf × wheelDisp/degRoll
+//   rearSpringBase:   number (inches),  // measured rear spring perch base width
+//   icLateralFront:   number (inches),  // IC lateral distance from centerline
+//   mrFront:          number,           // front spring motion ratio (springPickup/armLength)
+//   cgHeight:         number (inches),  // measured CG height
+//   frontBias:        number (0-1),     // measured front weight fraction (from corner scales)
 // }
 // When a field is omitted or null, the hardcoded VEH constant is used.
 export function analyzeSetup(setup, ambientTemp = 65, inflationTemp = COLD_PSI_TEMP, geoOverrides = null) {
@@ -1205,8 +1247,11 @@ export function analyzeSetup(setup, ambientTemp = 65, inflationTemp = COLD_PSI_T
     tw:             (geo.trackWidthFront != null ? geo.trackWidthFront : VEH.trackWidth           * 12) / 12, // ft
     jounceRF:       geo.slaJounceCoeffRF  != null ? geo.slaJounceCoeffRF  : 0.355,  // °/° roll
     droopLF:        geo.slaDroopCoeffLF   != null ? geo.slaDroopCoeffLF   : 0.547,  // °/° roll
-    rearSpringBase: geo.rearSpringBase    != null ? geo.rearSpringBase / 12 : null,  // ft (null = use spring ratio only)
-    icLateralFront: geo.icLateralFront    != null ? geo.icLateralFront / 12 : null,  // ft (null = use rcF as moment arm)
+    rearSpringBase: geo.rearSpringBase    != null ? geo.rearSpringBase / 12 : null,  // ft
+    icLateralFront: geo.icLateralFront    != null ? geo.icLateralFront / 12 : null,  // ft
+    mrFront:        geo.mrFront           != null ? geo.mrFront            : null,   // dimensionless
+    cgHeight:       geo.cgHeight          != null ? geo.cgHeight / 12       : null,  // ft (null → VEH.cgHeight used in tireLoadsCtx)
+    frontBias:      geo.frontBias         != null ? geo.frontBias           : null,  // fraction (null → VEH.frontBias)
   } : null;
 
   const ss = shockStiffness(setup, geoCtx);
@@ -1214,7 +1259,7 @@ export function analyzeSetup(setup, ambientTemp = 65, inflationTemp = COLD_PSI_T
   // Use actual cornering G for pressure targets — 1G gives absurd RF/LF optPsi
   const cornerLoads = tireLoadsCtx(OVAL_CORNER_G, ss.springLLTD, geoCtx);
   const avgLoad = VEH.weight / 4;
-  const roll = bodyRoll(1.0, rollStiffness(setup));
+  const roll = bodyRoll(1.0, rollStiffness(setup, geoCtx));
   const toe = setup.toe !== undefined ? setup.toe : -0.25;
   const caster = setup.caster || { LF: 3.5, RF: 5.0 };
 
@@ -1235,10 +1280,12 @@ export function analyzeSetup(setup, ambientTemp = 65, inflationTemp = COLD_PSI_T
   const springLF_ds = (setup.springs?.LF ?? setup.springs?.front ?? BASE_SPRING_FRONT) * 12; // lbs/ft
   const springRF_ds = (setup.springs?.RF ?? setup.springs?.front ?? BASE_SPRING_FRONT) * 12;
   const springR_ds  = (setup.springs?.LR ?? setup.springs?.rear  ?? BASE_SPRING_REAR)  * 12;
-  const frontRollStiffness = ((springLF_ds + springRF_ds) / 2) * Math.pow(tw_ds / 2, 2); // lb-ft/rad
+  // Apply motion ratio squared (Goodman §15.6): K_wheel = K_spring × MR²
+  // Front SLA MR=0.87 (spring pickup at mid-span of lower arm), rear solid axle MR=1.0.
+  const frontRollStiffness = ((springLF_ds + springRF_ds) / 2) * Math.pow(tw_ds / 2, 2) * MR_FRONT * MR_FRONT; // lb-ft/rad
   // Rear: use measured spring base if available, otherwise use track width (conservative for solid axle)
   const rearHalfBase = geoCtx?.rearSpringBase != null ? geoCtx.rearSpringBase / 2 : tw_ds / 2;
-  const rearRollStiffness  = springR_ds * Math.pow(rearHalfBase, 2); // lb-ft/rad
+  const rearRollStiffness  = springR_ds * Math.pow(rearHalfBase, 2) * MR_REAR * MR_REAR; // lb-ft/rad
   // Include ARB in front roll stiffness (it resists front roll directly)
   const frontRollStiffnessTotal = frontRollStiffness + ARB.frontRollStiffness;
   const mFront_ds = VEH.mass * VEH.frontBias * G; // lbs (sprung mass approximation)

@@ -44,7 +44,8 @@ export function analyzeGeometry(geo) {
     ? (rf.rcHeight + lf.rcHeight) / 2
     : rf.rcHeight ?? lf.rcHeight;
   const rearRC      = num(geo.rearRollCenter || 14.5);
-  const cgH         = OVAL.cgHeight - (num(geo.rideLowering) * 0.65);
+  const measuredCg  = geo.cgHeight && num(geo.cgHeight) > 0 ? num(geo.cgHeight) : null;
+  const cgH         = measuredCg != null ? measuredCg : (OVAL.cgHeight - (num(geo.rideLowering) * 0.65));
   const momentArm   = rcAvg != null ? cgH - rcAvg : null;
 
   // ── Derived: body roll at oval apex ───────────────────────────────────────

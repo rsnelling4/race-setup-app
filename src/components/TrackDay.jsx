@@ -178,6 +178,25 @@ function buildGeoOverrides(geo) {
     overrides.slaDroopCoeffLF = (57.3 / lf.fvsa) * wheelDispPerDegRoll;
   }
 
+  // Spring motion ratio from measured spring pickup position on lower arm.
+  const spLF = Number(geo.springPickup?.LF);
+  const spRF = Number(geo.springPickup?.RF);
+  if (spLF > 0 || spRF > 0) {
+    const spAvg = (spLF > 0 && spRF > 0) ? (spLF + spRF) / 2 : (spLF || spRF);
+    overrides.mrFront = spAvg / 13.0; // P71_LOWER_ARM_LENGTH = 13.0"
+  }
+
+  // CG height from direct measurement (inches).
+  if (geo.cgHeight && Number(geo.cgHeight) > 0) overrides.cgHeight = Number(geo.cgHeight);
+
+  // Front weight bias from corner scale measurements.
+  const wLF = Number(geo.cornerWeights?.LF) || 0;
+  const wRF = Number(geo.cornerWeights?.RF) || 0;
+  const wLR = Number(geo.cornerWeights?.LR) || 0;
+  const wRR = Number(geo.cornerWeights?.RR) || 0;
+  const wTotal = wLF + wRF + wLR + wRR;
+  if (wTotal > 500) overrides.frontBias = (wLF + wRF) / wTotal;
+
   return Object.keys(overrides).length > 0 ? overrides : null;
 }
 

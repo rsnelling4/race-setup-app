@@ -16,8 +16,10 @@ const EMPTY_SESSION = {
   camber: { LF: '', RF: '' },
   caster: { LF: '', RF: '' },
   toe: '',
-  springRate: { LF: '', RF: '' },
+  rearToe: '',
+  springRate: { LF: '', RF: '', LR: '' },
   shocks: { LF: '', RF: '', LR: '', RR: '' },   // shockLabel strings
+  shockAdj:  { LF: '', RF: '', LR: '', RR: '' }, // damper click/position (numeric)
   coldPsi: { LF: '', RF: '', LR: '', RR: '' },
   hotPsi:  { LF: '', RF: '', LR: '', RR: '' },
   tireTemps: {
@@ -26,6 +28,8 @@ const EMPTY_SESSION = {
     LR: { inside: '', middle: '', outside: '' },
     RR: { inside: '', middle: '', outside: '' },
   },
+  lapTimes: '',
+  bestLap:  '',
 };
 
 const EMPTY_GEO = {
@@ -33,21 +37,25 @@ const EMPTY_GEO = {
   title: '',
   date: new Date().toISOString().slice(0, 10),
   notes: '',
-  trackWidth:      { front: '', rear: '' },
-  rearRollCenter:  '',
-  rearSpringBase:  '',
-  lowerBallJoint:  { LF: '', RF: '' },
-  upperBallJoint:  { LF: '', RF: '' },
-  lowerArmPivot:   { LF: '', RF: '' },
-  upperArmPivot:   { LF: '', RF: '' },
+  trackWidth:        { front: '', rear: '' },
+  rearRollCenter:    '',
+  rearSpringBase:    '',
+  lowerBallJoint:    { LF: '', RF: '' },
+  upperBallJoint:    { LF: '', RF: '' },
+  lowerArmPivot:     { LF: '', RF: '' },
+  upperArmPivot:     { LF: '', RF: '' },
+  springPickup:      { LF: '', RF: '' }, // distance from lower arm inner pivot to spring seat (inches)
   wheelCenterHeight: '',
-  droopCamber:     { LF: '', RF: '' },
-  droopTravel:     { LF: '', RF: '' },
-  bumpCamber:      { LF: '', RF: '' },
-  bumpTravel:      { LF: '', RF: '' },
-  steerCamber20:   { LF: '', RF: '' },
-  rideLowering:    '',
-  cgNotes:         '',
+  droopCamber:       { LF: '', RF: '' },
+  droopTravel:       { LF: '', RF: '' },
+  bumpCamber:        { LF: '', RF: '' },
+  bumpTravel:        { LF: '', RF: '' },
+  steerCamber20:     { LF: '', RF: '' },
+  cornerWeights:     { LF: '', RF: '', LR: '', RR: '' }, // lbs per corner on scales
+  cgHeight:          '',   // measured CG height (inches) — from tilt test or estimate
+  rideLowering:      '',
+  arbDiameter:       '',   // front ARB bar diameter (inches) — for roll stiffness override
+  cgNotes:           '',
 };
 
 // ─── Persistence ─────────────────────────────────────────────────────────────
@@ -66,18 +74,19 @@ function formatSession(car) {
     `Tires Set At (inflation temp): ${v(car.inflationTemp)}°F`,
     '',
     '--- Alignment ---',
-    `Camber:  LF ${v(car.camber.LF)}°   RF ${v(car.camber.RF)}°`,
-    `Caster:  LF ${v(car.caster.LF)}°   RF ${v(car.caster.RF)}°`,
-    `Toe (front): ${v(car.toe)}" (negative = toe-out)`,
+    `Camber:    LF ${v(car.camber.LF)}°   RF ${v(car.camber.RF)}°`,
+    `Caster:    LF ${v(car.caster.LF)}°   RF ${v(car.caster.RF)}°`,
+    `Front Toe: ${v(car.toe)}" (negative = toe-out)`,
+    `Rear Toe:  ${v(car.rearToe)}" (negative = toe-out)`,
     '',
     '--- Springs ---',
-    `LF ${v(car.springRate.LF)} lbs/in   RF ${v(car.springRate.RF)} lbs/in`,
+    `LF ${v(car.springRate.LF)} lbs/in   RF ${v(car.springRate.RF)} lbs/in   Rear ${v(car.springRate.LR)} lbs/in`,
     '',
     '--- Shocks / Struts ---',
-    `LF: ${v(car.shocks.LF)}`,
-    `RF: ${v(car.shocks.RF)}`,
-    `LR: ${v(car.shocks.LR)}`,
-    `RR: ${v(car.shocks.RR)}`,
+    `LF: ${v(car.shocks.LF)}  adj: ${v(car.shockAdj?.LF)}`,
+    `RF: ${v(car.shocks.RF)}  adj: ${v(car.shockAdj?.RF)}`,
+    `LR: ${v(car.shocks.LR)}  adj: ${v(car.shockAdj?.LR)}`,
+    `RR: ${v(car.shocks.RR)}  adj: ${v(car.shockAdj?.RR)}`,
     '',
     '--- Cold Tire Pressures (PSI) ---',
     `LF ${v(car.coldPsi.LF)}   RF ${v(car.coldPsi.RF)}`,
@@ -92,6 +101,10 @@ function formatSession(car) {
     `RF: ${v(car.tireTemps.RF.inside)} / ${v(car.tireTemps.RF.middle)} / ${v(car.tireTemps.RF.outside)}`,
     `LR: ${v(car.tireTemps.LR.inside)} / ${v(car.tireTemps.LR.middle)} / ${v(car.tireTemps.LR.outside)}`,
     `RR: ${v(car.tireTemps.RR.inside)} / ${v(car.tireTemps.RR.middle)} / ${v(car.tireTemps.RR.outside)}`,
+    '',
+    '--- Lap Times ---',
+    `Best: ${v(car.bestLap)}s`,
+    `All laps: ${v(car.lapTimes)}`,
   ];
   if (car.notes.trim()) lines.push('', '--- Notes ---', car.notes.trim());
   return lines.join('\n');
@@ -108,7 +121,9 @@ function formatGeo(car) {
     'Front SLA ball joint heights from floor:',
     `  LF lower BJ: ${v(car.lowerBallJoint.LF)}"   RF lower BJ: ${v(car.lowerBallJoint.RF)}"`,
     `  LF upper BJ: ${v(car.upperBallJoint.LF)}"   RF upper BJ: ${v(car.upperBallJoint.RF)}"`,
-    `  LF lower arm pivot: ${v(car.lowerArmPivot.LF)}"   RF lower arm pivot: ${v(car.lowerArmPivot.RF)}"`,
+    `  LF lower arm inner pivot: ${v(car.lowerArmPivot.LF)}"   RF lower arm inner pivot: ${v(car.lowerArmPivot.RF)}"`,
+    `  LF upper arm inner pivot: ${v(car.upperArmPivot?.LF)}"   RF upper arm inner pivot: ${v(car.upperArmPivot?.RF)}"`,
+    `  LF spring pickup from pivot: ${v(car.springPickup?.LF)}"   RF spring pickup from pivot: ${v(car.springPickup?.RF)}"`,
     `  Front wheel center height: ${v(car.wheelCenterHeight)}"`,
     '',
     'Droop camber (wheels hanging freely at full droop):',
@@ -122,10 +137,16 @@ function formatGeo(car) {
     'Caster camber gain (at 20° right steer):',
     `  LF camber: ${v(car.steerCamber20.LF)}°   RF camber: ${v(car.steerCamber20.RF)}°`,
     '',
+    `CG height (measured): ${v(car.cgHeight)}"`,
     `Ride height lowering from stock: ${v(car.rideLowering)}"`,
+    '',
+    'Corner weights (lbs):',
+    `  LF ${v(car.cornerWeights?.LF)}   RF ${v(car.cornerWeights?.RF)}`,
+    `  LR ${v(car.cornerWeights?.LR)}   RR ${v(car.cornerWeights?.RR)}`,
+    `Front ARB diameter: ${v(car.arbDiameter)}"`,
   ];
-  if (car.cgNotes.trim())  lines.push(`CG / ballast notes: ${car.cgNotes.trim()}`);
-  if (car.notes.trim())    lines.push('', '--- Notes ---', car.notes.trim());
+  if (car.cgNotes?.trim()) lines.push(`CG / ballast notes: ${car.cgNotes.trim()}`);
+  if (car.notes?.trim())   lines.push('', '--- Notes ---', car.notes.trim());
   return lines.join('\n');
 }
 
@@ -347,8 +368,11 @@ function SessionEditor({ editing, setEditing }) {
           </Field>
         </div>
         <div className="ml-row">
-          <Field label="Front Toe (inches)" hint="Total toe across both fronts at hub height. Rear gap minus front gap. Negative = toe-out. e.g. -0.25 = quarter inch toe-out.">
+          <Field label="Front Toe (inches)" hint="Total toe across both front tires measured at hub height. Use a tape or toe plates: measure from the leading edge of each rim to a straight reference, then from the trailing edge — the difference is toe per side, double it for total. Negative = toe-out (fronts spread apart at front). e.g. -0.25 = quarter inch total toe-out.">
             <NumIn value={editing.toe} onChange={v => set('toe', v)} placeholder="e.g. -0.25" step="0.0625" />
+          </Field>
+          <Field label="Rear Toe (inches)" hint="Total toe across both rear tires. Same measurement method as front — tape or toe plates at hub height on the rear wheels. Negative = toe-out. Stock P71 rear is typically 0 to +0.125 in (slight toe-in). Rear toe-out causes oversteer.">
+            <NumIn value={editing.rearToe ?? ''} onChange={v => set('rearToe', v)} placeholder="e.g. 0.0" step="0.0625" />
           </Field>
         </div>
       </div>
@@ -390,12 +414,28 @@ function SessionEditor({ editing, setEditing }) {
         })}
       </div>
 
+      {/* Shock adjustment */}
+      <div className="ml-section">
+        <h3 className="ml-section-heading">Damper Adjustment (click / position)</h3>
+        <p className="ml-section-note">
+          Record the actual click or position number set at the track. Lower number = stiffer on most adjustable shocks. Leave blank if non-adjustable.
+        </p>
+        <div className="ml-tire-grid">
+          {['LF', 'RF', 'LR', 'RR'].map(corner => (
+            <Field key={corner} label={corner}
+              hint={`Record the adjuster position for ${corner}. On most adjustable shocks: turn fully clockwise (stiff), then count clicks out counterclockwise. Write down that number. Some shocks label the knob 1–10. Capture whatever the unit uses so you can reproduce it.`}>
+              <NumIn value={editing.shockAdj?.[corner] ?? ''} onChange={v => setN('shockAdj', corner, v)} placeholder="e.g. 4" step="1" min="0" max="20" />
+            </Field>
+          ))}
+        </div>
+      </div>
+
       {/* Spring rates */}
       <div className="ml-section">
-        <h3 className="ml-section-heading">Front Spring Rates</h3>
-        <p className="ml-section-note">Auto-filled from strut selection above if applicable. Override if needed.</p>
+        <h3 className="ml-section-heading">Spring Rates</h3>
+        <p className="ml-section-note">Front auto-filled from strut selection above if applicable. Override if needed. Rear rate is critical for roll stiffness and LLTD calculations.</p>
         <div className="ml-row">
-          <Field label="LF (lbs/in)">
+          <Field label="LF (lbs/in)" hint="Front left spring rate. On a P71 strut assembly the spring is integrated — rate depends on which strut is installed (475 = Police/Taxi, 440 = Base, 700 = Heavy Duty). Confirm with strut part number.">
             <select className="ml-input ml-select"
               value={editing.springRate.LF}
               onChange={e => setN('springRate', 'LF', e.target.value)}>
@@ -405,7 +445,7 @@ function SessionEditor({ editing, setEditing }) {
               <option value="440">440 lbs/in — Base/LX</option>
             </select>
           </Field>
-          <Field label="RF (lbs/in)">
+          <Field label="RF (lbs/in)" hint="Front right spring rate. Same options as LF — match the installed strut assembly.">
             <select className="ml-input ml-select"
               value={editing.springRate.RF}
               onChange={e => setN('springRate', 'RF', e.target.value)}>
@@ -413,6 +453,17 @@ function SessionEditor({ editing, setEditing }) {
               <option value="700">700 lbs/in — Heavy Duty</option>
               <option value="475">475 lbs/in — Police/Taxi</option>
               <option value="440">440 lbs/in — Base/LX</option>
+            </select>
+          </Field>
+          <Field label="Rear (lbs/in)"
+            hint="Rear coil spring rate. P71 stock rear = 160 lbs/in. This feeds directly into rear roll stiffness and front/rear elastic load transfer split (LLTD). To measure: remove spring, compress it a known distance with a known weight (e.g. hang a 160 lb weight, measure deflection — rate = load ÷ deflection). Or use published part number data.">
+            <select className="ml-input ml-select"
+              value={editing.springRate.LR ?? ''}
+              onChange={e => setN('springRate', 'LR', e.target.value)}>
+              <option value="">— Select —</option>
+              <option value="200">200 lbs/in — Heavy Duty / Police</option>
+              <option value="160">160 lbs/in — Stock P71</option>
+              <option value="140">140 lbs/in — Soft / Base</option>
             </select>
           </Field>
         </div>
@@ -467,12 +518,30 @@ function SessionEditor({ editing, setEditing }) {
         </div>
       </div>
 
+      {/* Lap Times */}
+      <div className="ml-section">
+        <h3 className="ml-section-heading">Lap Times</h3>
+        <p className="ml-section-note">Used to validate model accuracy and track progress across sessions.</p>
+        <div className="ml-row">
+          <Field label="Best lap (seconds)"
+            hint="Your single fastest lap of the session. e.g. 17.42. Record from transponder readout, timing app, or stopwatch. This is the primary model calibration reference — the model targets this number.">
+            <NumIn value={editing.bestLap ?? ''} onChange={v => set('bestLap', v)} placeholder="e.g. 17.4" step="0.01" min="10" max="120" />
+          </Field>
+        </div>
+        <Field label="All lap times (comma-separated)"
+          hint="Paste all lap times from the session. e.g. 17.8, 17.4, 17.6, 17.5. Used to see consistency and tire fade trends across the session.">
+          <textarea className="ml-textarea" rows={2}
+            placeholder="e.g. 17.8, 17.4, 17.6, 17.5, 17.7"
+            value={editing.lapTimes ?? ''} onChange={e => set('lapTimes', e.target.value)} />
+        </Field>
+      </div>
+
       {/* Notes */}
       <div className="ml-section">
         <h3 className="ml-section-heading">Session Notes</h3>
         <Field label="Notes / Observations">
           <textarea className="ml-textarea" rows={4}
-            placeholder="Handling notes, tight/loose feel, changes made, lap times, track conditions..."
+            placeholder="Handling notes, tight/loose feel, changes made during session, track conditions..."
             value={editing.notes} onChange={e => set('notes', e.target.value)} />
         </Field>
       </div>
@@ -506,11 +575,11 @@ function GeoEditor({ editing, setEditing }) {
         <h3 className="ml-section-heading">Track Width</h3>
         <div className="ml-row">
           <Field label="Front track width (inches)"
-            hint="Park on flat ground, wheels straight ahead. Mark the center of the tread contact patch on the ground (chalk or tape) for each front tire. Measure between the two marks.">
+            hint="Park on flat ground, wheels straight ahead. Lay a straightedge or tape on the ground beside each front tire. Mark the center of the contact patch (midpoint of tread width) with chalk or tape on both sides. Measure between the two centerline marks. P71 stock ≈ 64″.">
             <NumIn value={editing.trackWidth.front} onChange={v => setN('trackWidth', 'front', v)} placeholder="e.g. 64" step="0.125" />
           </Field>
           <Field label="Rear track width (inches)"
-            hint="Same method as front — mark center of rear contact patches and measure between marks.">
+            hint="Same method as front — mark the center of each rear contact patch and measure between the marks. P71 rear is slightly wider than front due to wheel offset. Stock ≈ 65.125″.">
             <NumIn value={editing.trackWidth.rear} onChange={v => setN('trackWidth', 'rear', v)} placeholder="e.g. 65.125" step="0.125" />
           </Field>
         </div>
@@ -518,58 +587,75 @@ function GeoEditor({ editing, setEditing }) {
 
       {/* Rear Roll Center */}
       <div className="ml-section">
-        <h3 className="ml-section-heading">Rear Roll Center</h3>
+        <h3 className="ml-section-heading">Rear Roll Center &amp; Spring Base</h3>
         <Field label="Watts link center pivot height from floor (inches)"
-          hint="Car at ride height with driver weight (~200 lbs on seat). Find the large center pivot bolt on the Watts link — it sits on a bracket centered on top of the rear axle housing, connecting the two horizontal arms. Measure from the bolt centerline straight down to the floor.">
+          hint="Car at ride height with driver weight (~200 lbs on seat). Crawl under the rear of the car and locate the Watts link center pivot bolt — it's on a bracket mounted on the axle housing, centered left-to-right, connecting the two horizontal balance arms. Measure from the center of that bolt straight down to the floor. P71 stock ≈ 14.5″. This directly sets the rear roll center height in the model — wrong value = wrong rear LLTD.">
           <NumIn value={editing.rearRollCenter} onChange={v => set('rearRollCenter', v)} placeholder="e.g. 14.5" step="0.125" />
         </Field>
         <Field label="Rear spring base width (inches)"
-          hint="Distance between the centers of the two rear coil spring perches on the axle housing. On a P71 solid axle, measure along the axle tube from the center of the left spring perch to the center of the right spring perch. Wider spring base = more rear roll resistance independent of spring rate.">
+          hint="Distance between the centers of the two rear coil spring perches on the axle tube. Measure along the axle from the center of the left spring perch cup to the center of the right spring perch cup. This is narrower than the track width. Wider base = more rear roll stiffness, which shifts LLTD toward the rear (more oversteer tendency). Used directly in the roll stiffness model.">
           <NumIn value={editing.rearSpringBase} onChange={v => set('rearSpringBase', v)} placeholder="e.g. 42" step="0.25" />
         </Field>
       </div>
 
       {/* Front SLA */}
       <div className="ml-section">
-        <h3 className="ml-section-heading">Front SLA Ball Joint Heights</h3>
-        <p className="ml-section-note">Car at ride height on flat ground. Measure to the center of each ball joint stud.</p>
+        <h3 className="ml-section-heading">Front SLA Hardpoint Heights</h3>
+        <p className="ml-section-note">
+          Car at ride height on flat ground with driver weight (~200 lbs) on seat. All measurements are from the center of the joint/pivot bolt straight down to the floor. These four hardpoints define the instant center and roll center height — the most accuracy-critical geometry measurements in the model.
+        </p>
         <div className="ml-row">
           <Field label="LF lower ball joint (inches)"
-            hint="Lower control arm outer end — where the spindle attaches. Measure from the ball joint stud center to the floor.">
+            hint="The lower ball joint is at the outer end of the lower control arm where it connects to the steering knuckle/spindle. On the P71, look at the bottom-outside corner of the front hub assembly. The ball joint stud points downward through the knuckle. Measure from the center of that stud (top of the stud nut, minus half the stud exposed length) down to the floor. Typical P71 ≈ 7–8″.">
             <NumIn value={editing.lowerBallJoint.LF} onChange={v => setN('lowerBallJoint', 'LF', v)} placeholder="e.g. 7.75" step="0.125" />
           </Field>
-          <Field label="RF lower ball joint (inches)" hint="Same as LF — right front lower control arm outer pivot.">
+          <Field label="RF lower ball joint (inches)"
+            hint="Same as LF lower ball joint — right side. The RF may sit slightly lower than LF due to asymmetric caster settings. Measure stud center to floor.">
             <NumIn value={editing.lowerBallJoint.RF} onChange={v => setN('lowerBallJoint', 'RF', v)} placeholder="e.g. 6.75" step="0.125" />
           </Field>
         </div>
         <div className="ml-row">
-          <Field label="LF upper ball joint (inches)" hint="Upper control arm outer end. Measure ball joint stud center to floor.">
+          <Field label="LF upper ball joint (inches)"
+            hint="The upper ball joint is at the outer end of the upper control arm, connecting to the top of the steering knuckle. On the P71 SLA, look directly above the lower ball joint at the top of the hub assembly. The stud points upward. Measure from stud center to floor. Typical P71 ≈ 17–19″.">
             <NumIn value={editing.upperBallJoint.LF} onChange={v => setN('upperBallJoint', 'LF', v)} placeholder="e.g. 18.5" step="0.125" />
           </Field>
-          <Field label="RF upper ball joint (inches)" hint="Right front upper control arm outer pivot — stud center to floor.">
+          <Field label="RF upper ball joint (inches)"
+            hint="Same as LF upper ball joint — right side. Stud center to floor.">
             <NumIn value={editing.upperBallJoint.RF} onChange={v => setN('upperBallJoint', 'RF', v)} placeholder="e.g. 17.625" step="0.125" />
           </Field>
         </div>
         <div className="ml-row">
           <Field label="LF lower arm inner pivot (inches)"
-            hint="Inner end of the lower control arm where it bolts to the subframe. If two bolts, average their heights. Measure pivot center to floor.">
+            hint="The inner end of the lower control arm where it bolts to the K-member/subframe. The P71 lower arm uses two bolt pivot — measure the height of the midpoint between the two bolts. Use a straightedge or plumb bob from the bolt center to the floor. Typical P71 ≈ 9–11″.">
             <NumIn value={editing.lowerArmPivot.LF} onChange={v => setN('lowerArmPivot', 'LF', v)} placeholder="e.g. 10.0" step="0.125" />
           </Field>
-          <Field label="RF lower arm inner pivot (inches)" hint="Same as LF — right front lower arm subframe bolt center to floor.">
+          <Field label="RF lower arm inner pivot (inches)"
+            hint="Same as LF lower arm inner pivot — right side. Measure midpoint of the two pivot bolt centers to floor.">
             <NumIn value={editing.lowerArmPivot.RF} onChange={v => setN('lowerArmPivot', 'RF', v)} placeholder="e.g. 9.375" step="0.125" />
           </Field>
         </div>
         <div className="ml-row">
           <Field label="LF upper arm inner pivot (inches)"
-            hint="Inner end of the upper control arm where it bolts to the subframe/tower. Measure pivot bolt center to floor. This is the critical measurement for computing the instant center.">
+            hint="The inner end of the upper control arm where it bolts to the tower/subframe above the lower arm. On the P71, this is a single bolt (or bushing) high up on the inner fender structure. This is the hardest point to measure accurately and the one most likely to be estimated — it directly determines the instant center position and roll center height. Plumb bob from the bolt centerline to the floor. Estimated ≈ 13.5″ from published Ford geometry — measure if at all possible.">
             <NumIn value={editing.upperArmPivot?.LF ?? ''} onChange={v => setN('upperArmPivot', 'LF', v)} placeholder="e.g. 13.5 (est)" step="0.125" />
           </Field>
-          <Field label="RF upper arm inner pivot (inches)" hint="Same as LF — right front upper arm subframe bolt center to floor.">
+          <Field label="RF upper arm inner pivot (inches)"
+            hint="Same as LF upper arm inner pivot — right side. Measure or estimate the bolt center height from the floor.">
             <NumIn value={editing.upperArmPivot?.RF ?? ''} onChange={v => setN('upperArmPivot', 'RF', v)} placeholder="e.g. 13.5 (est)" step="0.125" />
           </Field>
         </div>
+        <div className="ml-row">
+          <Field label="LF spring pickup distance from inner pivot (inches)"
+            hint="On the P71 SLA, the strut/spring assembly mounts to the lower control arm at a point between the inner pivot and the ball joint. Measure from the center of the lower arm inner pivot bolt to the center of the spring mount hole on the arm (along the arm). This distance divided by the total arm length (pivot to ball joint) is the motion ratio — it directly scales front roll stiffness. Typical P71 lower arm: total length ≈ 13″, spring mount ≈ 9–11″ from pivot (MR ≈ 0.7–0.87).">
+            <NumIn value={editing.springPickup?.LF ?? ''} onChange={v => setN('springPickup', 'LF', v)} placeholder="e.g. 11.0" step="0.125" />
+          </Field>
+          <Field label="RF spring pickup distance from inner pivot (inches)"
+            hint="Same as LF — measure from the RF lower arm inner pivot center to the spring mount hole along the arm. Both sides should be the same unless the arms are different parts.">
+            <NumIn value={editing.springPickup?.RF ?? ''} onChange={v => setN('springPickup', 'RF', v)} placeholder="e.g. 11.0" step="0.125" />
+          </Field>
+        </div>
         <Field label="Front wheel center height (inches)"
-          hint="Measure from the center of the front hub/axle straight down to the floor. Should be approximately the tire radius (~13.5&quot; for 235/55R17).">
+          hint="Measure from the center of the front hub/axle to the floor. Plumb a string or straight-edge from the hub center to the ground. For 235/55R17 tires, this should be close to 13.5–13.6″. Used to establish the suspension geometry reference plane.">
           <NumIn value={editing.wheelCenterHeight} onChange={v => set('wheelCenterHeight', v)} placeholder="e.g. 13.0" step="0.125" />
         </Field>
       </div>
@@ -578,23 +664,25 @@ function GeoEditor({ editing, setEditing }) {
       <div className="ml-section">
         <h3 className="ml-section-heading">Droop Camber</h3>
         <p className="ml-section-note">
-          Support car under frame rails on jack stands — NOT under control arms. Front wheels must hang freely at full droop.
-          Hold a flat plate flush against the wheel face and read camber with a phone inclinometer.
+          Support the car under the frame rails or rocker panels on jack stands — NOT under the control arms. The front wheels must hang freely at full droop (no spring tension). Hold a flat plate flush against the wheel face and read camber with a phone inclinometer app.
         </p>
         <div className="ml-row">
-          <Field label="LF camber at full droop (°)" hint="LF wheel hanging freely — read camber via phone on flat plate against wheel face. Negative = top tilts inward.">
+          <Field label="LF camber at full droop (°)"
+            hint="With LF wheel hanging freely: hold a rigid flat plate (piece of aluminum, clipboard) flush against the center of the wheel face. Place your phone flat on the plate and read the inclinometer. Positive = top leans outward. Negative = top leans inward. Record the value you see — do not subtract static camber here.">
             <NumIn value={editing.droopCamber.LF} onChange={v => setN('droopCamber', 'LF', v)} placeholder="e.g. 1.75" />
           </Field>
-          <Field label="RF camber at full droop (°)" hint="Same method — RF wheel hanging freely.">
+          <Field label="RF camber at full droop (°)"
+            hint="Same as LF — RF wheel hanging freely, read camber with phone inclinometer on flat plate against wheel face.">
             <NumIn value={editing.droopCamber.RF} onChange={v => setN('droopCamber', 'RF', v)} placeholder="e.g. -1.5" />
           </Field>
         </div>
         <div className="ml-row">
           <Field label="LF droop travel (inches)"
-            hint="Measure wheel center to a fixed chassis reference (fender lip) while on jack stands. Then lower to ride height and re-measure. The difference is droop travel.">
-            <NumIn value={editing.droopTravel.LF} onChange={v => setN('droopTravel', 'LF', v)} placeholder="e.g. 0.5" step="0.125" />
+            hint="Total wheel travel from ride height to full droop. Method: (1) At ride height, mark a point on the wheel center with a scribe or tape, and measure its height from the floor. (2) With car on jack stands and wheel hanging free, measure the same wheel center height from the floor. (3) The difference (ride height measurement minus droop measurement) is droop travel. Typical P71 front droop ≈ 0.5–1.5″.">
+            <NumIn value={editing.droopTravel.LF} onChange={v => setN('droopTravel', 'LF', v)} placeholder="e.g. 0.75" step="0.125" />
           </Field>
-          <Field label="RF droop travel (inches)" hint="Same method for right front.">
+          <Field label="RF droop travel (inches)"
+            hint="Same as LF droop travel — measure RF wheel center height at ride height then at full droop. Subtract to get travel.">
             <NumIn value={editing.droopTravel.RF} onChange={v => setN('droopTravel', 'RF', v)} placeholder="e.g. 0.875" step="0.125" />
           </Field>
         </div>
@@ -604,21 +692,25 @@ function GeoEditor({ editing, setEditing }) {
       <div className="ml-section">
         <h3 className="ml-section-heading">Bump Camber</h3>
         <p className="ml-section-note">
-          Car on jack stands. Use a floor jack under the lower control arm to push the wheel into full bump until the bumpstop contacts or motion stops.
+          Car on jack stands (same setup as droop — frame supported, wheels free). Use a floor jack under the lower control arm outboard end to push the wheel upward into bump until the bumpstop contacts or the strut bottoms.
         </p>
         <div className="ml-row">
-          <Field label="LF camber at full bump (°)" hint="Jack under lower control arm until bumpstop compresses. Measure camber with phone on flat plate against wheel face.">
+          <Field label="LF camber at full bump (°)"
+            hint="Place floor jack under the LF lower control arm near the ball joint. Jack slowly until bumpstop compresses or movement stops. Read camber with phone inclinometer on flat plate against wheel face. For SLA suspension, more bump = more negative camber (good). Record the final camber reading at full bump.">
             <NumIn value={editing.bumpCamber.LF} onChange={v => setN('bumpCamber', 'LF', v)} placeholder="e.g. -3.0" />
           </Field>
-          <Field label="RF camber at full bump (°)" hint="Same method — right front wheel pushed to full bump.">
+          <Field label="RF camber at full bump (°)"
+            hint="Same as LF — jack under RF lower control arm until bumpstop, read camber with inclinometer. RF bump camber is critical — this wheel is in jounce during left-turn cornering.">
             <NumIn value={editing.bumpCamber.RF} onChange={v => setN('bumpCamber', 'RF', v)} placeholder="e.g. -4.5" />
           </Field>
         </div>
         <div className="ml-row">
-          <Field label="LF bump travel (inches)" hint="Using same chassis reference as droop — measure at ride height then at full bump. Difference is bump travel.">
+          <Field label="LF bump travel (inches)"
+            hint="Total wheel travel from ride height to full bump. Method: (1) At ride height, mark the wheel center and measure its height from the floor. (2) Jack to full bump and re-measure wheel center height. (3) Bump travel = full-bump measurement minus ride-height measurement. Typical P71 front bump ≈ 1.5–2.5″.">
             <NumIn value={editing.bumpTravel.LF} onChange={v => setN('bumpTravel', 'LF', v)} placeholder="e.g. 2.0" step="0.125" />
           </Field>
-          <Field label="RF bump travel (inches)" hint="Same method for right front.">
+          <Field label="RF bump travel (inches)"
+            hint="Same as LF bump travel — measure RF wheel center at ride height then at full bump. Subtract.">
             <NumIn value={editing.bumpTravel.RF} onChange={v => setN('bumpTravel', 'RF', v)} placeholder="e.g. 2.0" step="0.125" />
           </Field>
         </div>
@@ -628,15 +720,15 @@ function GeoEditor({ editing, setEditing }) {
       <div className="ml-section">
         <h3 className="ml-section-heading">Caster Camber Gain</h3>
         <p className="ml-section-note">
-          Car at ride height on flat ground. Turn steering wheel right until front tires are at ~20° steer — use an angle finder on the tire sidewall to confirm. Then measure camber on each front wheel.
+          Car at ride height on flat ground. Turn steering right until the front tires steer approximately 20° — use a protractor or angle finder on the tire sidewall (not the steering wheel). Read camber on each wheel with phone inclinometer on a flat plate. This calibrates caster gain coefficients used in the camber chain model.
         </p>
         <div className="ml-row">
           <Field label="LF camber at 20° right steer (°)"
-            hint="Confirm straight-ahead static camber first. Then turn 20° right and read LF camber — phone on flat plate against wheel face.">
+            hint="Record static (straight-ahead) camber first so you can cross-check. Then with wheels turned 20° right, read LF camber — phone on flat plate against the LF wheel face. The LF is the inside tire turning right, so it typically gains positive camber.">
             <NumIn value={editing.steerCamber20.LF} onChange={v => setN('steerCamber20', 'LF', v)} placeholder="e.g. 1.5" />
           </Field>
           <Field label="RF camber at 20° right steer (°)"
-            hint="Same turn — RF is the outside tire turning right; it should gain negative camber.">
+            hint="RF is the outside tire turning right — it should gain negative camber due to caster. The difference between RF camber at 20° steer and RF static camber is the caster gain. e.g. static −2°, at 20° steer −4° = 2° gain. The model uses this to calibrate the per-degree caster coefficient for the oval corner.">
             <NumIn value={editing.steerCamber20.RF} onChange={v => setN('steerCamber20', 'RF', v)} placeholder="e.g. -4.0" />
           </Field>
         </div>
@@ -645,16 +737,66 @@ function GeoEditor({ editing, setEditing }) {
       {/* CG */}
       <div className="ml-section">
         <h3 className="ml-section-heading">CG Height / Ballast</h3>
+        <p className="ml-section-note">
+          CG height directly affects elastic weight transfer (the spring-loaded portion). A higher CG shifts more load to the outside tires in cornering. The model defaults to 23″ for a stock P71 with roll cage — measure if you have the capability.
+        </p>
         <div className="ml-row">
+          <Field label="Measured CG height (inches)"
+            hint="Best method — tilt test: (1) Weigh all four corners on scales. (2) Raise one end of the car by a known height (e.g. 12″ on ramps) while keeping the other end on scales. (3) Read the new front/rear weights. (4) CG height = wheelbase × (ΔFront weight / total weight) × (wheelbase / lift height) — see Milliken RCVD Appendix. If you don't have scales: estimate using stock height (~21–22″) + roll cage raise (~1″) + any lowering offset. Leave blank to use the model default.">
+            <NumIn value={editing.cgHeight ?? ''} onChange={v => set('cgHeight', v)} placeholder="e.g. 22.5" step="0.25" />
+          </Field>
           <Field label="Ride height lowering from stock (inches)"
-            hint="If lowered with cut or aftermarket springs — estimate inches lower than stock. Zero if stock. Each inch lowered drops CG ~0.65 inches.">
+            hint="If running cut springs or aftermarket lowering springs — how many inches lower than stock is the car at ride height? Each inch of lowering drops the CG approximately 0.6–0.7 inches (the unsprung mass moves less than the body). Used as a CG height offset if no direct measurement is available.">
             <NumIn value={editing.rideLowering} onChange={v => set('rideLowering', v)} placeholder="0 if stock" step="0.25" />
           </Field>
         </div>
         <Field label="CG / ballast notes">
           <input className="ml-input ml-input-wide" type="text"
-            placeholder="e.g. Roll cage installed, battery moved to trunk"
+            placeholder="e.g. Roll cage installed, battery moved to trunk, sandbag ballast behind seats"
             value={editing.cgNotes} onChange={e => set('cgNotes', e.target.value)} />
+        </Field>
+      </div>
+
+      {/* Corner Weights */}
+      <div className="ml-section">
+        <h3 className="ml-section-heading">Corner Weights</h3>
+        <p className="ml-section-note">
+          Weigh all four corners simultaneously with the car at race ride height, driver in seat (~200 lbs), and fuel at race level. Used to derive front weight bias and validate the model's load transfer predictions.
+        </p>
+        <div className="ml-tire-grid">
+          {['LF', 'RF', 'LR', 'RR'].map(pos => (
+            <Field key={pos} label={`${pos} (lbs)`}
+              hint={`Place a scale under the ${pos} tire. All four scales must be level with each other — use shim plates if needed. Read with driver seated and car sitting still. Total should match known curb weight + driver. ${pos === 'LF' || pos === 'RF' ? 'Front total ÷ total weight = front bias. P71 target: ~57% front.' : 'Rear weight should be ~43% of total for stock P71.'}`}>
+              <NumIn value={editing.cornerWeights?.[pos] ?? ''} onChange={v => setN('cornerWeights', pos, v)} placeholder="lbs" step="1" min="100" max="1500" />
+            </Field>
+          ))}
+        </div>
+        {(() => {
+          const lf = parseFloat(editing.cornerWeights?.LF) || 0;
+          const rf = parseFloat(editing.cornerWeights?.RF) || 0;
+          const lr = parseFloat(editing.cornerWeights?.LR) || 0;
+          const rr = parseFloat(editing.cornerWeights?.RR) || 0;
+          const total = lf + rf + lr + rr;
+          if (total < 100) return null;
+          const frontBias = ((lf + rf) / total * 100).toFixed(1);
+          const crossWeight = ((lf + rr) / total * 100).toFixed(1);
+          return (
+            <div className="ml-section-note" style={{ marginTop: 8, fontFamily: 'monospace', fontSize: 12 }}>
+              Total: {total.toFixed(0)} lbs &nbsp;|&nbsp; Front bias: {frontBias}% &nbsp;|&nbsp; Cross weight (LF+RR): {crossWeight}%
+            </div>
+          );
+        })()}
+      </div>
+
+      {/* ARB */}
+      <div className="ml-section">
+        <h3 className="ml-section-heading">Front Anti-Roll Bar</h3>
+        <p className="ml-section-note">
+          The P71 front ARB wheel rate is hardcoded to 475 lbs/in (29.5mm solid bar). If you have a different bar, measure its diameter so the model can use the correct roll stiffness.
+        </p>
+        <Field label="Front ARB bar diameter (inches)"
+          hint="Measure the solid steel bar diameter at the straight section (not at the bends or end links). Use calipers. P71 stock: 29.5mm = 1.161 in. ARB roll stiffness scales as diameter^4, so even small changes matter — a 1 in bar has about 55% of the stiffness of the stock 1.161 in bar. Leave blank to use the stock P71 value (29.5mm).">
+          <NumIn value={editing.arbDiameter ?? ''} onChange={v => set('arbDiameter', v)} placeholder="e.g. 1.161 (stock 29.5mm)" step="0.001" min="0.5" max="2.0" />
         </Field>
       </div>
 
