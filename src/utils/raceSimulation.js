@@ -52,17 +52,41 @@ TRACK.cornerArc = Math.PI * TRACK.cornerRadius;
 TRACK.totalLength = 2 * TRACK.straightLength + 2 * TRACK.cornerArc;
 
 // Per-corner minimum hot PSI floors — empirically calibrated.
-// Cold PSI targets: LF 20, RF 38, LR 16, RR 35. Left side rises ~2 PSI, right side ~4-6 PSI hot.
-// LR floor 18 PSI hot (= 16 cold + 2 rise) — never run left rear below this.
-const MIN_HOT_PSI = { LF: 14, RF: 22, LR: 18, RR: 20 };
+// Never run left rear below 18 PSI hot (= 16 cold + 2 rise).
+const MIN_HOT_PSI = { LF: 14, RF: 28, LR: 16, RR: 28 };
 
-// Per-corner maximum hot PSI ceilings — practical operational limits.
-// The theoretical load-optimal PSI can exceed these when the front RC is high (20.4" estimated)
-// because geometric LLTD inflates RF corner load in the model. Cap recommendations at values
-// that reflect real-world tire management on this oval. Revisit after upper arm pivot is measured
-// and RC is confirmed — if measured RC drops, the theoretical optimum will come back down.
-// Tire max rated cold = 51 PSI (XL), but hot running limit is lower due to heat buildup.
-const MAX_HOT_PSI = { LF: 32, RF: 42, LR: 30, RR: 40 };
+// Per-corner maximum hot PSI ceilings — empirically validated from real sessions.
+// RF: never ran above 42 hot and that was already pushing it. Typical race target 38-42.
+// RR: raise 1-2 PSI to loosen (oversteer), lower to tighten. Typical 33-35 hot.
+const MAX_HOT_PSI = { LF: 30, RF: 42, LR: 26, RR: 38 };
+
+// Per-corner validated hot PSI targets at OVAL_CORNER_G loads.
+// Derived from multi-session real-world data (see memory: empirical PSI calibration).
+//
+// The load-proportional formula (30 × load/avgLoad) over-predicts RF (~45 PSI) and
+// under-predicts RR (~31 PSI), producing a 14 PSI right-side split that causes severe push.
+// Real-world validated: RF 38-40 / RR 33-35 (3-5 PSI split is neutral; wider split = tighter).
+//
+// Tire grip degression means the heavily loaded RF needs LESS pressure than load ratios suggest —
+// the tall sidewall (235/55R17, 5.09" section height) provides contact patch compliance at load
+// that reduces the pressure needed for optimal footprint shape.
+//
+// Formula: optHotPsi(corner) = BASE_HOT_PSI[corner] × (actualLoad / calibLoad[corner])^LOAD_EXP
+// where LOAD_EXP = 0.35 (damped — load sensitivity reduced vs. linear to match observed behavior).
+// This keeps load-sensitivity when setup changes shift loads, without extrapolating to absurd values.
+//
+// Calibration loads (OVAL_CORNER_G with stock geometry):
+//   RF ≈ 1417 lbs  → target 39 PSI hot
+//   RR ≈  955 lbs  → target 34 PSI hot
+//   LF ≈  508 lbs  → target 21 PSI hot
+//   LR ≈  820 lbs  → target 18 PSI hot
+const BASE_HOT_PSI   = { LF: 21, RF: 39, LR: 18, RR: 34 };
+const CALIB_LOAD     = { LF: 508, RF: 1417, LR: 820, RR: 955 };
+const LOAD_EXP       = 0.35; // damped load exponent — empirically fitted to avoid over/under prediction
+
+function optimalHotPsi(corner, load) {
+  return BASE_HOT_PSI[corner] * Math.pow(Math.max(load, 50) / CALIB_LOAD[corner], LOAD_EXP);
+}
 
 // TIME-AVERAGED LATERAL G — used for tire load, pressure target, and camber calculations.
 //
@@ -251,14 +275,12 @@ function tempGripFactor(temp) {
   return Math.max(0.70, 1 - Math.pow(above / 50, 2) * 0.30);
 }
 
-// Pressure: deviation from load-optimal reduces grip.
-// 0.006/PSI = 0.6% grip per PSI of deviation — affects lap time.
-// Handling balance is more sensitive to pressure than lap time; the balance
-// gauge applies an additional correction (see BalanceGauge in SetupOptimizer).
-// Floor 0.82 = 18% max loss (hits at ~30 PSI off — catastrophically wrong pressure).
-function pressureGripFactor(hotPsi, tireLoad) {
-  const avgLoad = VEH.weight / 4;
-  const optPsi = 30 * (tireLoad / avgLoad);
+// Pressure grip factor — deviation from load-optimal hot PSI reduces grip.
+// Uses optimalHotPsi() (empirically calibrated per corner) rather than raw load ratio.
+// corner: 'LF'|'RF'|'LR'|'RR'
+// 0.006/PSI = 0.6% grip per PSI of deviation. Floor 0.82 = 18% max loss.
+function pressureGripFactor(hotPsi, tireLoad, corner) {
+  const optPsi = corner ? optimalHotPsi(corner, tireLoad) : BASE_HOT_PSI.RF; // fallback
   const dev = Math.abs(hotPsi - optPsi);
   return Math.max(0.82, 1 - 0.006 * dev);
 }
@@ -753,7 +775,7 @@ function calcPerformance(setup, tires, inflationTemp = COLD_PSI_TEMP, geoCtx = n
     mu *= tempGripFactor(avgTemp);
 
     // Pressure — use actual cornering loads (not 1G) for realistic optPsi
-    mu *= pressureGripFactor(hp, cornerLoads[c]);
+    mu *= pressureGripFactor(hp, cornerLoads[c], c);
 
     // Camber (with caster-induced dynamic camber for fronts)
     const outside = OUTSIDE[c];
@@ -938,9 +960,8 @@ function updateTireTemps(tires, workFactors, ambient, lapTime, setup, inflationT
     // Pressure effect on temperature: over-inflation → hotter middle
     const avgTemp = (tires[c].inside + tires[c].middle + tires[c].outside) / 3;
     const hp = hotPressure(setup.coldPsi[c], avgTemp, inflationTemp);
-    const avgLoad = VEH.weight / 4;
     const cornerLoadsTherm = tireLoads(OVAL_CORNER_G, shockStiffness(setup).springLLTD);
-    const optPsi = 30 * (cornerLoadsTherm[c] / avgLoad);
+    const optPsi = optimalHotPsi(c, cornerLoadsTherm[c]);
     const psiDev = hp - optPsi; // positive = over-inflated
     const psiMiddleBoost = psiDev * 0.003; // over-inflation heats middle more
 
@@ -1320,9 +1341,9 @@ export function analyzeSetup(setup, ambientTemp = 65, inflationTemp = COLD_PSI_T
     // At OVAL_CORNER_G: RF≈45 PSI, LF≈23 PSI, RR≈37 PSI, LR≈15 PSI
     // (includes ARB +165 lbs RF, rear RCH 18", frontBias 0.57)
     const hp = hotPressure(setup.coldPsi[c], tEq, inflationTemp);
-    const optHotPsi = 30 * (cornerLoads[c] / avgLoad);
+    const optHotPsi = optimalHotPsi(c, cornerLoads[c]);
     const psiDev = hp - optHotPsi;
-    const psiGripFactor = pressureGripFactor(hp, cornerLoads[c]);
+    const psiGripFactor = pressureGripFactor(hp, cornerLoads[c], c);
     const minHot = MIN_HOT_PSI[c] ?? 12;
     const maxHot = MAX_HOT_PSI[c] ?? 51;
     const isPresLimited = optHotPsi < minHot || optHotPsi > maxHot;
@@ -1642,9 +1663,9 @@ export function analyzeSetupF8(setup, ambientTemp = 65, inflationTemp = COLD_PSI
 
     // Pressure — symmetric loads front-to-front and rear-to-rear, but fronts heavier than rears
     const hp = hotPressure(setup.coldPsi[c], tEq, inflationTemp);
-    const optHotPsi = 30 * (load / avgLoad);
+    const optHotPsi = optimalHotPsi(c, load);
     const psiDev = hp - optHotPsi;
-    const psiGripFactor = pressureGripFactor(hp, load);
+    const psiGripFactor = pressureGripFactor(hp, load, c);
     const minHot = MIN_HOT_PSI[c] ?? 12;
     const maxHot = MAX_HOT_PSI[c] ?? 51;
     const isPresLimited = optHotPsi < minHot || optHotPsi > maxHot;
@@ -1932,7 +1953,7 @@ function calcPerformanceF8(setup, tires, inflationTemp = COLD_PSI_TEMP) {
 
       let mu = 1.0;
       mu *= tempGripFactor(avgTemp);
-      mu *= pressureGripFactor(hp, cLoad);
+      mu *= pressureGripFactor(hp, cLoad, c);
 
       if (front) {
         // Caster: outside gains negative, inside gains positive. F8 apex steer 3.67°.
