@@ -718,17 +718,20 @@ function GeoEditor({ editing, setEditing }) {
 
       {/* Caster camber gain */}
       <div className="ml-section">
-        <h3 className="ml-section-heading">Caster Camber Gain</h3>
+        <h3 className="ml-section-heading">Caster Camber Gain Calibration</h3>
         <p className="ml-section-note">
-          Car at ride height on flat ground. Turn steering right until the front tires steer approximately 20° — use a protractor or angle finder on the tire sidewall (not the steering wheel). Read camber on each wheel with phone inclinometer on a flat plate. This calibrates caster gain coefficients used in the camber chain model.
+          Why right steer on a left-turn oval: caster gain is symmetric — the camber change per degree of steer is identical left or right. We use 20° right because it is a large angle that produces a clearly readable camber change on the inclinometer. The model applies the resulting coefficient at the actual oval apex steer angle (3.77° left), where the change is too small to measure directly (~0.5°). Direction of steer does not affect the calibration result.
+        </p>
+        <p className="ml-section-note">
+          Car at ride height on flat ground. Turn steering right to approximately 20° — confirm with an angle finder or protractor on the tire sidewall, not the steering wheel.
         </p>
         <div className="ml-row">
           <Field label="LF camber at 20° right steer (°)"
-            hint="Record static (straight-ahead) camber first so you can cross-check. Then with wheels turned 20° right, read LF camber — phone on flat plate against the LF wheel face. The LF is the inside tire turning right, so it typically gains positive camber.">
+            hint="Note the straight-ahead static camber first. Then turn 20° right and read LF camber — phone inclinometer on flat plate against wheel face. At 20° right the LF is the inside (unloaded) tire and typically gains positive camber. The gain = (this reading) minus (static LF camber). Model uses the gain divided by LF caster degrees to get a coefficient in deg/deg.">
             <NumIn value={editing.steerCamber20.LF} onChange={v => setN('steerCamber20', 'LF', v)} placeholder="e.g. 1.5" />
           </Field>
           <Field label="RF camber at 20° right steer (°)"
-            hint="RF is the outside tire turning right — it should gain negative camber due to caster. The difference between RF camber at 20° steer and RF static camber is the caster gain. e.g. static −2°, at 20° steer −4° = 2° gain. The model uses this to calibrate the per-degree caster coefficient for the oval corner.">
+            hint="At 20° right the RF is the outside (loaded) tire — it should gain negative camber due to caster geometry. e.g. if static RF is −2° and at 20° right steer it reads −4°, the gain is 2°. Divide by RF caster degrees and by sin(20°) to get the per-degree coefficient. The model applies that coefficient at sin(3.77°) for the actual oval apex — where the gain is only ~0.5° and unmeasurable directly.">
             <NumIn value={editing.steerCamber20.RF} onChange={v => setN('steerCamber20', 'RF', v)} placeholder="e.g. -4.0" />
           </Field>
         </div>

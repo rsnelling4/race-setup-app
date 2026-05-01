@@ -1,4 +1,4 @@
-import { useMemo, useState, useRef } from 'react';
+import { useMemo, useState, useRef, useEffect } from 'react';
 import { analyzeSetup, DEFAULT_SETUP, RECOMMENDED_SETUP, PETE_SETUP, DYLAN_SETUP, JOSH_SETUP, JOEY_SETUP } from '../utils/raceSimulation';
 import { REAR_SHOCKS, FRONT_STRUTS, shockLabel } from '../data/shockOptions';
 import { computeGeometry } from './GeometryVisualizer';
@@ -221,7 +221,20 @@ function BalanceGauge({ frontGripPct, frontLLTD, springLLTD, corners, setup }) {
   // Formula: -3.5 × deviation² (gaugeMax = 0.12, thresholds at ±0.015/0.04/0.08)
   const OPTIMAL_LLTD = 0.46;
   const lltdPush = -3.5 * Math.pow(frontLLTD - OPTIMAL_LLTD, 2); // always ≤ 0
-  const tendency = gripDev + lltdPush;  // + = loose, - = push
+
+  // Camber balance term — RF insufficient camber means less front grip → push.
+  // LF over-camber (too negative) means less LF grip → also push.
+  // camberDev is |groundCamber - ideal|; positive deviation = wrong direction.
+  // RF: negative camberDev direction = too little negative = push (tighter).
+  // Scale: 1° RF camber off = ~0.012 push contribution (visibly moves the needle).
+  const rfCamberPush = -(corners.RF.camberDev * 0.012);  // more deviation = more push
+  const lfCamberLoose = (corners.LF.camberDev * 0.006);  // LF off-ideal = slight loose (less LF bite)
+
+  // Caster balance term — higher RF caster increases RF grip (more dynamic camber gain) → looser.
+  // Modeled as deviation from baseline RF caster (5°). Each degree above baseline adds front grip.
+  const rfCasterLoose = ((setup.caster?.RF ?? 5) - 5) * 0.006;
+
+  const tendency = gripDev + lltdPush + rfCamberPush + lfCamberLoose + rfCasterLoose;  // + = loose, - = push
 
   const gaugeMax = 0.12;
   // gaugePos: 0 = full loose (left), 1 = full push (right)
@@ -456,10 +469,22 @@ const OVAL_RACING_G_CALC = 0.813; // instantaneous apex G — must match raceSim
 function CamberCalc({ roll, setupCaster, geoOverrides }) {
   const cornerRoll = roll * OVAL_RACING_G_CALC;
 
+  // Local caster state — initialized from setup but user can override in the calculator.
+  // Sync when the parent setup caster changes (e.g. user edits in the main form).
   const [caster, setCaster] = useState({
     LF: setupCaster?.LF ?? 3.5,
     RF: setupCaster?.RF ?? 5.0,
   });
+  const prevCaster = useRef(setupCaster);
+  useEffect(() => {
+    if (
+      setupCaster &&
+      (setupCaster.LF !== prevCaster.current?.LF || setupCaster.RF !== prevCaster.current?.RF)
+    ) {
+      setCaster({ LF: setupCaster.LF ?? 3.5, RF: setupCaster.RF ?? 5.0 });
+      prevCaster.current = setupCaster;
+    }
+  }, [setupCaster]);
 
   // Use measured FVSA-derived coefficients when geometry is loaded
   const jounceRF = geoOverrides?.slaJounceCoeffRF ?? CALC.RF.rollCoeff;
