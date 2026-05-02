@@ -428,11 +428,13 @@ function SessionEditor({ editing, setEditing }) {
                   const label = e.target.value;
                   setEditing(prev => {
                     const updated = { ...prev, shocks: { ...prev.shocks, [corner]: label } };
-                    if (isFront) {
-                      const found = FRONT_STRUTS.find(s => shockLabel(s) === label);
-                      if (found?.springRate) {
-                        updated.springRate = { ...prev.springRate, [corner]: String(found.springRate) };
-                      }
+                    const list = isFront ? FRONT_STRUTS : REAR_SHOCKS;
+                    const found = list.find(s => shockLabel(s) === label);
+                    if (found?.springRate) {
+                      updated.springRate = { ...prev.springRate, [corner]: String(found.springRate) };
+                    }
+                    if (found?.extended != null) {
+                      updated.shockFreeLength = { ...(prev.shockFreeLength ?? {}), [corner]: String(found.extended) };
                     }
                     return updated;
                   });
@@ -694,15 +696,37 @@ function GeoEditor({ editing, setEditing }) {
           These measurements allow the model to determine how much suspension travel remains before hitting the bumpstop, whether the shock is in its usable stroke range at ride height, and whether spring rate changes will run the shock out of travel. Measure with the car at race ride height.
         </p>
 
-        <h4 style={{ color: '#94a3b8', fontFamily: 'monospace', fontSize: 12, margin: '12px 0 6px' }}>Free Length — Fully Extended (inches)</h4>
-        <p className="ml-section-note">Remove shock from car, extend fully, measure eye-to-eye (or mounting face to mounting face). This is the maximum stroke reference.</p>
+        <h4 style={{ color: '#94a3b8', fontFamily: 'monospace', fontSize: 12, margin: '12px 0 6px' }}>Extended / Compressed / Stroke — From Spec</h4>
+        <p className="ml-section-note">
+          When a shock is selected above, these values are pulled from the manufacturer spec automatically — no measurement needed.
+          If no shock is selected for a corner, enter the extended (free) length manually.
+        </p>
         <div className="ml-tire-grid">
-          {['LF', 'RF', 'LR', 'RR'].map(pos => (
-            <Field key={pos} label={pos}
-              hint={`Detach the ${pos} shock/strut from both mounts. Extend it fully (pull apart until it stops). Measure from the center of the upper mount hole to the center of the lower mount hole (eye-to-eye), or mounting face to mounting face if stud-mounted. This gives you the extended length. Compressed length = extended minus stroke. The difference between extended and installed length is the current shaft compression.`}>
-              <NumIn value={editing.shockFreeLength?.[pos] ?? ''} onChange={v => setN('shockFreeLength', pos, v)} placeholder="e.g. 14.5" step="0.125" />
-            </Field>
-          ))}
+          {['LF', 'RF', 'LR', 'RR'].map(pos => {
+            const isFront = pos === 'LF' || pos === 'RF';
+            const list = isFront ? FRONT_STRUTS : REAR_SHOCKS;
+            const label = editing.shocks?.[pos] ?? '';
+            const spec = label ? list.find(s => shockLabel(s) === label) : null;
+            if (spec) {
+              return (
+                <div key={pos} className="ml-field">
+                  <div className="ml-field-label">{pos}</div>
+                  <div style={{ fontFamily: 'monospace', fontSize: 11, color: '#94a3b8', lineHeight: 1.7, padding: '4px 0' }}>
+                    <div>Extended: <span style={{ color: '#e2e8f0' }}>{spec.extended}"</span></div>
+                    <div>Compressed: <span style={{ color: '#e2e8f0' }}>{spec.compressed}"</span></div>
+                    <div>Stroke: <span style={{ color: '#e2e8f0' }}>{spec.stroke}"</span></div>
+                    <div style={{ color: '#64748b', fontSize: 10, marginTop: 2 }}>auto-filled from spec</div>
+                  </div>
+                </div>
+              );
+            }
+            return (
+              <Field key={pos} label={`${pos} (no shock selected)`}
+                hint={`No shock selected for ${pos}. Detach the shock from both mounts, extend fully, measure eye-to-eye. This is the extended (free) length.`}>
+                <NumIn value={editing.shockFreeLength?.[pos] ?? ''} onChange={v => setN('shockFreeLength', pos, v)} placeholder="e.g. 14.5" step="0.125" />
+              </Field>
+            );
+          })}
         </div>
 
         <h4 style={{ color: '#94a3b8', fontFamily: 'monospace', fontSize: 12, margin: '12px 0 6px' }}>Installed Length at Ride Height (inches)</h4>
@@ -730,19 +754,26 @@ function GeoEditor({ editing, setEditing }) {
         {(() => {
           const corners = ['LF', 'RF', 'LR', 'RR'];
           const rows = corners.map(pos => {
-            const free = parseFloat(editing.shockFreeLength?.[pos]);
+            const isFront = pos === 'LF' || pos === 'RF';
+            const list = isFront ? FRONT_STRUTS : REAR_SHOCKS;
+            const label = editing.shocks?.[pos] ?? '';
+            const spec = label ? list.find(s => shockLabel(s) === label) : null;
+            const freeRaw = parseFloat(editing.shockFreeLength?.[pos]) || (spec?.extended ?? null);
+            const free = freeRaw;
             const inst = parseFloat(editing.shockInstalled?.[pos]);
             const gap  = parseFloat(editing.shockBumpGap?.[pos]);
             if (!free || !inst) return null;
             const compression = (free - inst).toFixed(2);
+            const stroke = spec?.stroke ?? (free - (spec?.compressed ?? 0)) || null;
+            const droop = stroke ? (inst - (spec?.compressed ?? (free - stroke))).toFixed(2) : '—';
             const jounceLeft = gap ? parseFloat(gap).toFixed(2) : '—';
-            return { pos, compression, jounceLeft };
+            return { pos, compression, droop, jounceLeft };
           }).filter(Boolean);
           if (rows.length === 0) return null;
           return (
             <div className="ml-section-note" style={{ marginTop: 10, fontFamily: 'monospace', fontSize: 11 }}>
               {rows.map(r => (
-                <div key={r.pos}>{r.pos}: shaft compressed {r.compression}" from free length — {r.jounceLeft}" jounce to bumpstop</div>
+                <div key={r.pos}>{r.pos}: {r.compression}" shaft compression at ride height | {r.droop}" droop remaining | {r.jounceLeft}" to bumpstop</div>
               ))}
             </div>
           );
