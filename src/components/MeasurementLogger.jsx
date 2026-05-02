@@ -45,6 +45,8 @@ const EMPTY_GEO = {
   rearToe:           '',
   // ── Ride heights (inches from floor to rocker panel or consistent reference) ──
   rideHeight:        { LF: '', RF: '', LR: '', RR: '' },
+  // ── Shock selection (drives spec auto-fill in physical measurements) ──
+  shocks:            { LF: '', RF: '', LR: '', RR: '' },
   // ── Shock physical measurements ──
   shockFreeLength:   { LF: '', RF: '', LR: '', RR: '' },  // inches, fully extended
   shockInstalled:    { LF: '', RF: '', LR: '', RR: '' },  // inches, installed at ride height
@@ -687,6 +689,41 @@ function GeoEditor({ editing, setEditing }) {
             </div>
           );
         })()}
+      </div>
+
+      {/* Shock / Strut Selection */}
+      <div className="ml-section">
+        <h3 className="ml-section-heading">Shocks / Struts Installed</h3>
+        <p className="ml-section-note">Select the shock/strut installed at each corner. This auto-fills extended, compressed, and stroke values below from manufacturer specs.</p>
+        {['LF', 'RF', 'LR', 'RR'].map(corner => {
+          const isFront = corner === 'LF' || corner === 'RF';
+          const list = isFront ? FRONT_STRUTS : REAR_SHOCKS;
+          return (
+            <div key={corner} className="ml-field">
+              <div className="ml-field-label">{corner} {isFront ? 'Strut' : 'Shock'}</div>
+              <select className="ml-input ml-select"
+                value={editing.shocks?.[corner] ?? ''}
+                onChange={e => {
+                  const label = e.target.value;
+                  setEditing(prev => {
+                    const updated = { ...prev, shocks: { ...(prev.shocks ?? {}), [corner]: label } };
+                    const found = list.find(s => shockLabel(s) === label);
+                    if (found?.extended != null) {
+                      updated.shockFreeLength = { ...(prev.shockFreeLength ?? {}), [corner]: String(found.extended) };
+                    }
+                    return updated;
+                  });
+                }}>
+                <option value="">— Select —</option>
+                {list.map(s => (
+                  <option key={s.part} value={shockLabel(s)}>
+                    {shockLabel(s)} — {s.use}
+                  </option>
+                ))}
+              </select>
+            </div>
+          );
+        })}
       </div>
 
       {/* Shock Physical Measurements */}
