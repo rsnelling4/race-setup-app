@@ -69,6 +69,18 @@ const EMPTY_GEO = {
   rideLowering:      '',
   arbDiameter:       '',
   cgNotes:           '',
+  // ── Spring rates (lb/in at spring) ──
+  springRate:        { LF: '', RF: '', LR: '', RR: '' },
+  installRatio:      { front: '', rear: '' },  // spring compression per inch wheel travel
+  rearSpringTrack:   '',  // distance between rear spring centerlines (in)
+  // ── Coil spring physical dimensions (optional — for stress check §21.2) ──
+  springWireDia:     { front: '', rear: '' },  // d, wire diameter, in
+  springCoilDia:     { front: '', rear: '' },  // D, mean coil diameter, in
+  springActiveCoils: { front: '', rear: '' },  // N, number of active coils
+  // ── Bumpstop rate (optional — for series spring rate §21.3) ──
+  bumpstopRate:      { front: '', rear: '' },  // lb/in, bumpstop progressive rate
+  // ── Damping forces (optional — for Ch.22 damping ratio analysis) ──
+  dampingForce:      { bumpFront: '', rebFront: '', bumpRear: '', rebRear: '' }, // lbs at 5 in/sec
 };
 
 // ─── Persistence ─────────────────────────────────────────────────────────────
@@ -732,6 +744,139 @@ function GeoEditor({ editing, setEditing }) {
               {rows.map(r => (
                 <div key={r.pos}>{r.pos}: shaft compressed {r.compression}" from free length — {r.jounceLeft}" jounce to bumpstop</div>
               ))}
+            </div>
+          );
+        })()}
+      </div>
+
+      {/* Spring Rates */}
+      <div className="ml-section">
+        <h3 className="ml-section-heading">Spring Rates &amp; Installation Ratios (Milliken Ch.16)</h3>
+        <p className="ml-section-note">
+          Spring rate at the spring (lb/in). For coil springs: read the rate stamped on the spring or from the manufacturer spec. Installation ratio (IR) is the fraction of wheel travel that compresses the spring — for the P71 SLA front, IR ≈ 0.52 (spring mounted inboard of wheel center). Wheel rate = spring rate × IR². Ride frequency and roll gradient are computed from these values.
+        </p>
+
+        <h4 style={{ color: '#94a3b8', fontFamily: 'monospace', fontSize: 12, margin: '12px 0 6px' }}>Spring Rate (lb/in at spring)</h4>
+        <div className="ml-tire-grid">
+          {['LF', 'RF', 'LR', 'RR'].map(pos => (
+            <Field key={pos} label={pos}
+              hint={`Spring rate in lb/in, measured at the spring coil centerline. For a coil spring, this is stamped on the spring or listed in the manufacturer spec. Do NOT confuse with wheel rate — wheel rate = spring rate × installation ratio². P71 police-package front ≈ 475 lb/in. P71 rear (leaf spring equivalent) varies widely — estimate from load/deflection if unknown.`}>
+              <NumIn value={editing.springRate?.[pos] ?? ''} onChange={v => setN('springRate', pos, v)} placeholder={pos.endsWith('F') ? 'e.g. 475' : 'e.g. 220'} step="5" />
+            </Field>
+          ))}
+        </div>
+
+        <h4 style={{ color: '#94a3b8', fontFamily: 'monospace', fontSize: 12, margin: '12px 0 6px' }}>Installation Ratio</h4>
+        <p className="ml-section-note">Inches of spring compression per inch of wheel travel. Measure by jacking wheel up 1 inch and measuring spring length change, or use direct measurement method (Milliken §16.3). P71 SLA front ≈ 0.52. P71 rear solid axle spring-to-axle ≈ 1.0 (spring at axle center).</p>
+        <div className="ml-row">
+          <Field label="Front IR (per side)"
+            hint="Jack the front wheel up exactly 1 inch from ride height. Measure how much the spring compresses. IR = spring compression / wheel travel. For the P71 SLA: spring is mounted inboard partway along the lower arm, so IR is typically 0.48–0.55. Default 0.52.">
+            <NumIn value={editing.installRatio?.front ?? ''} onChange={v => setN('installRatio', 'front', v)} placeholder="e.g. 0.52" step="0.01" />
+          </Field>
+          <Field label="Rear IR (per side)"
+            hint="For the P71 solid rear axle: the coil springs sit on perches on the axle housing. If the spring is directly above the axle, IR ≈ 1.0. If mounted at an angle or offset, measure directly. Leaf spring equivalent: IR is inherently 1.0 for a spring sitting at the axle.">
+            <NumIn value={editing.installRatio?.rear ?? ''} onChange={v => setN('installRatio', 'rear', v)} placeholder="e.g. 1.0" step="0.01" />
+          </Field>
+        </div>
+
+        <h4 style={{ color: '#94a3b8', fontFamily: 'monospace', fontSize: 12, margin: '12px 0 6px' }}>Rear Spring Track (inches)</h4>
+        <p className="ml-section-note">Distance between the centers of the left and right rear spring perches on the axle tube. Used to compute rear roll stiffness from spring rates. Milliken §16.2: rear spring roll rate = K_φ = 12 × K_WR × T_S²/2 for a solid axle.</p>
+        <Field label="Rear spring center-to-center (inches)"
+          hint="With the car at ride height, measure from the center of the LR spring perch cup to the center of the RR spring perch cup, along the axle tube. Narrower than track width. Wider = more rear roll stiffness (more rear LLTD, looser). Stock P71 ≈ 42–46 inches.">
+          <NumIn value={editing.rearSpringTrack ?? ''} onChange={v => set('rearSpringTrack', v)} placeholder="e.g. 44" step="0.5" />
+        </Field>
+
+        <h4 style={{ color: '#94a3b8', fontFamily: 'monospace', fontSize: 12, margin: '16px 0 6px' }}>Coil Spring Physical Dimensions (optional — stress check §21.2)</h4>
+        <p className="ml-section-note">Wire diameter (d), mean coil diameter (D), and active coil count (N) allow the model to verify the spring is not over-stressed at cornering loads and to compute the spring rate from first principles: S = Gd⁴/8D³N. Leave blank if unknown — spring rate entries above are sufficient for ride/roll analysis.</p>
+        <div className="ml-row">
+          <Field label="Front wire diameter d (inches)"
+            hint="Measure the wire that the coil spring is wound from. Caliper across a single strand of wire at the coil. P71 police-package front coil ≈ 0.50–0.56 in wire diameter. Do not measure the coil diameter — measure the wire strand itself.">
+            <NumIn value={editing.springWireDia?.front ?? ''} onChange={v => setN('springWireDia', 'front', v)} placeholder="e.g. 0.52" step="0.01" />
+          </Field>
+          <Field label="Rear wire diameter d (inches)"
+            hint="Same method — measure the rear coil spring wire strand diameter with a caliper. P71 rear coil ≈ 0.47–0.53 in.">
+            <NumIn value={editing.springWireDia?.rear ?? ''} onChange={v => setN('springWireDia', 'rear', v)} placeholder="e.g. 0.50" step="0.01" />
+          </Field>
+        </div>
+        <div className="ml-row">
+          <Field label="Front mean coil diameter D (inches)"
+            hint="Mean coil diameter = (outside diameter + inside diameter) / 2. Measure the outside diameter of the coil spring with a tape or caliper, then subtract one wire diameter to get mean diameter. P71 front ≈ 4.0–5.0 in mean diameter.">
+            <NumIn value={editing.springCoilDia?.front ?? ''} onChange={v => setN('springCoilDia', 'front', v)} placeholder="e.g. 4.5" step="0.1" />
+          </Field>
+          <Field label="Rear mean coil diameter D (inches)"
+            hint="Same method as front — (OD + ID) / 2. P71 rear ≈ 4.0–5.0 in.">
+            <NumIn value={editing.springCoilDia?.rear ?? ''} onChange={v => setN('springCoilDia', 'rear', v)} placeholder="e.g. 4.5" step="0.1" />
+          </Field>
+        </div>
+        <div className="ml-row">
+          <Field label="Front active coils N"
+            hint="Count the number of coils that are free to deflect (active coils). Closed-and-ground ends: subtract 2 inactive coils from total. Plain ends: subtract 0 (all active). Plain-ends-ground: approximately 0.5 inactive per end. Count visually — total coils minus inactive (those touching the end plates and not deflecting). P71 front ≈ 5–8 active coils.">
+            <NumIn value={editing.springActiveCoils?.front ?? ''} onChange={v => setN('springActiveCoils', 'front', v)} placeholder="e.g. 6" step="0.5" />
+          </Field>
+          <Field label="Rear active coils N"
+            hint="Same method as front — count free (active) coils on the rear spring. P71 rear ≈ 5–8.">
+            <NumIn value={editing.springActiveCoils?.rear ?? ''} onChange={v => setN('springActiveCoils', 'rear', v)} placeholder="e.g. 6" step="0.5" />
+          </Field>
+        </div>
+
+        <h4 style={{ color: '#94a3b8', fontFamily: 'monospace', fontSize: 12, margin: '16px 0 6px' }}>Bumpstop Rate (optional — §21.3 series spring rate)</h4>
+        <p className="ml-section-note">When the shock contacts the bumpstop, the bumpstop acts as a second spring in series. Effective rate = K_coil × K_bump / (K_coil + K_bump). A stiffer bumpstop produces less rate increase; a softer bump rubber produces more (progressive). Typical race bumpstop rubber: 500–2000 lb/in depending on durometer and thickness.</p>
+        <div className="ml-row">
+          <Field label="Front bumpstop rate (lb/in)"
+            hint="Bumpstop stiffness at the shock shaft. Measure by compressing the bump rubber with a known load and measuring deflection. If unknown, estimate from durometer: 40A ≈ 400–600 lb/in, 60A ≈ 800–1200 lb/in, 80A ≈ 1500–2500 lb/in. Enter 0 or leave blank if no bumpstops are used.">
+            <NumIn value={editing.bumpstopRate?.front ?? ''} onChange={v => setN('bumpstopRate', 'front', v)} placeholder="e.g. 800" step="50" />
+          </Field>
+          <Field label="Rear bumpstop rate (lb/in)"
+            hint="Same as front — rear bumpstop stiffness. Rear bumpstop contact is typically less critical than front on oval (car loads front more in left turn).">
+            <NumIn value={editing.bumpstopRate?.rear ?? ''} onChange={v => setN('bumpstopRate', 'rear', v)} placeholder="e.g. 600" step="50" />
+          </Field>
+        </div>
+
+        <h4 style={{ color: '#94a3b8', fontFamily: 'monospace', fontSize: 12, margin: '16px 0 6px' }}>Damping Forces (optional — §22.3 damping ratio analysis)</h4>
+        <p className="ml-section-note">Dyno-measured shock force in lbs at 5 in/sec shaft speed — the body-control range (0–5 in/sec is where dampers do most of their work). If you have a shock dyno printout, read off the force at 5 in/sec for bump and rebound separately. If not, leave blank — target force ranges will still be computed from spring/weight data. Racing sedan target (Milliken Table 22.2): bump ζ = 0.40–0.50, rebound ζ = 0.71. Rebound is always ~2× bump.</p>
+        <div className="ml-row">
+          <Field label="Front BUMP force at 5 in/sec (lbs)"
+            hint="From shock dyno: bump (compression) force in pounds at 5 inches/second shaft speed. This is the most important operating point for body control. If using KONI shocks, test at various adjustment positions and record which click gave this value.">
+            <NumIn value={editing.dampingForce?.bumpFront ?? ''} onChange={v => setN('dampingForce', 'bumpFront', v)} placeholder="e.g. 150" step="10" />
+          </Field>
+          <Field label="Front REBOUND force at 5 in/sec (lbs)"
+            hint="Rebound (extension) force at 5 in/sec. Should be approximately 2× the bump force. Higher rebound than 2× bump risks 'jacking down' — the shock cannot extend fast enough after a bump and the car progressively settles lower through a long corner.">
+            <NumIn value={editing.dampingForce?.rebFront ?? ''} onChange={v => setN('dampingForce', 'rebFront', v)} placeholder="e.g. 300" step="10" />
+          </Field>
+        </div>
+        <div className="ml-row">
+          <Field label="Rear BUMP force at 5 in/sec (lbs)"
+            hint="Rear shock bump force at 5 in/sec. P71 rear shocks have lower wheel rates than front (solid axle, IR=1.0 but lower spring rate) — rear critical damping coefficient is lower, so the required force to hit the same ζ is less than the front.">
+            <NumIn value={editing.dampingForce?.bumpRear ?? ''} onChange={v => setN('dampingForce', 'bumpRear', v)} placeholder="e.g. 120" step="10" />
+          </Field>
+          <Field label="Rear REBOUND force at 5 in/sec (lbs)"
+            hint="Rear rebound at 5 in/sec. Rear rebound overdamping causes jacking down on the rear axle — this manifests as a loose condition at exit from a long corner as the car suddenly springs back up off the bumpstop.">
+            <NumIn value={editing.dampingForce?.rebRear ?? ''} onChange={v => setN('dampingForce', 'rebRear', v)} placeholder="e.g. 240" step="10" />
+          </Field>
+        </div>
+
+        {(() => {
+          const ksF = parseFloat(editing.springRate?.LF || editing.springRate?.RF);
+          const ksR = parseFloat(editing.springRate?.LR || editing.springRate?.RR);
+          const irF = parseFloat(editing.installRatio?.front) || 0.52;
+          const irR = parseFloat(editing.installRatio?.rear)  || 1.0;
+          if (!ksF && !ksR) return null;
+          const kwF = ksF ? (ksF * irF * irF).toFixed(0) : '—';
+          const kwR = ksR ? (ksR * irR * irR).toFixed(0) : '—';
+          const wF  = 3700 * 0.57 / 2;
+          const wR  = 3700 * 0.43 / 2;
+          const freqF = ksF ? ((1/(2*Math.PI)) * Math.sqrt(ksF * irF * irF * 386.4 / wF) * 60).toFixed(0) : '—';
+          const freqR = ksR ? ((1/(2*Math.PI)) * Math.sqrt(ksR * irR * irR * 386.4 / wR) * 60).toFixed(0) : '—';
+          // Stress check if dimensions entered
+          const dF = parseFloat(editing.springWireDia?.front);
+          const DF = parseFloat(editing.springCoilDia?.front);
+          const cornerLoadF = (3700 * 0.57 / 2) / irF; // spring load at static
+          const stressF = dF && DF ? (8 * DF * cornerLoadF / (Math.PI * Math.pow(dF, 3))).toFixed(0) : null;
+          return (
+            <div className="ml-section-note" style={{ marginTop: 10, fontFamily: 'monospace', fontSize: 11 }}>
+              Wheel rate: Front {kwF} lb/in | Rear {kwR} lb/in{'\n'}
+              Ride freq: Front {freqF} cpm | Rear {freqR} cpm (target: 95–120 cpm race sedan){'\n'}
+              {stressF && `Front spring static shear stress: ${stressF} psi (limit ~82,500 psi oil-tempered 0.5" wire)`}
             </div>
           );
         })()}

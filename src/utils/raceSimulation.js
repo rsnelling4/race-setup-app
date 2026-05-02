@@ -1634,10 +1634,20 @@ const F8_CASTER_COEFF_IN  = 0.031; // °/°caster — F8 inside tire, 3.67° ape
 // Display factors mirror calcPerformanceF8 exactly so scores reflect actual lap time impact.
 const F8_IDEAL_AVG_EFFECTIVE_CAMBER = -2.25; // avg of outside ideal (−4.5°) + inside ideal (0°, flat)
 
-export function analyzeSetupF8(setup, ambientTemp = 65, inflationTemp = COLD_PSI_TEMP) {
-  const ss = shockStiffness(setup);
+export function analyzeSetupF8(setup, ambientTemp = 65, inflationTemp = COLD_PSI_TEMP, geoOverrides = null) {
+  const geo = geoOverrides || {};
+  const geoCtx = geoOverrides ? {
+    rcF:            (geo.rcHeightFront   != null ? geo.rcHeightFront   : VEH.rollCenterHeight     * 12) / 12,
+    rcR:            (geo.rcHeightRear    != null ? geo.rcHeightRear    : VEH.rollCenterHeightRear * 12) / 12,
+    tw:             (geo.trackWidthFront != null ? geo.trackWidthFront : VEH.trackWidth * 12) / 12,
+    rearSpringBase: geo.rearSpringBase  ?? null,
+    mrFront:        geo.mrFront         ?? null,
+    cgH:            geo.cgHeight        != null ? geo.cgHeight / 12 : VEH.cgHeight,
+    frontBias:      geo.frontBias       ?? VEH.frontBias,
+  } : null;
+  const ss = shockStiffness(setup, geoCtx);
   // Average loads across L+R turns = static loads (lateral transfer cancels)
-  const loadsL = tireLoads(1.0, ss.springLLTD);
+  const loadsL = geoCtx ? tireLoadsCtx(1.0, ss.springLLTD, geoCtx) : tireLoads(1.0, ss.springLLTD);
   const loadsR = { LF: loadsL.RF, RF: loadsL.LF, LR: loadsL.RR, RR: loadsL.LR };
   const loads = {
     LF: (loadsL.LF + loadsR.LF) / 2,
@@ -1646,7 +1656,7 @@ export function analyzeSetupF8(setup, ambientTemp = 65, inflationTemp = COLD_PSI
     RR: (loadsL.RR + loadsR.RR) / 2,
   };
   const avgLoad = VEH.weight / 4;
-  const roll = bodyRoll(1.0, rollStiffness(setup));
+  const roll = bodyRoll(1.0, rollStiffness(setup, geoCtx));
   const toe = setup.toe !== undefined ? setup.toe : -0.25;
   const caster = setup.caster || { LF: 4.0, RF: 4.0 };
 

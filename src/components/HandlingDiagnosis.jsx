@@ -2,7 +2,36 @@ import { useState, useMemo } from 'react';
 import { handlingConditions, cornerPhases } from '../utils/tireAnalysis';
 import { analyzeSetup, DEFAULT_SETUP, RECOMMENDED_SETUP, PETE_SETUP, DYLAN_SETUP, JOSH_SETUP, JOEY_SETUP } from '../utils/raceSimulation';
 import { REAR_SHOCKS, FRONT_STRUTS, shockLabel } from '../data/shockOptions';
+import { computeGeometry } from './GeometryVisualizer';
+import { useSync } from '../utils/SyncContext';
 import NumericInput from './NumericInput';
+
+function buildGeoOverrides(geo) {
+  if (!geo) return null;
+  const overrides = {};
+  if (geo.trackWidth?.front) overrides.trackWidthFront = Number(geo.trackWidth.front);
+  if (geo.rearRollCenter)    overrides.rcHeightRear    = Number(geo.rearRollCenter);
+  if (geo.rearSpringBase)    overrides.rearSpringBase  = Number(geo.rearSpringBase);
+  const rf = computeGeometry(geo, 'RF');
+  const lf = computeGeometry(geo, 'LF');
+  if (rf?.rcHeight != null && lf?.rcHeight != null) {
+    overrides.rcHeightFront = (rf.rcHeight + lf.rcHeight) / 2;
+  }
+  if (rf?.fvsa != null && lf?.fvsa != null) {
+    const avgFvsa = (rf.fvsa + lf.fvsa) / 2;
+    const camberGainPerIn = Math.atan(1 / avgFvsa) * (180 / Math.PI);
+    overrides.slaJounceCoeffRF = camberGainPerIn * 0.383;
+    overrides.slaDroopCoeffLF  = camberGainPerIn * 0.383;
+  }
+  if (geo.springPickup?.RF && geo.lowerBallJoint?.RF) {
+    const pickupX = Number(geo.springPickup.RF);
+    const bjX     = Number(geo.lowerBallJoint.RF) || 6.75;
+    const pivX    = Number(geo.lowerArmPivot?.RF)  || 9.375;
+    const armLen  = Math.abs(bjX - pivX);
+    if (armLen > 0 && pickupX > 0) overrides.mrFront = pickupX / armLen;
+  }
+  return Object.keys(overrides).length > 0 ? overrides : null;
+}
 
 function deepClone(o) { return JSON.parse(JSON.stringify(o)); }
 
@@ -437,13 +466,18 @@ function buildRecommendations(condition, phase, analysis, setup) {
 
 // ── Main component ───────────────────────────────────────────────────────────
 export default function HandlingDiagnosis({ setup, setSetup, ambient, setAmbient, inflationTemp, setInflationTemp }) {
+  const { geometry: geoProfiles = [] } = useSync();
+  const [selectedGeoId, setSelectedGeoId] = useState(null);
+  const selectedGeo = selectedGeoId != null ? geoProfiles.find(g => g.id === selectedGeoId) : null;
+  const geoOverrides = useMemo(() => buildGeoOverrides(selectedGeo), [selectedGeo]);
+
   const [condition, setCondition] = useState('');
   const [phase, setPhase] = useState('');
   const [setupConfirmed, setSetupConfirmed] = useState(false);
 
   const analysis = useMemo(
-    () => analyzeSetup(setup, ambient, inflationTemp),
-    [setup, ambient, inflationTemp]
+    () => analyzeSetup(setup, ambient, inflationTemp, geoOverrides),
+    [setup, ambient, inflationTemp, geoOverrides]
   );
 
   const isDefaultSetup = useMemo(() => {
@@ -490,7 +524,25 @@ export default function HandlingDiagnosis({ setup, setSetup, ambient, setAmbient
             <input type="number" step="1" min="30" max="120" className="opt-input"
               value={ambient} onChange={e => setAmbient(parseFloat(e.target.value) || 65)} />
           </div>
+          {geoProfiles.length > 0 && (
+            <div className="opt-form-field" style={{ flexGrow: 1 }}>
+              <label style={{ marginRight: 8 }}>Geometry Profile</label>
+              <select className="opt-input" value={selectedGeoId ?? ''} onChange={e => setSelectedGeoId(e.target.value ? Number(e.target.value) : null)}>
+                <option value="">Default P71 baseline</option>
+                {geoProfiles.map(g => (
+                  <option key={g.id} value={g.id}>{g.name || `Profile ${g.id}`}</option>
+                ))}
+              </select>
+            </div>
+          )}
         </div>
+        {geoOverrides && (
+          <div className="opt-geo-note" style={{ marginBottom: 8 }}>
+            Using measured:{geoOverrides.rcHeightFront != null ? ` front RC ${geoOverrides.rcHeightFront.toFixed(1)}"` : ''}
+            {geoOverrides.rcHeightRear != null ? ` · rear RC ${geoOverrides.rcHeightRear}"` : ''}
+            {geoOverrides.mrFront      != null ? ` · MR ${geoOverrides.mrFront.toFixed(2)}` : ''}
+          </div>
+        )}
 
         <CompactSetupForm setup={setup} onChange={s => { setSetup(s); setSetupConfirmed(true); }} />
 

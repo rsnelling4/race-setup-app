@@ -1,7 +1,36 @@
 import { useMemo, useState, useRef } from 'react';
 import { analyzeSetupF8, DEFAULT_SETUP_F8 } from '../utils/raceSimulation';
 import { REAR_SHOCKS, FRONT_STRUTS, shockLabel } from '../data/shockOptions';
+import { computeGeometry } from './GeometryVisualizer';
+import { useSync } from '../utils/SyncContext';
 import NumericInput from './NumericInput';
+
+function buildGeoOverrides(geo) {
+  if (!geo) return null;
+  const overrides = {};
+  if (geo.trackWidth?.front) overrides.trackWidthFront = Number(geo.trackWidth.front);
+  if (geo.rearRollCenter)    overrides.rcHeightRear    = Number(geo.rearRollCenter);
+  if (geo.rearSpringBase)    overrides.rearSpringBase  = Number(geo.rearSpringBase);
+  const rf = computeGeometry(geo, 'RF');
+  const lf = computeGeometry(geo, 'LF');
+  if (rf?.rcHeight != null && lf?.rcHeight != null) {
+    overrides.rcHeightFront = (rf.rcHeight + lf.rcHeight) / 2;
+  }
+  if (rf?.fvsa != null && lf?.fvsa != null) {
+    const avgFvsa = (rf.fvsa + lf.fvsa) / 2;
+    const camberGainPerIn = Math.atan(1 / avgFvsa) * (180 / Math.PI);
+    overrides.slaJounceCoeffRF = camberGainPerIn * 0.383;
+    overrides.slaDroopCoeffLF  = camberGainPerIn * 0.383;
+  }
+  if (geo.springPickup?.RF && geo.lowerBallJoint?.RF) {
+    const pickupX = Number(geo.springPickup.RF);
+    const bjX     = Number(geo.lowerBallJoint.RF) || 6.75;
+    const pivX    = Number(geo.lowerArmPivot?.RF)  || 9.375;
+    const armLen  = Math.abs(bjX - pivX);
+    if (armLen > 0 && pickupX > 0) overrides.mrFront = pickupX / armLen;
+  }
+  return Object.keys(overrides).length > 0 ? overrides : null;
+}
 
 const CORNERS = ['LF', 'RF', 'LR', 'RR'];
 const CORNER_LABELS = { LF: 'Left Front', RF: 'Right Front', LR: 'Left Rear', RR: 'Right Rear' };
@@ -509,7 +538,11 @@ function CompactSetupForm({ setup, onChange }) {
 }
 
 export default function Figure8Optimizer({ setup, setSetup, ambient, setAmbient, inflationTemp, setInflationTemp }) {
-  const analysis = useMemo(() => analyzeSetupF8(setup, ambient, inflationTemp), [setup, ambient, inflationTemp]);
+  const { geometry: geoProfiles = [] } = useSync();
+  const [selectedGeoId, setSelectedGeoId] = useState(null);
+  const selectedGeo = selectedGeoId != null ? geoProfiles.find(g => g.id === selectedGeoId) : null;
+  const geoOverrides = useMemo(() => buildGeoOverrides(selectedGeo), [selectedGeo]);
+  const analysis = useMemo(() => analyzeSetupF8(setup, ambient, inflationTemp, geoOverrides), [setup, ambient, inflationTemp, geoOverrides]);
   const {
     corners, ss, roll, frontGripPct, balancePenalty, imbalance,
     toeGrip, toeDrag, toe,
@@ -619,6 +652,28 @@ export default function Figure8Optimizer({ setup, setSetup, ambient, setAmbient,
           </button>
         </div>
       </div>
+
+      {/* ── Geometry profile selector ── */}
+      {geoProfiles.length > 0 && (
+        <div className="opt-conditions" style={{ marginBottom: 0 }}>
+          <div className="opt-form-field" style={{ flexGrow: 1 }}>
+            <label>Car Geometry Profile</label>
+            <select className="opt-input" value={selectedGeoId ?? ''} onChange={e => setSelectedGeoId(e.target.value ? Number(e.target.value) : null)}>
+              <option value="">Default (hardcoded P71 baseline)</option>
+              {geoProfiles.map(g => (
+                <option key={g.id} value={g.id}>{g.name || `Profile ${g.id}`}</option>
+              ))}
+            </select>
+          </div>
+          {geoOverrides && (
+            <span className="opt-geo-note" style={{ alignSelf: 'flex-end', paddingBottom: 4 }}>
+              Using measured:{geoOverrides.rcHeightFront != null ? ` front RC ${geoOverrides.rcHeightFront.toFixed(1)}"` : ''}
+              {geoOverrides.rcHeightRear   != null ? ` · rear RC ${geoOverrides.rcHeightRear}"` : ''}
+              {geoOverrides.mrFront        != null ? ` · MR ${geoOverrides.mrFront.toFixed(2)}` : ''}
+            </span>
+          )}
+        </div>
+      )}
 
       {/* ── Setup form ── */}
       <div className="opt-section">
