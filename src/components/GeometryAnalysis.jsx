@@ -303,12 +303,15 @@ export default function GeometryAnalysis({ geo }) {
   const rfGroundStr = sign(a.rfGroundCamber);
   const lfGroundStr = sign(a.lfGroundCamber);
 
+  // RC jacking flag: above ~25" the lateral jacking force becomes significant (Milliken §12.2 item 9)
+  const frontRCJacking = a.rcAvg != null && a.rcAvg > 25;
+
   const rcDiffNote = a.rcDiff != null
     ? a.rcDiff > 2
-      ? `Front RC (${a.rcAvg?.toFixed(1)}") is ${a.rcDiff.toFixed(1)}" higher than rear (${a.rearRC.toFixed(1)}"). Front is geometrically stiffer in roll — ${isOval ? 'intentional on a left-turn oval' : 'may produce understeer on figure-8 with mixed turn directions'}.`
+      ? `Front RC (${a.rcAvg?.toFixed(1)}") is ${a.rcDiff.toFixed(1)}" higher than rear (${a.rearRC.toFixed(1)}"). Front is geometrically stiffer in roll — ${isOval ? 'intentional on a left-turn oval to bias geometric load to the RF' : 'may produce understeer on figure-8 with mixed turn directions'}. ${frontRCJacking ? 'WARNING: front RC above 25" — jacking forces are significant. The body will rise under cornering load rather than roll, causing unpredictable load transfer. Lowering ride height or RC is needed.' : ''}`
       : a.rcDiff < -2
-      ? `Front RC (${a.rcAvg?.toFixed(1)}") is lower than rear (${a.rearRC.toFixed(1)}") by ${Math.abs(a.rcDiff).toFixed(1)}". Rear transfers load geometrically faster — tends to cause oversteer at turn-in.`
-      : `Front RC (${a.rcAvg?.toFixed(1)}") and rear RC (${a.rearRC.toFixed(1)}") are nearly equal. Roll stiffness relies on springs and ARB rather than geometry.`
+      ? `Front RC (${a.rcAvg?.toFixed(1)}") is lower than rear (${a.rearRC.toFixed(1)}") by ${Math.abs(a.rcDiff).toFixed(1)}". Rear transfers load geometrically faster — tends to cause oversteer at turn-in and loose corner exit.`
+      : `Front RC (${a.rcAvg?.toFixed(1)}") and rear RC (${a.rearRC.toFixed(1)}") are nearly equal. Roll stiffness distribution relies on springs and ARB rather than geometry — spring/ARB tuning is effective here.`
     : '';
 
   // ── Parts / spring / shock recommendations ────────────────────────────────
@@ -320,16 +323,22 @@ export default function GeometryAnalysis({ geo }) {
     if (!sd) continue;
     if (sd.jounceAvail != null && sd.jounceAvail < 0.5) {
       partsRecs.push({
-        pos, type: 'SPRING — STIFFER or LONGER',
+        pos, type: 'SPRING — STIFFER or SHORTER BUMP RUBBER',
         color: '#f87171',
-        detail: `${pos} bumpstop gap is only ${sd.jounceAvail.toFixed(2)}" at ride height. The suspension hits the bumpstop early in jounce — this creates a sudden increase in spring rate mid-corner, which feels like a harsh impact and can cause the car to push or bounce off the corner. Fix: stiffer spring (keeps the car higher), shorter bump rubber, or raise ride height.`,
+        detail: `${pos} bumpstop gap is only ${sd.jounceAvail.toFixed(2)}" at ride height. Contact with the bumpstop is upsetting to the car in any circumstance (Milliken §12.3). The solid rubber stop acts as an instantaneous spring rate spike — the effective rate jumps from the coil rate to effectively infinite at contact, causing the tire to momentarily unload and lose grip. Fix options in order of preference: (1) stiffer spring keeps the car higher and away from the stop; (2) shorter/progressive bump rubber — a tapered bump rubber acts as a rising-rate progressive spring rather than a hard stop; (3) raise ride height if spring rate is already correct.`,
+      });
+    } else if (sd.jounceAvail != null && sd.jounceAvail < 1.0) {
+      partsRecs.push({
+        pos, type: 'SPRING — BUMPSTOP PROXIMITY WARNING',
+        color: '#f59e0b',
+        detail: `${pos} bumpstop gap is ${sd.jounceAvail.toFixed(2)}" — marginal. At 0.813G cornering with body roll, this corner is using approximately ${(sd.jounceAvail * 0.6).toFixed(2)}" of available jounce travel dynamically. You are likely contacting the bump rubber in hard cornering. Consider a progressive-taper bump rubber that begins building rate gradually before full contact — this is effectively a rising-rate spring that smooths the transition and prevents the sharp load spike of a hard stop.`,
       });
     }
     if (sd.compression < 0.5) {
       partsRecs.push({
-        pos, type: 'SHOCK — TOPPED OUT',
+        pos, type: 'SHOCK — TOPPED OUT (NO DROOP TRAVEL)',
         color: '#f87171',
-        detail: `${pos} shock is only ${sd.compression.toFixed(2)}" compressed at ride height — nearly at full extension. The shock has no droop travel, which means the wheel cannot follow the road surface downward. This causes wheel hop and loss of traction on bumps and in corners. Fix: longer shock (more travel), lower ride height, or different spring perch position.`,
+        detail: `${pos} shock is only ${sd.compression.toFixed(2)}" compressed at ride height — nearly at full extension. The shock has no droop travel remaining, meaning the wheel cannot follow the road surface downward when load is removed. This causes wheel hop, loss of traction on bumps, and reduced cornering grip as the tire bounces off the surface. Fix: longer shock body (more total travel), lower ride height, or adjust spring perch position to compress the shock further at ride height.`,
       });
     }
     if (sd.free && sd.inst && sd.jounceAvail != null) {
@@ -338,9 +347,9 @@ export default function GeometryAnalysis({ geo }) {
       const jounceUsed  = sd.jounceAvail;
       if (totalStroke < 2.0) {
         partsRecs.push({
-          pos, type: 'SHOCK — INSUFFICIENT TRAVEL',
+          pos, type: 'SHOCK — INSUFFICIENT TOTAL TRAVEL',
           color: '#f59e0b',
-          detail: `${pos} total available travel (${droopUsed.toFixed(2)}" droop + ${jounceUsed.toFixed(2)}" to bumpstop) = ${totalStroke.toFixed(2)}". Less than 2" total is very tight — rough track surfaces or load changes will quickly use up available travel. Consider a longer-travel shock or increasing ride height.`,
+          detail: `${pos} total usable travel (${droopUsed.toFixed(2)}" droop + ${jounceUsed.toFixed(2)}" to bumpstop) = ${totalStroke.toFixed(2)}". Spring rate and wheel travel must be matched to the track surface — on a rough oval this is not enough travel to keep the wheel in contact with the ground over bumps and surface irregularities. The car will skip and lose traction. Consider a longer-travel shock body or increasing ride height.`,
         });
       }
     }
@@ -364,22 +373,56 @@ export default function GeometryAnalysis({ geo }) {
     });
   }
 
-  // ARB effectiveness warning
+  // ARB / moment arm effectiveness
   if (a.momentArm != null && a.momentArm < 2 && a.momentArm >= 0) {
     partsRecs.push({
-      pos: 'FRONT', type: 'SPRINGS — RAISE RIDE HEIGHT',
+      pos: 'FRONT', type: 'SPRINGS — RAISE RIDE HEIGHT (RESTORE ARB AUTHORITY)',
       color: '#60a5fa',
-      detail: `CG-to-RC moment arm is only ${a.momentArm.toFixed(2)}" — the front ARB and springs are transferring almost no load elastically. The front 29.5mm ARB is largely wasted. Raising the car 1" (stiffer or taller springs) would grow the moment arm to ~${(a.momentArm + 1.5).toFixed(1)}", restoring spring/ARB effectiveness. Consider P71 Police/Taxi struts (475 lb/in) or Heavy Duty (700 lb/in) if currently on base struts.`,
+      detail: `CG-to-RC moment arm is only ${a.momentArm.toFixed(2)}" — nearly zero. The front ARB and springs are transferring almost no load elastically. This is a critical tuning constraint: unevenly loaded tires produce less lateral force than the same total load split evenly (Milliken §12.3 item 11). Because front LLTD is geometry-dominated at this RC height, stiffening the front ARB or spring does NOT redistribute load to the RF — there is no elastic moment to stiffen. The P71 29.5mm ARB is essentially a ride quality device at this geometry. To restore ARB authority: raise the car 1" (stiffer or taller springs) to grow moment arm to ~${(a.momentArm + 1.5).toFixed(1)}", then the ARB will again shift front elastic LLTD. P71 strut options: 700 lb/in Heavy Duty (tallest), 475 lb/in Police/Taxi, 440 lb/in base.`,
     });
   }
 
-  // Figure-8 specific: symmetric caster recommendation
+  // Roll stiffness balance recommendations (Milliken §12.3 item 11A/11B)
+  // If geometric LLTD data is available, compute whether front or rear is dominant
+  if (a.geoLLTDF != null && a.geoLLTDR != null) {
+    const totalGeoLLTD = a.geoLLTDF + a.geoLLTDR;
+    const frontFrac    = a.geoLLTDF / Math.max(totalGeoLLTD, 0.01);
+    // On oval, target ~55% front geometric LLTD (front-biased for left-turn)
+    // On figure-8, target ~50% (symmetric)
+    const targetFrontFrac = isOval ? 0.55 : 0.50;
+    if (frontFrac < targetFrontFrac - 0.08) {
+      partsRecs.push({
+        pos: 'LLTD', type: 'REAR RC — LOWER WATTS LINK (ENTRY LOOSE)',
+        color: '#f59e0b',
+        detail: `Rear geometric LLTD (${(a.geoLLTDR * 100).toFixed(1)}%) is disproportionately high relative to front (${(a.geoLLTDF * 100).toFixed(1)}%). The rear is transferring load geometrically faster than the front — this causes the rear to reach its lateral grip limit before the front on turn entry (oversteer/loose entry). To shift LLTD toward the front: lower the rear Watts link pivot to reduce rear geometric transfer. Each 1" lower reduces rear geometric LLTD by ~0.5–1%. Alternatively, stiffen front roll stiffness (if moment arm allows) — but at this RC height geometry dominates. (Milliken §12.3 2A)`,
+      });
+    } else if (frontFrac > targetFrontFrac + 0.08) {
+      partsRecs.push({
+        pos: 'LLTD', type: 'FRONT RC — TOO HIGH (CHRONIC PUSH)',
+        color: '#f59e0b',
+        detail: `Front geometric LLTD (${(a.geoLLTDF * 100).toFixed(1)}%) is too high relative to rear (${(a.geoLLTDR * 100).toFixed(1)}%). The front is overloading the outside front tire geometrically — this causes chronic understeer/push that cannot be tuned out with springs or ARB alone because the transfer path bypasses them entirely. Raising the rear Watts link pivot increases rear geometric LLTD to partially rebalance. Longer-term: raise ride height to lower front RC and shift front transfer from geometric to elastic (spring-tunable).`,
+      });
+    }
+  }
+
+  // Figure-8 specific: symmetric caster recommendation + caster effectiveness note
   if (!isOval && Math.abs(a.rfCaster - a.lfCaster) > 1.0) {
     partsRecs.push({
       pos: 'CASTER', type: 'ALIGNMENT — SYMMETRIC CASTER',
       color: '#a78bfa',
-      detail: `Figure-8 needs symmetric caster — car turns both left and right. Current: LF ${a.lfCaster}° / RF ${a.rfCaster}°, split of ${Math.abs(a.rfCaster - a.lfCaster).toFixed(1)}°. Large caster split will give asymmetric camber gain in left vs right turns. Target: within 0.5° side-to-side. Adjust via P71 lower arm eccentric camber/caster bolts.`,
+      detail: `Figure-8 needs symmetric caster — car turns both left and right. Current: LF ${a.lfCaster}° / RF ${a.rfCaster}°, split of ${Math.abs(a.rfCaster - a.lfCaster).toFixed(1)}°. Large caster split will give asymmetric camber gain in left vs right turns. Target: within 0.5° side-to-side. On figure-8 (${T.apexSteer}° steer angle), caster contributes ${T.casterCoeffRF.toFixed(3)}°/° of camber — meaningfully more than oval. Symmetric caster of 5–6° gives ~1.45° camber gain per side, which materially helps each outside tire. Adjust via P71 lower arm eccentric camber/caster bolts. (Milliken §12.3 4E: at larger steer angles, KPI and caster give useful negative camber on outside wheel.)`,
     });
+  } else if (!isOval) {
+    // Note caster effectiveness on figure-8 even if symmetric
+    const casterAvg = (a.rfCaster + a.lfCaster) / 2;
+    const camberContrib = casterAvg * T.casterCoeffRF;
+    if (camberContrib < 1.0) {
+      partsRecs.push({
+        pos: 'CASTER', type: 'ALIGNMENT — INCREASE CASTER (FIGURE-8)',
+        color: '#a78bfa',
+        detail: `At ${T.apexSteer}° steer angle, current avg caster of ${casterAvg.toFixed(1)}° contributes only ${camberContrib.toFixed(2)}° of camber gain per side. On figure-8, caster is a meaningful camber tuning tool (unlike oval). Increasing symmetric caster to 6–7° would contribute ~${(6.5 * T.casterCoeffRF).toFixed(2)}° of negative camber on the outside wheel in both left and right turns, reducing the static camber needed. Adjust within P71 eccentric bolt range.`,
+      });
+    }
   }
 
   return (
@@ -706,7 +749,7 @@ export default function GeometryAnalysis({ geo }) {
           />}
         >
           {a.geoLLTDF != null
-            ? `Geometric front LLTD: ${(a.geoLLTDF * 100).toFixed(1)}% (target ${isOval ? '46' : '50'}%). ${a.geoLLTDF > (isOval ? 0.46 : 0.50) ? 'Over target from geometry alone — cannot tune below this with spring/ARB changes alone.' : 'Under target — remaining LLTD must come from elastic (springs, ARB, shocks).'}`
+            ? `Geometric front LLTD: ${(a.geoLLTDF * 100).toFixed(1)}% (target ${isOval ? '46' : '50'}%). ${a.geoLLTDF > (isOval ? 0.46 : 0.50) ? 'Over target from geometry alone — cannot reduce this with spring/ARB changes alone because geometric transfer bypasses the springs entirely.' : 'Under target — remaining LLTD comes from elastic transfer (springs, ARB, shocks).'}\n\nWhy LLTD matters: a pair of unevenly loaded tires produces less combined lateral force than the same total load split evenly (Milliken §12.3 item 11 — load sensitivity). More LLTD to the front = front tires more unequal = less front grip = understeer. More LLTD to the rear = rear tires more unequal = less rear grip = oversteer. Optimal LLTD balances both ends at their grip limits simultaneously.`
             : 'Enter all hardpoints to compute.'}
         </Finding>
 

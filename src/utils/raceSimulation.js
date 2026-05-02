@@ -1532,26 +1532,31 @@ export function analyzeSetup(setup, ambientTemp = 65, inflationTemp = COLD_PSI_T
   // Shocks — test all click values 0-10 for each position, find best gain.
   // Shocks drive LLTD, body roll, and phase-specific balance — must be in recommendations.
   // Lower click = stiffer (more LLTD contribution). Front stiffer = more push. Rear stiffer = more loose.
+  // Milliken §12.3 item 11: roll stiffness adjusts lateral load transfer distribution (LLTD).
+  // More LLTD to an end = that end's tires are more unequally loaded = less combined grip from that end.
+  // If loose on entry: need more front LLTD (stiffen front) or less rear LLTD (soften rear).
+  // If tight on entry: need less front LLTD (soften front) or more rear LLTD (stiffen rear).
+  // Shocks control the rate of load transfer (transient), springs set the steady-state.
   const shockMeta = {
     RF: {
       role: 'Outside front strut',
-      stiffer: 'Increases front LLTD → more RF load on turn-in → tighter entry',
-      softer:  'Reduces front LLTD → less RF load transfer → freer turn-in, looser entry',
+      stiffer: 'Increases front roll resistance → more front LLTD → RF carries more load in turns → tighter/push on entry. Use if car is loose (oversteer) on turn-in.',
+      softer:  'Reduces front roll resistance → less front LLTD → RF load reduced → looser/freer entry. Use if car is tight (understeer) on turn-in.',
     },
     LF: {
       role: 'Inside front strut',
-      stiffer: 'Resists body roll → slower weight transfer → more front LLTD → tighter',
-      softer:  'Allows more body roll → front loads later → less front LLTD → looser',
+      stiffer: 'Slows body roll rate → front loads faster in transient → more transient front LLTD → tighter turn-in. Also controls body pitch under braking.',
+      softer:  'Allows faster body roll → front loads more slowly → lower transient front LLTD → looser turn-in. Softer LF extends the roll transient, giving more time before front LLTD peaks.',
     },
     RR: {
       role: 'Outside rear shock',
-      stiffer: 'Increases rear LLTD → overloads RR in corners → looser',
-      softer:  'Reduces rear LLTD → distributes rear load better → tighter',
+      stiffer: 'Increases rear roll resistance → more rear LLTD → rear loses grip disproportionately → looser/oversteer. Use if car is tight (push) mid-corner.',
+      softer:  'Reduces rear roll resistance → less rear LLTD → rear loads more evenly → tighter/understeer mid-corner. Use if car has chronic rear breakaway.',
     },
     LR: {
       role: 'Inside rear shock',
-      stiffer: 'More rear roll resistance → more rear LLTD → looser',
-      softer:  'Allows inside rear to extend freely → less rear LLTD → tighter',
+      stiffer: 'More resistance to inside rear droop in cornering → more rear roll couple → looser. Also affects dropped-throttle behavior — stiffer LR stretches out the throttle-off transient.',
+      softer:  'Inside rear extends more freely → less rear roll couple → tighter. Soft LR allows the inside rear to unload quickly, reducing rear load transfer spike at turn-in.',
     },
   };
   for (const pos of ['RF', 'LF', 'RR', 'LR']) {
