@@ -51,8 +51,6 @@ const EMPTY_GEO = {
   bumpCamber:        { LF: '', RF: '' },
   bumpTravel:        { LF: '', RF: '' },
   steerCamber20:     { LF: '', RF: '' },
-  cornerWeights:     { LF: '', RF: '', LR: '', RR: '' }, // lbs per corner on scales
-  cgHeight:          '',   // measured CG height (inches) — from tilt test or estimate
   rideLowering:      '',
   arbDiameter:       '',   // front ARB bar diameter (inches) — for roll stiffness override
   cgNotes:           '',
@@ -137,12 +135,7 @@ function formatGeo(car) {
     'Caster camber gain (at 20° right steer):',
     `  LF camber: ${v(car.steerCamber20.LF)}°   RF camber: ${v(car.steerCamber20.RF)}°`,
     '',
-    `CG height (measured): ${v(car.cgHeight)}"`,
     `Ride height lowering from stock: ${v(car.rideLowering)}"`,
-    '',
-    'Corner weights (lbs):',
-    `  LF ${v(car.cornerWeights?.LF)}   RF ${v(car.cornerWeights?.RF)}`,
-    `  LR ${v(car.cornerWeights?.LR)}   RR ${v(car.cornerWeights?.RR)}`,
     `Front ARB diameter: ${v(car.arbDiameter)}"`,
   ];
   if (car.cgNotes?.trim()) lines.push(`CG / ballast notes: ${car.cgNotes.trim()}`);
@@ -737,58 +730,23 @@ function GeoEditor({ editing, setEditing }) {
         </div>
       </div>
 
-      {/* CG */}
+      {/* CG / Ride Height */}
       <div className="ml-section">
-        <h3 className="ml-section-heading">CG Height / Ballast</h3>
+        <h3 className="ml-section-heading">Ride Height</h3>
         <p className="ml-section-note">
-          CG height directly affects elastic weight transfer (the spring-loaded portion). A higher CG shifts more load to the outside tires in cornering. The model defaults to 23″ for a stock P71 with roll cage — measure if you have the capability.
+          If running cut or lowered springs, enter how many inches lower than stock the car sits at ride height. Each inch of lowering drops the CG approximately 0.6–0.7 inches. The model uses this to adjust its CG height estimate from the stock P71 baseline.
         </p>
         <div className="ml-row">
-          <Field label="Measured CG height (inches)"
-            hint="Best method — tilt test: (1) Weigh all four corners on scales. (2) Raise one end of the car by a known height (e.g. 12″ on ramps) while keeping the other end on scales. (3) Read the new front/rear weights. (4) CG height = wheelbase × (ΔFront weight / total weight) × (wheelbase / lift height) — see Milliken RCVD Appendix. If you don't have scales: estimate using stock height (~21–22″) + roll cage raise (~1″) + any lowering offset. Leave blank to use the model default.">
-            <NumIn value={editing.cgHeight ?? ''} onChange={v => set('cgHeight', v)} placeholder="e.g. 22.5" step="0.25" />
-          </Field>
           <Field label="Ride height lowering from stock (inches)"
-            hint="If running cut springs or aftermarket lowering springs — how many inches lower than stock is the car at ride height? Each inch of lowering drops the CG approximately 0.6–0.7 inches (the unsprung mass moves less than the body). Used as a CG height offset if no direct measurement is available.">
+            hint="Measure: (1) Find a stock P71 ride height reference (factory spec or photo). (2) Measure your car's ride height at the rocker panel or a consistent body reference point. (3) Enter the difference. 0 if running stock springs. Leave blank if unknown — the model uses the stock CG height baseline.">
             <NumIn value={editing.rideLowering} onChange={v => set('rideLowering', v)} placeholder="0 if stock" step="0.25" />
           </Field>
         </div>
-        <Field label="CG / ballast notes">
+        <Field label="Ballast / weight notes">
           <input className="ml-input ml-input-wide" type="text"
             placeholder="e.g. Roll cage installed, battery moved to trunk, sandbag ballast behind seats"
             value={editing.cgNotes} onChange={e => set('cgNotes', e.target.value)} />
         </Field>
-      </div>
-
-      {/* Corner Weights */}
-      <div className="ml-section">
-        <h3 className="ml-section-heading">Corner Weights</h3>
-        <p className="ml-section-note">
-          Weigh all four corners simultaneously with the car at race ride height, driver in seat (~200 lbs), and fuel at race level. Used to derive front weight bias and validate the model's load transfer predictions.
-        </p>
-        <div className="ml-tire-grid">
-          {['LF', 'RF', 'LR', 'RR'].map(pos => (
-            <Field key={pos} label={`${pos} (lbs)`}
-              hint={`Place a scale under the ${pos} tire. All four scales must be level with each other — use shim plates if needed. Read with driver seated and car sitting still. Total should match known curb weight + driver. ${pos === 'LF' || pos === 'RF' ? 'Front total ÷ total weight = front bias. P71 target: ~57% front.' : 'Rear weight should be ~43% of total for stock P71.'}`}>
-              <NumIn value={editing.cornerWeights?.[pos] ?? ''} onChange={v => setN('cornerWeights', pos, v)} placeholder="lbs" step="1" min="100" max="1500" />
-            </Field>
-          ))}
-        </div>
-        {(() => {
-          const lf = parseFloat(editing.cornerWeights?.LF) || 0;
-          const rf = parseFloat(editing.cornerWeights?.RF) || 0;
-          const lr = parseFloat(editing.cornerWeights?.LR) || 0;
-          const rr = parseFloat(editing.cornerWeights?.RR) || 0;
-          const total = lf + rf + lr + rr;
-          if (total < 100) return null;
-          const frontBias = ((lf + rf) / total * 100).toFixed(1);
-          const crossWeight = ((lf + rr) / total * 100).toFixed(1);
-          return (
-            <div className="ml-section-note" style={{ marginTop: 8, fontFamily: 'monospace', fontSize: 12 }}>
-              Total: {total.toFixed(0)} lbs &nbsp;|&nbsp; Front bias: {frontBias}% &nbsp;|&nbsp; Cross weight (LF+RR): {crossWeight}%
-            </div>
-          );
-        })()}
       </div>
 
       {/* ARB */}
