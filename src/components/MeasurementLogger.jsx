@@ -36,7 +36,20 @@ const EMPTY_GEO = {
   id: null,
   title: '',
   date: new Date().toISOString().slice(0, 10),
+  trackType:         'oval',  // 'oval' | 'figure8'
   notes: '',
+  // ── Static alignment (current settings at time of measurement) ──
+  camber:            { LF: '', RF: '' },
+  caster:            { LF: '', RF: '' },
+  toe:               '',       // front total toe, inches (negative = toe-out)
+  rearToe:           '',
+  // ── Ride heights (inches from floor to rocker panel or consistent reference) ──
+  rideHeight:        { LF: '', RF: '', LR: '', RR: '' },
+  // ── Shock physical measurements ──
+  shockFreeLength:   { LF: '', RF: '', LR: '', RR: '' },  // inches, fully extended
+  shockInstalled:    { LF: '', RF: '', LR: '', RR: '' },  // inches, installed at ride height
+  shockBumpGap:      { LF: '', RF: '', LR: '', RR: '' },  // inches, gap to bumpstop at ride height
+  // ── Suspension hardpoints ──
   trackWidth:        { front: '', rear: '' },
   rearRollCenter:    '',
   rearSpringBase:    '',
@@ -44,15 +57,17 @@ const EMPTY_GEO = {
   upperBallJoint:    { LF: '', RF: '' },
   lowerArmPivot:     { LF: '', RF: '' },
   upperArmPivot:     { LF: '', RF: '' },
-  springPickup:      { LF: '', RF: '' }, // distance from lower arm inner pivot to spring seat (inches)
+  springPickup:      { LF: '', RF: '' },
   wheelCenterHeight: '',
+  // ── Suspension travel measurements ──
   droopCamber:       { LF: '', RF: '' },
   droopTravel:       { LF: '', RF: '' },
   bumpCamber:        { LF: '', RF: '' },
   bumpTravel:        { LF: '', RF: '' },
   steerCamber20:     { LF: '', RF: '' },
+  // ── Ride height / ARB ──
   rideLowering:      '',
-  arbDiameter:       '',   // front ARB bar diameter (inches) — for roll stiffness override
+  arbDiameter:       '',
   cgNotes:           '',
 };
 
@@ -111,6 +126,21 @@ function formatSession(car) {
 function formatGeo(car) {
   const lines = [
     `=== ${car.title || 'Unnamed Car'} — Suspension Geometry — ${car.date} ===`,
+    `Track type: ${car.trackType === 'figure8' ? 'Figure-8' : 'Oval'}`,
+    '',
+    '--- Static Alignment ---',
+    `Camber:    LF ${v(car.camber?.LF)}°   RF ${v(car.camber?.RF)}°`,
+    `Caster:    LF ${v(car.caster?.LF)}°   RF ${v(car.caster?.RF)}°`,
+    `Front toe: ${v(car.toe)}"   Rear toe: ${v(car.rearToe)}"`,
+    '',
+    '--- Ride Heights (floor to rocker panel, inches) ---',
+    `  LF ${v(car.rideHeight?.LF)}"   RF ${v(car.rideHeight?.RF)}"`,
+    `  LR ${v(car.rideHeight?.LR)}"   RR ${v(car.rideHeight?.RR)}"`,
+    '',
+    '--- Shock Physical Measurements ---',
+    `  Free length (extended):   LF ${v(car.shockFreeLength?.LF)}"  RF ${v(car.shockFreeLength?.RF)}"  LR ${v(car.shockFreeLength?.LR)}"  RR ${v(car.shockFreeLength?.RR)}"`,
+    `  Installed length:         LF ${v(car.shockInstalled?.LF)}"  RF ${v(car.shockInstalled?.RF)}"  LR ${v(car.shockInstalled?.LR)}"  RR ${v(car.shockInstalled?.RR)}"`,
+    `  Bumpstop gap at ride ht:  LF ${v(car.shockBumpGap?.LF)}"  RF ${v(car.shockBumpGap?.RF)}"  LR ${v(car.shockBumpGap?.LR)}"  RR ${v(car.shockBumpGap?.RR)}"`,
     '',
     `Track width (front): ${v(car.trackWidth.front)}"   rear: ${v(car.trackWidth.rear)}"`,
     `Rear roll center height (Watts pivot): ${v(car.rearRollCenter)}"`,
@@ -138,7 +168,7 @@ function formatGeo(car) {
     `Ride height lowering from stock: ${v(car.rideLowering)}"`,
     `Front ARB diameter: ${v(car.arbDiameter)}"`,
   ];
-  if (car.cgNotes?.trim()) lines.push(`CG / ballast notes: ${car.cgNotes.trim()}`);
+  if (car.cgNotes?.trim()) lines.push(`Notes: ${car.cgNotes.trim()}`);
   if (car.notes?.trim())   lines.push('', '--- Notes ---', car.notes.trim());
   return lines.join('\n');
 }
@@ -561,6 +591,150 @@ function GeoEditor({ editing, setEditing }) {
             <input className="ml-input" type="date" value={editing.date} onChange={e => set('date', e.target.value)} />
           </Field>
         </div>
+      </div>
+
+      {/* Track Type */}
+      <div className="ml-section">
+        <h3 className="ml-section-heading">Track Type</h3>
+        <Field label="Racing format"
+          hint="Select the track type this geometry profile is tuned for. Oval analysis uses asymmetric camber targets (RF −2°, LF +0.75°) and left-turn-only caster/LLTD targets. Figure-8 analysis uses symmetric targets for both left and right turns — RF and LF both need similar negative camber.">
+          <select className="ml-input ml-select"
+            value={editing.trackType ?? 'oval'}
+            onChange={e => set('trackType', e.target.value)}>
+            <option value="oval">Oval (left-turn only)</option>
+            <option value="figure8">Figure-8 (left and right turns)</option>
+          </select>
+        </Field>
+      </div>
+
+      {/* Static Alignment */}
+      <div className="ml-section">
+        <h3 className="ml-section-heading">Static Alignment (Current Settings)</h3>
+        <p className="ml-section-note">
+          Record the current alignment settings at the time of measurement. These feed directly into the camber chain analysis — without them the model uses default estimates.
+        </p>
+        <div className="ml-row">
+          <Field label="LF camber (°)"
+            hint="Tilt of the LF tire top relative to vertical. Negative = top tilts inward. Measured at the alignment rack or with a phone inclinometer on a flat plate held flush against the wheel face, car at ride height with driver weight in seat. Oval typical: +2° to +3° static (body roll droop subtracts ~1.4° dynamically). Figure-8: −1° to −2°.">
+            <NumIn value={editing.camber?.LF ?? ''} onChange={v => setN('camber', 'LF', v)} placeholder="e.g. 2.75" />
+          </Field>
+          <Field label="RF camber (°)"
+            hint="Tilt of the RF tire top. For oval: RF needs negative static camber, typically −2° to −3.5° with camber bolt installed. For figure-8: −1.5° to −2.5°. Negative = top leans inward. The model back-calculates the ideal value from your geometry — enter what the car is currently set to.">
+            <NumIn value={editing.camber?.RF ?? ''} onChange={v => setN('camber', 'RF', v)} placeholder="e.g. -2.25" />
+          </Field>
+        </div>
+        <div className="ml-row">
+          <Field label="LF caster (°)"
+            hint="Kingpin tilt from side view. Measured at alignment rack: turn wheel 20° in, zero gauge, turn 20° out, read caster. On a P71, LF caster is typically set lower than RF for oval (3–5°). Higher caster increases camber gain per degree of steer, but on a tight oval the steer angle is small so the effect is limited.">
+            <NumIn value={editing.caster?.LF ?? ''} onChange={v => setN('caster', 'LF', v)} placeholder="e.g. 3.5" />
+          </Field>
+          <Field label="RF caster (°)"
+            hint="RF caster controls mechanical trail (steering feel/return) and small amount of camber gain. Typical oval: 5–7° RF. Higher RF caster (7–9°) on road courses where steer angles are larger. For this oval's ~3.77° apex steer, each degree of RF caster contributes only 0.136° of camber gain — enter current setting so the model can calculate actual contribution.">
+            <NumIn value={editing.caster?.RF ?? ''} onChange={v => setN('caster', 'RF', v)} placeholder="e.g. 5.0" />
+          </Field>
+        </div>
+        <div className="ml-row">
+          <Field label="Front toe (inches, total)"
+            hint="Total front toe across both tires measured at hub height. Use toe plates or a tape: measure from leading edge of each rim to a straight reference, then trailing edge — difference per side × 2 = total. Negative = toe-out (fronts spread apart at front of car). Oval typical: −0.125 to −0.25 inch toe-out. Zero at center.">
+            <NumIn value={editing.toe ?? ''} onChange={v => set('toe', v)} placeholder="e.g. -0.25" step="0.0625" />
+          </Field>
+          <Field label="Rear toe (inches, total)"
+            hint="Total rear toe. Same measurement method. Rear toe-in is stable (stock P71 ≈ 0 to +0.125 inch). Rear toe-out causes oversteer — avoid unless intentional. Measured the same way as front.">
+            <NumIn value={editing.rearToe ?? ''} onChange={v => set('rearToe', v)} placeholder="e.g. 0.0" step="0.0625" />
+          </Field>
+        </div>
+      </div>
+
+      {/* Ride Heights */}
+      <div className="ml-section">
+        <h3 className="ml-section-heading">Ride Heights (Floor to Reference Point)</h3>
+        <p className="ml-section-note">
+          Car at race ride height on flat ground, driver weight (~200 lbs) on seat. Measure from the floor straight up to a consistent reference point — the bottom of the rocker panel at a fixed location works well. Take all four corners with the car stationary. Used to compute suspension travel remaining, spring compression, rake angle, and CG height offset.
+        </p>
+        <div className="ml-tire-grid">
+          {['LF', 'RF', 'LR', 'RR'].map(pos => (
+            <Field key={pos} label={`${pos} ride height (inches)`}
+              hint={`Measure at the same reference point every time — bottom of rocker panel directly below the ${pos} door hinge is a reliable spot. Write the exact reference location in Notes so future measurements are consistent. ${pos === 'RF' || pos === 'RR' ? 'Right side typically sits lower than left on an oval setup.' : ''}`}>
+              <NumIn value={editing.rideHeight?.[pos] ?? ''} onChange={v => setN('rideHeight', pos, v)} placeholder="e.g. 5.5" step="0.125" />
+            </Field>
+          ))}
+        </div>
+        {(() => {
+          const lf = parseFloat(editing.rideHeight?.LF) || 0;
+          const rf = parseFloat(editing.rideHeight?.RF) || 0;
+          const lr = parseFloat(editing.rideHeight?.LR) || 0;
+          const rr = parseFloat(editing.rideHeight?.RR) || 0;
+          if (lf + rf + lr + rr < 1) return null;
+          const frontRake = lf > 0 && rf > 0 ? ((lf + rf) / 2 - (lr + rr) / 2).toFixed(2) : '—';
+          const sideSplit = lf > 0 && rf > 0 ? ((lf + lr) / 2 - (rf + rr) / 2).toFixed(2) : '—';
+          return (
+            <div className="ml-section-note" style={{ marginTop: 8, fontFamily: 'monospace', fontSize: 12 }}>
+              Front avg: {lf > 0 && rf > 0 ? ((lf + rf) / 2).toFixed(2) : '—'}"  |  Rear avg: {lr > 0 && rr > 0 ? ((lr + rr) / 2).toFixed(2) : '—'}"  |  Rake (F−R): {frontRake}"  |  L−R split: {sideSplit}"
+            </div>
+          );
+        })()}
+      </div>
+
+      {/* Shock Physical Measurements */}
+      <div className="ml-section">
+        <h3 className="ml-section-heading">Shock / Strut Physical Measurements</h3>
+        <p className="ml-section-note">
+          These measurements allow the model to determine how much suspension travel remains before hitting the bumpstop, whether the shock is in its usable stroke range at ride height, and whether spring rate changes will run the shock out of travel. Measure with the car at race ride height.
+        </p>
+
+        <h4 style={{ color: '#94a3b8', fontFamily: 'monospace', fontSize: 12, margin: '12px 0 6px' }}>Free Length — Fully Extended (inches)</h4>
+        <p className="ml-section-note">Remove shock from car, extend fully, measure eye-to-eye (or mounting face to mounting face). This is the maximum stroke reference.</p>
+        <div className="ml-tire-grid">
+          {['LF', 'RF', 'LR', 'RR'].map(pos => (
+            <Field key={pos} label={pos}
+              hint={`Detach the ${pos} shock/strut from both mounts. Extend it fully (pull apart until it stops). Measure from the center of the upper mount hole to the center of the lower mount hole (eye-to-eye), or mounting face to mounting face if stud-mounted. This gives you the extended length. Compressed length = extended minus stroke. The difference between extended and installed length is the current shaft compression.`}>
+              <NumIn value={editing.shockFreeLength?.[pos] ?? ''} onChange={v => setN('shockFreeLength', pos, v)} placeholder="e.g. 14.5" step="0.125" />
+            </Field>
+          ))}
+        </div>
+
+        <h4 style={{ color: '#94a3b8', fontFamily: 'monospace', fontSize: 12, margin: '12px 0 6px' }}>Installed Length at Ride Height (inches)</h4>
+        <p className="ml-section-note">Car at race ride height. Measure the shock eye-to-eye (or mount-to-mount) while installed. Shaft compression = free length minus installed length.</p>
+        <div className="ml-tire-grid">
+          {['LF', 'RF', 'LR', 'RR'].map(pos => (
+            <Field key={pos} label={pos}
+              hint={`Car at race ride height, driver weight in seat. Measure the ${pos} shock from upper mount center to lower mount center while installed in the car. Use a tape measure or caliper. This tells you how much of the stroke the shock has already used at ride height — the remaining droop travel is: installed minus compressed (minimum) length.`}>
+              <NumIn value={editing.shockInstalled?.[pos] ?? ''} onChange={v => setN('shockInstalled', pos, v)} placeholder="e.g. 12.0" step="0.125" />
+            </Field>
+          ))}
+        </div>
+
+        <h4 style={{ color: '#94a3b8', fontFamily: 'monospace', fontSize: 12, margin: '12px 0 6px' }}>Bumpstop Gap at Ride Height (inches)</h4>
+        <p className="ml-section-note">Distance from the shock piston or bump rubber to contact at ride height. This is how much jounce travel is available before hitting the stop. Critical for spring rate selection.</p>
+        <div className="ml-tire-grid">
+          {['LF', 'RF', 'LR', 'RR'].map(pos => (
+            <Field key={pos} label={pos}
+              hint={`With the car at race ride height, measure the gap between the bumpstop rubber (on the shock shaft or chassis) and the contact surface it would hit when fully compressed. On the P71 front strut: the bump rubber is on the strut shaft above the top mount — measure from the top of the bump rubber to the lower surface of the strut mount bearing. On rear shocks: the bump rubber is typically on the axle or frame — measure from rubber face to contact point. A gap of 1.0–1.5" is typical; less than 0.5" means you are near the stop at race height.`}>
+              <NumIn value={editing.shockBumpGap?.[pos] ?? ''} onChange={v => setN('shockBumpGap', pos, v)} placeholder="e.g. 1.25" step="0.125" />
+            </Field>
+          ))}
+        </div>
+
+        {(() => {
+          const corners = ['LF', 'RF', 'LR', 'RR'];
+          const rows = corners.map(pos => {
+            const free = parseFloat(editing.shockFreeLength?.[pos]);
+            const inst = parseFloat(editing.shockInstalled?.[pos]);
+            const gap  = parseFloat(editing.shockBumpGap?.[pos]);
+            if (!free || !inst) return null;
+            const compression = (free - inst).toFixed(2);
+            const jounceLeft = gap ? parseFloat(gap).toFixed(2) : '—';
+            return { pos, compression, jounceLeft };
+          }).filter(Boolean);
+          if (rows.length === 0) return null;
+          return (
+            <div className="ml-section-note" style={{ marginTop: 10, fontFamily: 'monospace', fontSize: 11 }}>
+              {rows.map(r => (
+                <div key={r.pos}>{r.pos}: shaft compressed {r.compression}" from free length — {r.jounceLeft}" jounce to bumpstop</div>
+              ))}
+            </div>
+          );
+        })()}
       </div>
 
       {/* Track Width */}
