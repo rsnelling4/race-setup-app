@@ -472,11 +472,11 @@ export default function GeometryAnalysis({ geo }) {
           sev={rearRCSev}
           tip={<Tip
             changeable={true}
-            text={`The Watts link pivot height sets rear RC. Target ${T.idealRearRC_low}–${T.idealRearRC_high}" for ${T.label}. Aftermarket adjustable Watts link brackets allow raising or lowering by 1–4".`}
-            fixMethod={`Adjustable Watts link center pivot bracket. Each 1" raise increases rear geometric LLTD ~0.5–1%. ${isOval ? 'Target 12–16" for oval.' : 'For figure-8 target 10–18" — symmetric handling, lower RC reduces rear-end stiffness in both directions.'}`}
+            text={`The Watts link pivot height sets rear RC. Target ${T.idealRearRC_low}–${T.idealRearRC_high}" for ${T.label}. Aftermarket adjustable Watts link brackets allow raising or lowering by 1–4". Note: the Watts link roll axis (line connecting front and rear lateral restraint centers in the side view) also controls roll steer — if the roll axis tilts downward toward the front, the axle has roll understeer geometry; tilted up toward the front = roll oversteer. (Milliken §17.4)`}
+            fixMethod={`Adjustable Watts link center pivot bracket. Each 1" raise increases rear geometric LLTD ~0.5–1%. ${isOval ? 'Target 12–16" for oval.' : 'For figure-8 target 10–18" — symmetric handling, lower RC reduces rear-end stiffness in both directions.'} Keep Watts link as level as possible in the side view to minimize roll steer — a heavily angled Watts link imparts a steering correction on the rear axle as the suspension rolls, which is difficult to predict and tune around.`}
           />}
         >
-          Rear RC at {a.rearRC.toFixed(1)}" — target {T.idealRearRC_low}–{T.idealRearRC_high}". {rearRCSev === 'good' ? 'Within target range.' : 'Outside target range — see fix method.'}
+          Rear RC at {a.rearRC.toFixed(1)}" — target {T.idealRearRC_low}–{T.idealRearRC_high}". {rearRCSev === 'good' ? 'Within target range.' : 'Outside target range — see fix method.'} Watts link provides near-linear lateral motion for the axle (better than a Panhard bar, which arcs laterally as it rotates). Roll steer is controlled by the fore-aft inclination of the Watts link in the side view — a level Watts link minimizes roll steer tendency.
         </Finding>
 
         <Finding
@@ -644,12 +644,12 @@ export default function GeometryAnalysis({ geo }) {
           sev={fvsaSev(a.rf.fvsa)}
           tip={<Tip
             changeable={false}
-            text={`FVSA = distance from IC to wheel center. Sets camber gain rate. Target ${T.idealFVSA_low}–${T.idealFVSA_high}" for ${T.label}.`}
+            text={`FVSA (Front View Swing Arm) = distance from front-view IC to wheel center. Sets camber change rate per inch of travel: rate = arctan(1/FVSA) ≈ 57.3/FVSA °/in. Target ${T.idealFVSA_low}–${T.idealFVSA_high}" for ${T.label}. NOTE: do not confuse with SVSA (Side View Swing Arm) — Milliken §17.4 states SVSA should be ≥60" to prevent power hop/brake hop. SVSA is a fore-aft measurement (controls anti-dive/squat and wheel path); FVSA is a lateral measurement (controls camber gain). The P71 short FVSA of 14–22" is intentionally short for high camber gain rate in roll — this is correct. (Milliken §17.3 Fig.17.9)`}
             fixMethod="Fixed by hardpoint geometry. Not adjustable without fabrication."
           />}
         >
           {a.rf.fvsa != null
-            ? `RF FVSA ${a.rf.fvsa.toFixed(1)}" — ${a.rf.fvsa >= T.idealFVSA_low && a.rf.fvsa <= T.idealFVSA_high ? 'within target' : 'outside target'} (${T.idealFVSA_low}–${T.idealFVSA_high}"). Camber gain ≈ ${(57.3 / a.rf.fvsa).toFixed(2)}°/inch of travel.`
+            ? `RF FVSA ${a.rf.fvsa.toFixed(1)}" — ${a.rf.fvsa >= T.idealFVSA_low && a.rf.fvsa <= T.idealFVSA_high ? 'within target' : 'outside target'} (${T.idealFVSA_low}–${T.idealFVSA_high}"). Camber gain = arctan(1/${a.rf.fvsa.toFixed(1)}) ≈ ${(Math.atan(1/a.rf.fvsa) * 180/Math.PI).toFixed(3)}°/in of travel.`
             : 'Cannot compute — IC not found.'}
         </Finding>
 
@@ -657,10 +657,10 @@ export default function GeometryAnalysis({ geo }) {
           title="LF FVSA"
           value={a.lf.fvsa?.toFixed(1)} unit='"'
           sev={fvsaSev(a.lf.fvsa)}
-          tip={<Tip changeable={false} text="LF FVSA sets how fast LF gains camber in droop (during cornering). For figure-8, LF and RF FVSA should be similar." fixMethod="Fixed geometry." />}
+          tip={<Tip changeable={false} text="LF FVSA sets how fast LF gains camber in droop (during cornering). For figure-8, LF and RF FVSA should be similar. Camber change rate = arctan(1/FVSA length) — Milliken §17.3." fixMethod="Fixed geometry." />}
         >
           {a.lf.fvsa != null && a.rf.fvsa != null
-            ? `LF ${a.lf.fvsa.toFixed(1)}" vs RF ${a.rf.fvsa.toFixed(1)}" — delta ${(a.lf.fvsa - a.rf.fvsa).toFixed(1)}". ${!isOval && Math.abs(a.lf.fvsa - a.rf.fvsa) > 3 ? 'Large FVSA asymmetry for figure-8 — expect noticeably different camber response L vs R turn.' : 'Asymmetry is manageable.'}`
+            ? `LF ${a.lf.fvsa.toFixed(1)}" (${(Math.atan(1/a.lf.fvsa) * 180/Math.PI).toFixed(3)}°/in) vs RF ${a.rf.fvsa.toFixed(1)}" (${(Math.atan(1/a.rf.fvsa) * 180/Math.PI).toFixed(3)}°/in) — delta ${(a.lf.fvsa - a.rf.fvsa).toFixed(1)}". ${!isOval && Math.abs(a.lf.fvsa - a.rf.fvsa) > 3 ? 'Large FVSA asymmetry for figure-8 — expect noticeably different camber response L vs R turn.' : 'Asymmetry is manageable.'}`
             : '—'}
         </Finding>
       </Section>
@@ -713,11 +713,48 @@ export default function GeometryAnalysis({ geo }) {
           sev={a.scrubRadius > 0 && a.scrubRadius < 1.5 ? 'good' : a.scrubRadius < 0 ? 'warning' : 'info'}
           tip={<Tip
             changeable={false}
-            text="Scrub radius is the distance between the kingpin axis projected to ground and the tire contact patch center. Small positive (0.3–1.5 in) = light direct steering. Fixed by KPI (9.5°, cast into spindle) and wheel offset."
+            text="Scrub radius is the distance between the kingpin axis projected to ground and the tire contact patch center. Small positive (0.3–1.5 in) = light direct steering. Fixed by KPI (9.5°, cast into spindle) and wheel offset. (Milliken §17.3)"
             fixMethod="Fixed on P71. Wheel spacers/different offset can modify slightly — do not change unless specific steering complaint."
           />}
         >
           Scrub radius = (wheel center {a.wh.toFixed(2)}" × tan({P71_KPI}° KPI)) − {P71_WHEEL_OFFSET}" offset = {a.scrubRadius.toFixed(3)}". {a.scrubRadius < 1.5 ? 'Low scrub — light steering feel.' : 'Moderate scrub — adequate feel.'}
+        </Finding>
+
+        <Finding
+          title="Scrub Motion Direction"
+          value={(() => {
+            const icY = a.rf.ic?.y;
+            const icX = a.rf.ic?.x;
+            if (icY == null) return '—';
+            if (icY > 0 && icX != null && icX < 0) return 'SCRUB OUT on jounce';
+            if (icY < 0) return 'SCRUB IN on jounce';
+            return 'Minimal scrub';
+          })()}
+          unit=""
+          sev={(() => {
+            const icY = a.rf.ic?.y;
+            if (icY == null) return 'info';
+            return icY > 0 ? 'info' : 'warning';
+          })()}
+          tip={<Tip
+            changeable={false}
+            text="Scrub motion is lateral tire movement relative to the ground as the suspension travels. Milliken §17.3: if the front view IC is above ground level and inboard, the tire moves outward (scrubs out) as it rises in jounce. If IC is below ground, the tire moves inward. Scrub-out in jounce is the normal P71 condition — it means as the RF loads in a corner and jounces, the contact patch moves outward slightly, widening the effective track width and increasing mechanical advantage slightly. On rough tracks, scrub introduces lateral velocity at the tire that disturbs slip angles."
+            fixMethod="Fixed geometry — IC is set by control arm hardpoints. On a rough track where lateral disturbance is a concern, a longer FVSA (further-out IC) reduces the scrub rate per inch of travel."
+          />}
+        >
+          {(() => {
+            const icY = a.rf.ic?.y;
+            const icX = a.rf.ic?.x;
+            if (icY == null) return 'Enter all four hardpoints to determine IC and scrub direction.';
+            const rate = a.rf.fvsa != null ? (Math.abs(a.rf.ic.x) / a.rf.fvsa).toFixed(3) : '—';
+            if (icY > 0 && icX != null && icX < 0) {
+              return `RF IC is above ground (${icY.toFixed(1)}" height) and inboard — tire scrubs outward in jounce. Scrub rate ≈ ${rate} in/in of travel. On smooth oval surfaces this is benign; on rough pavement lateral disturbances disturb slip angles and introduce understeer transients (Milliken §17.3 Fig.17.11).`;
+            }
+            if (icY < 0) {
+              return `RF IC is below ground — tire scrubs inward in jounce. Less common for SLA front suspensions — check hardpoint measurements.`;
+            }
+            return `IC at ground level — minimum scrub condition. Ideal for rough tracks.`;
+          })()}
         </Finding>
 
         <Finding
