@@ -1087,15 +1087,31 @@ export default function SetupOptimizer({ setup, setSetup, ambient, setAmbient, i
                   <span className="opt-factor-title" style={{ fontSize: '0.78rem', marginBottom: 4, display: 'block' }}>Roll Angle Balance</span>
                 </Tooltip>
                 <div className="opt-stat-pair">
-                  <span>Front desired roll</span>
+                  <Tooltip text="How much roll the front suspension wants to reach at steady-state cornering. Driven by: front axle weight × lateral G × (CG height − front roll center height), divided by front roll stiffness (springs + ARB). Lower front roll center OR softer front springs/ARB = larger number. To reduce: raise front roll center, stiffen front springs, or add front ARB.">
+                    <span>Front desired roll</span>
+                  </Tooltip>
                   <span>{desiredRollFront.toFixed(2)}°</span>
                 </div>
                 <div className="opt-stat-pair">
-                  <span>Rear desired roll</span>
+                  <Tooltip text="How much roll the rear suspension wants to reach at steady-state cornering. Driven by: rear axle weight × lateral G × (CG height − rear roll center height), divided by rear spring roll stiffness. Lower rear roll center OR softer rear springs = larger number. To reduce: raise rear roll center, or stiffen rear springs. P71 has no rear ARB — rear springs are the only elastic resistance.">
+                    <span>Rear desired roll</span>
+                  </Tooltip>
                   <span>{desiredRollRear.toFixed(2)}°</span>
                 </div>
                 <div className="opt-stat-pair">
-                  <span>Imbalance</span>
+                  <Tooltip text={
+                    rollAngleImbalance < 1.0
+                      ? 'Front and rear are well-matched — both ends want to roll to nearly the same angle. Weight transfer is proportionate and tires work evenly front-to-rear.'
+                      : rollAngleImbalance < 2.0
+                        ? (desiredRollFront > desiredRollRear
+                            ? 'Front wants to roll more than rear — the front is the softer end relative to its load. In a corner the front rolls further, increasing outside front tire load and contact patch angle. Effect: front-end push (understeer) as the outside front is overloaded while the rear stays planted. To fix: stiffen front springs or ARB, or soften rear springs.'
+                            : 'Rear wants to roll more than front — the rear is the softer end relative to its load. In a corner the rear rolls further, lifting the inside rear and overloading the outside rear. Effect: loose (oversteer) condition as the rear rotates more than the front. To fix: stiffen rear springs, or soften front springs/ARB.')
+                        : (desiredRollFront > desiredRollRear
+                            ? 'Significant imbalance — front rolls much more than rear. The front outside tire is heavily overloaded in corners while the rear stays rigid. Causes: severe push, inside front unloading, outside front overheating, early tire wear on RF. Suspension is fighting itself — one end is rolling, the other is not, creating a yaw moment. Fix: substantially stiffen front springs or ARB, raise front roll center, or soften rear springs to let it roll more.'
+                            : 'Significant imbalance — rear rolls much more than front. Rear outside tire overloaded, inside rear lifted, rear stepping out under load. Causes: chronic loose condition, difficult throttle application, rear tire overheating. Fix: substantially stiffen rear springs, raise rear roll center, or reduce front spring/ARB stiffness.')
+                  }>
+                    <span>Imbalance</span>
+                  </Tooltip>
                   <span style={{
                     color: rollAngleImbalance < 1.0
                       ? 'var(--green)'
