@@ -867,7 +867,10 @@ function calcPerformance(setup, tires, inflationTemp = COLD_PSI_TEMP, geoCtx = n
 // ============ WORK FACTORS (for thermal model) ============
 function calcWorkFactors(setup, geoCtx) {
   const ss = shockStiffness(setup, geoCtx);
-  const loads = tireLoadsCtx(1.0, ss.springLLTD, geoCtx);
+  // Use lap-average cornering G for thermal work — matches the load regime the tires
+  // actually experience over a lap, not the instantaneous 1G apex load which would
+  // under-predict LF/LR heat generation and leave inside tires falsely cold.
+  const loads = tireLoadsCtx(OVAL_CORNER_G, ss.springLLTD, geoCtx);
   const avgLoad = VEH.weight / 4;
   return {
     LF: loads.LF / avgLoad,
@@ -1929,7 +1932,7 @@ TRACK_F8.totalLength = 2 * TRACK_F8.loopArc + 2 * TRACK_F8.straightLength + TRAC
 
 function calcWorkFactorsF8(setup) {
   const ss = shockStiffness(setup);
-  const loadsLeft = tireLoads(1.0, ss.springLLTD);
+  const loadsLeft = tireLoads(F8_CORNER_G, ss.springLLTD);
   const loadsRight = { LF: loadsLeft.RF, RF: loadsLeft.LF, LR: loadsLeft.RR, RR: loadsLeft.LR };
   const avgLoad = VEH.weight / 4;
   return {
