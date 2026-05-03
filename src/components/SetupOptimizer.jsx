@@ -891,6 +891,34 @@ export default function SetupOptimizer({ setup, setSetup, ambient, setAmbient, i
   const [selectedGeoId, setSelectedGeoId] = useState(null);
   const selectedGeo = selectedGeoId != null ? geoProfiles.find(g => g.id === selectedGeoId) : null;
   const geoOverrides = useMemo(() => buildGeoOverrides(selectedGeo), [selectedGeo]);
+
+  const loadSetupFromGeo = () => {
+    if (!selectedGeo) return;
+    const s = deepClone(setup);
+    // Camber
+    if (selectedGeo.camber?.LF !== '' && selectedGeo.camber?.LF != null) s.camber.LF = parseFloat(selectedGeo.camber.LF);
+    if (selectedGeo.camber?.RF !== '' && selectedGeo.camber?.RF != null) s.camber.RF = parseFloat(selectedGeo.camber.RF);
+    // Caster
+    if (selectedGeo.caster?.LF !== '' && selectedGeo.caster?.LF != null) s.caster.LF = parseFloat(selectedGeo.caster.LF);
+    if (selectedGeo.caster?.RF !== '' && selectedGeo.caster?.RF != null) s.caster.RF = parseFloat(selectedGeo.caster.RF);
+    // Toe
+    if (selectedGeo.toe !== '' && selectedGeo.toe != null) s.toe = parseFloat(selectedGeo.toe);
+    // Spring rates — geometry stores LF/RF/LR/RR
+    if (selectedGeo.springRate?.LF !== '' && selectedGeo.springRate?.LF != null) s.springs.LF = parseFloat(selectedGeo.springRate.LF);
+    if (selectedGeo.springRate?.RF !== '' && selectedGeo.springRate?.RF != null) s.springs.RF = parseFloat(selectedGeo.springRate.RF);
+    const rearRate = selectedGeo.springRate?.LR ?? selectedGeo.springRate?.RR;
+    if (rearRate !== '' && rearRate != null) { s.springs.LR = parseFloat(rearRate); s.springs.RR = parseFloat(rearRate); }
+    // Shocks — geometry stores part label strings; look up rating from shockOptions
+    ['LF', 'RF', 'LR', 'RR'].forEach(corner => {
+      const label = selectedGeo.shocks?.[corner];
+      if (!label) return;
+      const isFront = corner === 'LF' || corner === 'RF';
+      const list = isFront ? FRONT_STRUTS : REAR_SHOCKS;
+      const found = list.find(sh => shockLabel(sh) === label);
+      if (found?.rating != null) s.shocks[corner] = found.rating;
+    });
+    setSetup(s);
+  };
   const analysis = useMemo(() => analyzeSetup(setup, ambient, inflationTemp, geoOverrides), [setup, ambient, inflationTemp, geoOverrides]);
   const {
     corners, ss, roll, frontGripPct, balancePenalty,
@@ -939,11 +967,20 @@ export default function SetupOptimizer({ setup, setSetup, ambient, setAmbient, i
             ))}
           </select>
           {selectedGeo && (
-            <span className="opt-geo-note">
-              Using measured: RCH {selectedGeo.rearRollCenter ? `rear ${selectedGeo.rearRollCenter}"` : ''}
-              {geoOverrides?.rcHeightFront != null ? ` · front ${geoOverrides.rcHeightFront.toFixed(1)}"` : ''}
-              {geoOverrides?.slaJounceCoeffRF != null ? ` · jounce RF ${geoOverrides.slaJounceCoeffRF.toFixed(3)}°/°` : ''}
-            </span>
+            <>
+              <button
+                className="opt-geo-load-btn"
+                onClick={loadSetupFromGeo}
+                title="Copy camber, caster, toe, spring rates, and shocks from this geometry profile into the setup parameters below"
+              >
+                Load setup from profile
+              </button>
+              <span className="opt-geo-note">
+                Using measured: RCH {selectedGeo.rearRollCenter ? `rear ${selectedGeo.rearRollCenter}"` : ''}
+                {geoOverrides?.rcHeightFront != null ? ` · front ${geoOverrides.rcHeightFront.toFixed(1)}"` : ''}
+                {geoOverrides?.slaJounceCoeffRF != null ? ` · jounce RF ${geoOverrides.slaJounceCoeffRF.toFixed(3)}°/°` : ''}
+              </span>
+            </>
           )}
         </div>
       )}

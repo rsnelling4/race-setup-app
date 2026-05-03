@@ -555,6 +555,29 @@ export default function Figure8Optimizer({ setup, setSetup, ambient, setAmbient,
   const barPos = (t) =>
     `${Math.max(0, Math.min(100, (RANGE_MAX - t) / (RANGE_MAX - RANGE_MIN) * 100))}%`;
 
+  const loadSetupFromGeo = () => {
+    if (!selectedGeo) return;
+    const s = deepClone(setup);
+    if (selectedGeo.camber?.LF !== '' && selectedGeo.camber?.LF != null) s.camber.LF = parseFloat(selectedGeo.camber.LF);
+    if (selectedGeo.camber?.RF !== '' && selectedGeo.camber?.RF != null) s.camber.RF = parseFloat(selectedGeo.camber.RF);
+    if (selectedGeo.caster?.LF !== '' && selectedGeo.caster?.LF != null) s.caster.LF = parseFloat(selectedGeo.caster.LF);
+    if (selectedGeo.caster?.RF !== '' && selectedGeo.caster?.RF != null) s.caster.RF = parseFloat(selectedGeo.caster.RF);
+    if (selectedGeo.toe !== '' && selectedGeo.toe != null) s.toe = parseFloat(selectedGeo.toe);
+    if (selectedGeo.springRate?.LF !== '' && selectedGeo.springRate?.LF != null) s.springs.LF = parseFloat(selectedGeo.springRate.LF);
+    if (selectedGeo.springRate?.RF !== '' && selectedGeo.springRate?.RF != null) s.springs.RF = parseFloat(selectedGeo.springRate.RF);
+    const rearRate = selectedGeo.springRate?.LR ?? selectedGeo.springRate?.RR;
+    if (rearRate !== '' && rearRate != null) { s.springs.LR = parseFloat(rearRate); s.springs.RR = parseFloat(rearRate); }
+    ['LF', 'RF', 'LR', 'RR'].forEach(corner => {
+      const label = selectedGeo.shocks?.[corner];
+      if (!label) return;
+      const isFront = corner === 'LF' || corner === 'RF';
+      const list = isFront ? FRONT_STRUTS : REAR_SHOCKS;
+      const found = list.find(sh => shockLabel(sh) === label);
+      if (found?.rating != null) s.shocks[corner] = found.rating;
+    });
+    setSetup(s);
+  };
+
   const applyAll = () => {
     const s = deepClone(setup);
     for (const rec of recs) {
@@ -665,6 +688,12 @@ export default function Figure8Optimizer({ setup, setSetup, ambient, setAmbient,
               ))}
             </select>
           </div>
+          {selectedGeo && (
+            <button className="opt-geo-load-btn" onClick={loadSetupFromGeo}
+              title="Copy camber, caster, toe, spring rates, and shocks from this geometry profile into the setup parameters">
+              Load setup from profile
+            </button>
+          )}
           {geoOverrides && (
             <span className="opt-geo-note" style={{ alignSelf: 'flex-end', paddingBottom: 4 }}>
               Using measured:{geoOverrides.rcHeightFront != null ? ` front RC ${geoOverrides.rcHeightFront.toFixed(1)}"` : ''}

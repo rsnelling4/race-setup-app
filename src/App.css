@@ -2788,6 +2788,21 @@
   color: var(--text-muted);
   font-family: monospace;
 }
+.opt-geo-load-btn {
+  padding: 4px 12px;
+  font-size: 0.82rem;
+  background: var(--surface-1);
+  border: 1px solid var(--accent);
+  border-radius: 5px;
+  color: var(--accent);
+  cursor: pointer;
+  white-space: nowrap;
+  transition: background 0.15s, color 0.15s;
+}
+.opt-geo-load-btn:hover {
+  background: var(--accent);
+  color: #000;
+}
 
 /* Header */
 .opt-header {
