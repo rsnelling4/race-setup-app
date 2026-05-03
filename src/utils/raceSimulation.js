@@ -547,9 +547,9 @@ function tireLoadsCtx(lateralG, springLLTD, geoCtx) {
   const fStatic = VEH.weight * VEH.frontBias / 2;
   const rStatic = VEH.weight * (1 - VEH.frontBias) / 2;
   return {
-    LF: Math.max(50, fStatic - ltFront),
+    LF: fStatic - ltFront,
     RF: fStatic + ltFront,
-    LR: Math.max(50, rStatic - ltRear),
+    LR: rStatic - ltRear,
     RR: rStatic + ltRear,
   };
 }
@@ -729,9 +729,9 @@ function tireLoads(lateralG, springLLTD) {
   const fStatic = VEH.weight * VEH.frontBias / 2;
   const rStatic = VEH.weight * (1 - VEH.frontBias) / 2;
   return {
-    LF: Math.max(50, fStatic - ltFront),
+    LF: fStatic - ltFront,
     RF: fStatic + ltFront,
-    LR: Math.max(50, rStatic - ltRear),
+    LR: rStatic - ltRear,
     RR: rStatic + ltRear,
   };
 }
@@ -1331,7 +1331,7 @@ export function analyzeSetup(setup, ambientTemp = 65, inflationTemp = COLD_PSI_T
   // Per-corner breakdown
   const corners = {};
   for (const c of CORNERS) {
-    const load = loads[c];
+    const load = cornerLoads[c]; // lap-average cornering load (OVAL_CORNER_G) — realistic for display
     const outside = OUTSIDE[c];
     const front = IS_FRONT[c];
     const wf = workFactors[c];
@@ -1437,7 +1437,7 @@ export function analyzeSetup(setup, ambientTemp = 65, inflationTemp = COLD_PSI_T
       dynamicGain: front ? casterGain + bodyRollCamber + kpiCamber : 0,
       casterFactor, optStaticCamber, alignmentOutOfRange,
       sidewallCamber: front ? swCamber : sidewallCamberDeg(cornerLoads[c]),
-      front, outside, tempFactor, loadSens, mu, adjustableScore,
+      front, outside, tempFactor, toeFactor, loadSens, mu, adjustableScore,
     };
   }
 

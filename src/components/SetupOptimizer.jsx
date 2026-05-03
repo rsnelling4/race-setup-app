@@ -586,19 +586,31 @@ function StatusRow({ ok, label, value, action, tip, warn }) {
   return tip ? <Tooltip text={tip}>{content}</Tooltip> : content;
 }
 
-function CornerCard({ c, data, setup }) {
+function CornerCard({ c, data, setup, frontGripPct }) {
   const [expanded, setExpanded] = useState(false);
   const {
     load, estimatedTemp, hp, recColdPsi, recHotPsi,
     psiGripFactor, isPresLimited, psiDev,
     effectiveCamber, groundCamber, idealGroundCamber, camberDev, camberFactor, dynamicGain,
-    optStaticCamber, alignmentOutOfRange, sidewallCamber, front, outside, tempFactor, adjustableScore,
+    optStaticCamber, alignmentOutOfRange, sidewallCamber, front, outside, tempFactor, toeFactor, adjustableScore,
   } = data;
 
   const camberOk   = camberDev < 0.5;
   const presOk     = Math.abs(psiDev) < 2;
   const recCold    = Math.round(recColdPsi * 2) / 2;
   const psiDir     = psiDev < 0 ? 'Raise' : 'Lower';
+
+  // Balance note — derived from frontGripPct vs target 0.57 front bias
+  const balanceNote = frontGripPct != null ? (() => {
+    const dev = frontGripPct - 0.57;
+    if (Math.abs(dev) < 0.02) return null;
+    if (front && dev > 0.02)  return { text: 'Front dominant — push', color: '#f59e0b' };
+    if (front && dev < -0.02) return { text: 'Front limited — loose entry', color: '#60a5fa' };
+    if (!front && dev > 0.02) return { text: 'Rear yielding — push', color: '#f59e0b' };
+    if (!front && dev < -0.02) return { text: 'Rear dominant — loose', color: '#60a5fa' };
+    return null;
+  })() : null;
+  const toeOk = toeFactor == null || toeFactor > 0.97;
 
   const idealTip = front
     ? (outside ? TIPS.idealCamber.outside : TIPS.idealCamber.inside)
@@ -635,6 +647,21 @@ function CornerCard({ c, data, setup }) {
           <span style={{ color: scoreColor(tempFactor) }}>Temp {pct(tempFactor)}</span>
         </Tooltip>
       </div>
+      {/* ── Balance / Toe indicators ── */}
+      {(balanceNote || (front && !toeOk)) && (
+        <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6, margin: '4px 0 2px', fontSize: '0.78em' }}>
+          {balanceNote && (
+            <Tooltip text="Overall grip balance between front and rear axles. Push = front is the limit; Loose = rear is the limit. Adjust spring rates, ARB, or camber to rebalance.">
+              <span style={{ color: balanceNote.color, fontFamily: 'monospace' }}>{balanceNote.text}</span>
+            </Tooltip>
+          )}
+          {front && !toeOk && (
+            <Tooltip text="Front toe-out adds understeer at corner entry. Reducing toe-out (toward 0) increases front grip and reduces drag. Current setting is outside the efficient range.">
+              <span style={{ color: '#f59e0b', fontFamily: 'monospace' }}>Toe drag</span>
+            </Tooltip>
+          )}
+        </div>
+      )}
 
       {/* ── Top action badge ── */}
       {topAction && (
@@ -1023,7 +1050,7 @@ export default function SetupOptimizer({ setup, setSetup, ambient, setAmbient, i
         </h3>
         <div className="opt-corners-grid">
           {CORNERS.map(c => (
-            <CornerCard key={c} c={c} data={corners[c]} setup={setup} />
+            <CornerCard key={c} c={c} data={corners[c]} setup={setup} frontGripPct={frontGripPct} />
           ))}
         </div>
       </div>
