@@ -593,6 +593,7 @@ function CornerCard({ c, data, setup, frontGripPct }) {
     psiGripFactor, isPresLimited, psiDev,
     effectiveCamber, groundCamber, idealGroundCamber, camberDev, camberFactor, dynamicGain,
     optStaticCamber, alignmentOutOfRange, sidewallCamber, front, outside, tempFactor, toeFactor, adjustableScore,
+    cornerRoll,
   } = data;
 
   const camberOk   = camberDev < 0.5;
@@ -711,12 +712,26 @@ function CornerCard({ c, data, setup, frontGripPct }) {
               ok={camberOk}
               label="Ground camber"
               value={`${groundCamber !== null ? (groundCamber >= 0 ? '+' : '') + groundCamber.toFixed(2) : '—'}° (target ${idealGroundCamber !== undefined ? (idealGroundCamber >= 0 ? '+' : '') + idealGroundCamber.toFixed(1) : '—'}°)`}
-              tip={idealTip}
+              tip="Rear solid axle — ground camber equals body roll angle at the corner apex. The axle cannot be individually adjusted; the only lever is total body roll stiffness (spring rates). Outside rear tilts outward (positive); inside rear tilts inward (negative). Target is 0° — the axle is flat relative to the road."
             />
-            {expanded && (
-              <Tooltip text={TIPS.solidAxle}>
-                <div className="opt-limited-note">Solid axle — adjust via shock balance</div>
-              </Tooltip>
+            {expanded && cornerRoll != null && (
+              <div className="opt-expanded-detail">
+                <div className="opt-camber-math" style={{ fontSize: '0.85em', color: 'var(--text-muted)' }}>
+                  <Tooltip text="Body roll angle at the corner apex. Formula: (body roll per G at 1G) × 0.813G apex. Body roll per G = 3.1°/G baseline × (baseline spring stiffness / current spring stiffness). Stiffer springs reduce roll; softer springs increase it. ARB is included in stiffness for both baseline and current.">
+                    <span>Body roll at apex</span>
+                  </Tooltip>
+                  <span style={{ color: 'var(--text-primary)', marginLeft: 'auto' }}>{cornerRoll.toFixed(2)}°</span>
+                </div>
+                <div className="opt-camber-math" style={{ fontSize: '0.85em', color: 'var(--text-muted)' }}>
+                  <Tooltip text="Sidewall compliance camber: the tire sidewall deflects slightly outward under load, adding a small positive (outward) camber at the contact patch. Larger on the heavily loaded outside rear.">
+                    <span>↳ sidewall compliance</span>
+                  </Tooltip>
+                  <span style={{ marginLeft: 'auto' }}>+{sidewallCamber !== undefined ? sidewallCamber.toFixed(2) : '—'}°</span>
+                </div>
+                <div style={{ fontSize: '0.8em', color: 'var(--text-muted)', marginTop: 4, lineHeight: 1.5 }}>
+                  To reduce: stiffen front or rear springs. Softer springs = more roll = more rear camber angle. No static adjustment possible on solid axle.
+                </div>
+              </div>
             )}
           </>
         )}

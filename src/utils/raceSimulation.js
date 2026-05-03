@@ -640,10 +640,15 @@ function rollStiffness(setup, geoCtx) {
 // Dampers do NOT contribute to steady-state roll stiffness — they resist roll velocity,
 // not roll angle. They affect how quickly the car reaches equilibrium, not where it settles.
 function bodyRoll(lateralG, totalStiffness) {
-  // totalStiffness is now K_roll_spring (lb-ft/rad) from rollStiffness().
-  // Ratio to baseline scales the 3.1°/G measurement proportionally.
-  const baseRoll = 3.1; // deg/G at baseline springs (measured: 3.1° at actual corner G)
-  const stiffnessRatio = BASE_K_ROLL_SPRING / Math.max(totalStiffness, 1000);
+  // totalStiffness is K_roll_spring (lb-ft/rad) from rollStiffness() — springs only.
+  // The ARB is a physical roll resistor and must be included in both numerator (baseline)
+  // and denominator (current) so that the ratio correctly accounts for ARB stiffening.
+  // The measured 3.1°/G baseline was taken with the ARB installed, so BASE_K_ROLL_SPRING
+  // underestimates the actual baseline stiffness — adding ARB to both cancels this error.
+  const baseStiffnessTotal = BASE_K_ROLL_SPRING + ARB.frontRollStiffness;
+  const currentStiffnessTotal = totalStiffness + ARB.frontRollStiffness;
+  const baseRoll = 3.1; // deg/G at baseline springs (measured: 3.1° at actual corner G, ARB installed)
+  const stiffnessRatio = baseStiffnessTotal / Math.max(currentStiffnessTotal, 1000);
   return lateralG * baseRoll * stiffnessRatio;
 }
 
@@ -1440,7 +1445,7 @@ export function analyzeSetup(setup, ambientTemp = 65, inflationTemp = COLD_PSI_T
       dynamicGain: front ? casterGain + bodyRollCamber + kpiCamber : 0,
       casterFactor, optStaticCamber, alignmentOutOfRange,
       sidewallCamber: front ? swCamber : sidewallCamberDeg(cornerLoads[c]),
-      front, outside, tempFactor, toeFactor, loadSens, mu, adjustableScore,
+      front, outside, tempFactor, toeFactor, loadSens, mu, adjustableScore, cornerRoll,
     };
   }
 
