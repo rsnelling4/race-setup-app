@@ -11,6 +11,7 @@ import SimulationMath from './components/SimulationMath';
 import SuggestedSetup from './components/SuggestedSetup';
 import { MeasurementLog, SuspensionGeometry } from './components/MeasurementLogger';
 import TrackDay from './components/TrackDay';
+import TheoreticalResults from './components/TheoreticalResults';
 import Settings from './components/Settings';
 import { analyzeFullCar } from './utils/tireAnalysis';
 import { DEFAULT_SETUP } from './utils/raceSimulation';
@@ -26,6 +27,7 @@ const TABS = [
   { id: 'mathref',   label: 'Simulation Math' },
   { id: 'suggested', label: 'Suggested Setup' },
   { id: 'trackday',     label: 'Track Day' },
+  { id: 'theoretical',  label: 'Theoretical Results' },
   { id: 'measurements', label: 'Measurement Log' },
   { id: 'geometry',     label: 'Suspension Geometry' },
   { id: 'settings',     label: 'Settings' },
@@ -146,6 +148,7 @@ function App() {
             }}
           />
         )}
+        {activeTab === 'theoretical'   && <TheoreticalResults />}
         {activeTab === 'measurements' && <MeasurementLog />}
         {activeTab === 'geometry'     && <SuspensionGeometry />}
         {activeTab === 'settings'     && <Settings />}
