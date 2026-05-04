@@ -195,7 +195,7 @@ export default function TheoreticalResults() {
   const [inflationTemp, setInflationTemp] = useState(85);
 
   const selectedGeo = useMemo(
-    () => geoProfiles?.find(g => g.id === selectedGeoId) ?? null,
+    () => geoProfiles?.find(g => String(g.id) === selectedGeoId) ?? null,
     [geoProfiles, selectedGeoId]
   );
 
