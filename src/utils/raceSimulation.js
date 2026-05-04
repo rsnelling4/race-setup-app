@@ -88,6 +88,21 @@ function optimalHotPsi(corner, load) {
   return BASE_HOT_PSI[corner] * Math.pow(Math.max(load, 50) / CALIB_LOAD[corner], LOAD_EXP);
 }
 
+// Figure 8 pressure calibration — symmetric loading, derived from real baseline session.
+// Baseline: all fronts 35 cold / all rears 30 cold, set at 68°F.
+// Equilibrium temps: fronts ~122°F, rears ~120°F.
+// Hot PSI at baseline: fronts 35×(582/528)=38.6, rears 30×(580/528)=32.9
+// F8 average corner loads (lateral transfer cancels L+R): front ~1055 lbs, rear ~796 lbs
+// These are symmetric L/R so LF=RF and LR=RR.
+const BASE_HOT_PSI_F8 = { LF: 38.5, RF: 38.5, LR: 33.0, RR: 33.0 };
+const CALIB_LOAD_F8   = { LF: 1055, RF: 1055, LR: 796,  RR: 796  };
+const MIN_HOT_PSI_F8  = { LF: 28, RF: 28, LR: 24, RR: 24 };
+const MAX_HOT_PSI_F8  = { LF: 46, RF: 46, LR: 40, RR: 40 };
+
+function optimalHotPsiF8(corner, load) {
+  return BASE_HOT_PSI_F8[corner] * Math.pow(Math.max(load, 50) / CALIB_LOAD_F8[corner], LOAD_EXP);
+}
+
 // TIME-AVERAGED LATERAL G — used for tire load, pressure target, and camber calculations.
 //
 // The tires are only cornering for a fraction of each lap; on the straights lateral G = 0.
@@ -281,6 +296,12 @@ function tempGripFactor(temp) {
 // 0.006/PSI = 0.6% grip per PSI of deviation. Floor 0.82 = 18% max loss.
 function pressureGripFactor(hotPsi, tireLoad, corner) {
   const optPsi = corner ? optimalHotPsi(corner, tireLoad) : BASE_HOT_PSI.RF; // fallback
+  const dev = Math.abs(hotPsi - optPsi);
+  return Math.max(0.82, 1 - 0.006 * dev);
+}
+
+function pressureGripFactorF8(hotPsi, tireLoad, corner) {
+  const optPsi = corner ? optimalHotPsiF8(corner, tireLoad) : BASE_HOT_PSI_F8.RF;
   const dev = Math.abs(hotPsi - optPsi);
   return Math.max(0.82, 1 - 0.006 * dev);
 }
@@ -1684,13 +1705,13 @@ export function analyzeSetupF8(setup, ambientTemp = 65, inflationTemp = COLD_PSI
     const front = IS_FRONT[c];
     const tEq = refTires[c].temp;
 
-    // Pressure — symmetric loads front-to-front and rear-to-rear, but fronts heavier than rears
+    // Pressure — F8-specific calibration: symmetric loads, anchored to real F8 baseline session
     const hp = hotPressure(setup.coldPsi[c], tEq, inflationTemp);
-    const optHotPsi = optimalHotPsi(c, load);
+    const optHotPsi = optimalHotPsiF8(c, load);
     const psiDev = hp - optHotPsi;
-    const psiGripFactor = pressureGripFactor(hp, load, c);
-    const minHot = MIN_HOT_PSI[c] ?? 12;
-    const maxHot = MAX_HOT_PSI[c] ?? 51;
+    const psiGripFactor = pressureGripFactorF8(hp, load, c);
+    const minHot = MIN_HOT_PSI_F8[c] ?? 20;
+    const maxHot = MAX_HOT_PSI_F8[c] ?? 51;
     const isPresLimited = optHotPsi < minHot || optHotPsi > maxHot;
     const recHotPsi = Math.min(Math.max(minHot, optHotPsi), maxHot);
     const recColdPsi = recHotPsi * (inflationTemp + RANKINE) / (tEq + RANKINE);
@@ -1976,7 +1997,7 @@ function calcPerformanceF8(setup, tires, inflationTemp = COLD_PSI_TEMP) {
 
       let mu = 1.0;
       mu *= tempGripFactor(avgTemp);
-      mu *= pressureGripFactor(hp, cLoad, c);
+      mu *= pressureGripFactorF8(hp, cLoad, c);
 
       if (front) {
         // Caster: outside gains negative, inside gains positive. F8 apex steer 3.67°.
