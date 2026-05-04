@@ -1,5 +1,5 @@
 import { useMemo, useState, useRef } from 'react';
-import { analyzeSetupF8, DEFAULT_SETUP_F8 } from '../utils/raceSimulation';
+import { analyzeSetupF8, DEFAULT_SETUP_F8, F8_BASELINE_SETUP, PETE_SETUP, DYLAN_SETUP, JOSH_SETUP, JOEY_SETUP } from '../utils/raceSimulation';
 import { REAR_SHOCKS, FRONT_STRUTS, shockLabel } from '../data/shockOptions';
 import { computeGeometry } from './GeometryVisualizer';
 import { useSync } from '../utils/SyncContext';
@@ -15,19 +15,26 @@ function buildGeoOverrides(geo) {
   const lf = computeGeometry(geo, 'LF');
   if (rf?.rcHeight != null && lf?.rcHeight != null) {
     overrides.rcHeightFront = (rf.rcHeight + lf.rcHeight) / 2;
+  } else if (rf?.rcHeight != null) {
+    overrides.rcHeightFront = rf.rcHeight;
+  } else if (lf?.rcHeight != null) {
+    overrides.rcHeightFront = lf.rcHeight;
   }
-  if (rf?.fvsa != null && lf?.fvsa != null) {
-    const avgFvsa = (rf.fvsa + lf.fvsa) / 2;
-    const camberGainPerIn = Math.atan(1 / avgFvsa) * (180 / Math.PI);
-    overrides.slaJounceCoeffRF = camberGainPerIn * 0.383;
-    overrides.slaDroopCoeffLF  = camberGainPerIn * 0.383;
+  if (rf?.ic?.x != null && lf?.ic?.x != null) {
+    overrides.icLateralFront = (Math.abs(rf.ic.x) + Math.abs(lf.ic.x)) / 2;
+  } else if (rf?.ic?.x != null) {
+    overrides.icLateralFront = Math.abs(rf.ic.x);
+  } else if (lf?.ic?.x != null) {
+    overrides.icLateralFront = Math.abs(lf.ic.x);
   }
-  if (geo.springPickup?.RF && geo.lowerBallJoint?.RF) {
-    const pickupX = Number(geo.springPickup.RF);
-    const bjX     = Number(geo.lowerBallJoint.RF) || 6.75;
-    const pivX    = Number(geo.lowerArmPivot?.RF)  || 9.375;
-    const armLen  = Math.abs(bjX - pivX);
-    if (armLen > 0 && pickupX > 0) overrides.mrFront = pickupX / armLen;
+  const wheelDispPerDegRoll = 0.383;
+  if (rf?.fvsa != null && rf.fvsa > 0) overrides.slaJounceCoeffRF = (57.3 / rf.fvsa) * wheelDispPerDegRoll;
+  if (lf?.fvsa != null && lf.fvsa > 0) overrides.slaDroopCoeffLF  = (57.3 / lf.fvsa) * wheelDispPerDegRoll;
+  const spLF = Number(geo.springPickup?.LF);
+  const spRF = Number(geo.springPickup?.RF);
+  if (spLF > 0 || spRF > 0) {
+    const spAvg = (spLF > 0 && spRF > 0) ? (spLF + spRF) / 2 : (spLF || spRF);
+    overrides.mrFront = spAvg / 13.0;
   }
   return Object.keys(overrides).length > 0 ? overrides : null;
 }
@@ -35,6 +42,16 @@ function buildGeoOverrides(geo) {
 const CORNERS = ['LF', 'RF', 'LR', 'RR'];
 const CORNER_LABELS = { LF: 'Left Front', RF: 'Right Front', LR: 'Left Rear', RR: 'Right Rear' };
 const TARGET = 23.1;
+const FRONT_SPRING_OPTIONS = [
+  { value: 700, label: '700 lbs/in — Pre-2003 / Heavy Duty' },
+  { value: 475, label: '475 lbs/in — Police / Taxi (P71 stock)' },
+  { value: 440, label: '440 lbs/in — Civilian / Base' },
+];
+const REAR_SPRING_OPTIONS = [
+  { value: 200, label: '200 lbs/in — Heavy Duty / Police' },
+  { value: 160, label: '160 lbs/in — Stock P71' },
+  { value: 140, label: '140 lbs/in — Soft / Base' },
+];
 const RANGE_MIN = 22.8;
 const RANGE_MAX = 23.8;
 
@@ -447,11 +464,13 @@ function CompactSetupForm({ setup, onChange }) {
   };
 
   const updateShock = (corner, label) => {
-    const list = (corner === 'LF' || corner === 'RF') ? FRONT_STRUTS : REAR_SHOCKS;
+    const isFront = corner === 'LF' || corner === 'RF';
+    const list = isFront ? FRONT_STRUTS : REAR_SHOCKS;
     const found = list.find(s => shockLabel(s) === label);
     if (!found) return;
     const s = deepClone(setup);
     s.shocks[corner] = found.rating;
+    if (isFront && found.springRate) s.springs[corner] = found.springRate;
     onChange(s);
   };
 
@@ -483,6 +502,41 @@ function CompactSetupForm({ setup, onChange }) {
               </div>
             );
           })}
+
+          <div className="opt-form-label" style={{ marginTop: 12 }}>Front Spring Rates <span className="opt-form-hint">Symmetric recommended</span></div>
+          {['LF', 'RF'].map(c => (
+            <div key={c} className="opt-form-field">
+              <label>{c}</label>
+              <select
+                className="opt-select"
+                value={setup.springs[c] ?? 475}
+                onChange={e => update(`springs.${c}`, parseInt(e.target.value))}
+              >
+                {FRONT_SPRING_OPTIONS.map(o => (
+                  <option key={o.value} value={o.value}>{o.label}</option>
+                ))}
+              </select>
+            </div>
+          ))}
+
+          <div className="opt-form-label" style={{ marginTop: 12 }}>Rear Spring Rate</div>
+          <div className="opt-form-field">
+            <label>LR/RR</label>
+            <select
+              className="opt-select"
+              value={setup.springs.LR ?? 160}
+              onChange={e => {
+                const val = parseInt(e.target.value);
+                const s = deepClone(setup);
+                s.springs.LR = val; s.springs.RR = val;
+                onChange(s);
+              }}
+            >
+              {REAR_SPRING_OPTIONS.map(o => (
+                <option key={o.value} value={o.value}>{o.label}</option>
+              ))}
+            </select>
+          </div>
         </div>
 
         <div className="opt-form-col">
@@ -670,9 +724,12 @@ export default function Figure8Optimizer({ setup, setSetup, ambient, setAmbient,
           />
         </div>
         <div className="opt-presets">
-          <button className="sim-preset-btn" onClick={() => setSetup(deepClone(DEFAULT_SETUP_F8))}>
-            Load F8 Baseline
-          </button>
+          <button className="sim-preset-btn" onClick={() => setSetup(deepClone(DEFAULT_SETUP_F8))}>F8 Default</button>
+          <button className="sim-preset-btn" onClick={() => setSetup(deepClone(F8_BASELINE_SETUP))}>F8 Baseline</button>
+          <button className="sim-preset-btn" onClick={() => setSetup(deepClone(PETE_SETUP))}>Pete</button>
+          <button className="sim-preset-btn" onClick={() => setSetup(deepClone(DYLAN_SETUP))}>Dylan</button>
+          <button className="sim-preset-btn" onClick={() => setSetup(deepClone(JOSH_SETUP))}>Josh</button>
+          <button className="sim-preset-btn" onClick={() => setSetup(deepClone(JOEY_SETUP))}>Joey</button>
         </div>
       </div>
 
@@ -684,7 +741,7 @@ export default function Figure8Optimizer({ setup, setSetup, ambient, setAmbient,
             <select className="opt-input" value={selectedGeoId ?? ''} onChange={e => setSelectedGeoId(e.target.value ? Number(e.target.value) : null)}>
               <option value="">Default (hardcoded P71 baseline)</option>
               {geoProfiles.map(g => (
-                <option key={g.id} value={g.id}>{g.name || `Profile ${g.id}`}</option>
+                <option key={g.id} value={g.id}>{g.title || `Profile ${g.id}`}</option>
               ))}
             </select>
           </div>
