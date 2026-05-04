@@ -187,7 +187,7 @@ function ScoreBar({ value, low = 0.88, high = 1.0, label }) {
 
 // ── Main component ──
 export default function TheoreticalResults() {
-  const { geoProfiles } = useSync();
+  const { geometry: geoProfiles = [] } = useSync();
   const [selectedGeoId, setSelectedGeoId] = useState('');
   const [ambient, setAmbient] = useState(75);
   const [trackType, setTrackType] = useState('oval');
