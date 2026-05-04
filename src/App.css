@@ -5240,6 +5240,52 @@
   padding: 14px 18px;
 }
 
+/* Cold PSI row */
+.tr-psi-row {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  padding: 14px 20px;
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 12px;
+}
+.tr-psi-heading {
+  font-size: 0.78rem;
+  font-weight: 700;
+  color: var(--text-secondary);
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  flex: 0 0 auto;
+}
+.tr-psi-note {
+  font-size: 0.76rem;
+  color: var(--text-secondary);
+  flex: 1 1 auto;
+  font-style: italic;
+}
+.tr-psi-inputs {
+  display: flex;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+.tr-psi-group {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+.tr-psi-label {
+  font-size: 0.80rem;
+  font-weight: 700;
+  color: var(--text-primary);
+  min-width: 22px;
+}
+.tr-psi-field {
+  width: 58px !important;
+  text-align: center;
+}
+
 /* Sections */
 .tr-section {
   background: var(--surface);

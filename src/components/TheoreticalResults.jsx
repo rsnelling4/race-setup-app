@@ -1,4 +1,4 @@
-import { useState, useMemo } from 'react';
+import { useState, useMemo, useEffect } from 'react';
 import { analyzeSetup, analyzeSetupF8, simulateRace, VEH } from '../utils/raceSimulation';
 import { computeGeometry } from './GeometryVisualizer';
 import { useSync } from '../utils/SyncContext';
@@ -38,22 +38,36 @@ function buildGeoOverrides(geo) {
   return Object.keys(overrides).length > 0 ? overrides : null;
 }
 
-// Build a setup object from a geo profile
-function setupFromGeo(geo) {
+const DEFAULT_COLD_PSI = { LF: 20, RF: 38, LR: 16, RR: 35 };
+
+// Extract cold PSI from a geo profile, falling back to defaults
+function psiFromGeo(geo) {
+  const p = { ...DEFAULT_COLD_PSI };
+  if (!geo) return p;
+  const c = geo.coldPsi;
+  if (c?.LF !== '' && c?.LF != null) p.LF = parseFloat(c.LF);
+  if (c?.RF !== '' && c?.RF != null) p.RF = parseFloat(c.RF);
+  if (c?.LR !== '' && c?.LR != null) p.LR = parseFloat(c.LR);
+  if (c?.RR !== '' && c?.RR != null) p.RR = parseFloat(c.RR);
+  return p;
+}
+
+// Build a setup object from a geo profile + explicit coldPsi override
+function setupFromGeo(geo, coldPsi) {
   const s = {
     shocks:   { LF: 4, RF: 4, LR: 2, RR: 2 },
     springs:  { LF: 475, RF: 475, LR: 160, RR: 160 },
     camber:   { LF: 2.75, RF: -2.25 },
     caster:   { LF: 9.0, RF: 3.0 },
     toe:      -0.25,
-    coldPsi:  { LF: 20, RF: 38, LR: 16, RR: 35 },
+    coldPsi:  coldPsi ?? { ...DEFAULT_COLD_PSI },
   };
   if (!geo) return s;
   // Springs
-  if (geo.springs?.LF) s.springs.LF = parseFloat(geo.springs.LF);
-  if (geo.springs?.RF) s.springs.RF = parseFloat(geo.springs.RF);
-  if (geo.springs?.LR) s.springs.LR = parseFloat(geo.springs.LR);
-  if (geo.springs?.RR) s.springs.RR = parseFloat(geo.springs.RR);
+  if (geo.springRate?.LF) s.springs.LF = parseFloat(geo.springRate.LF);
+  if (geo.springRate?.RF) s.springs.RF = parseFloat(geo.springRate.RF);
+  if (geo.springRate?.LR) s.springs.LR = parseFloat(geo.springRate.LR);
+  if (geo.springRate?.RR) s.springs.RR = parseFloat(geo.springRate.RR);
   // Camber
   if (geo.camber?.LF !== '' && geo.camber?.LF != null) s.camber.LF = parseFloat(geo.camber.LF);
   if (geo.camber?.RF !== '' && geo.camber?.RF != null) s.camber.RF = parseFloat(geo.camber.RF);
@@ -61,7 +75,7 @@ function setupFromGeo(geo) {
   if (geo.caster?.LF !== '' && geo.caster?.LF != null) s.caster.LF = parseFloat(geo.caster.LF);
   if (geo.caster?.RF !== '' && geo.caster?.RF != null) s.caster.RF = parseFloat(geo.caster.RF);
   // Toe
-  if (geo.toe?.total !== '' && geo.toe?.total != null) s.toe = parseFloat(geo.toe.total) / 2; // total → per-side
+  if (geo.toe?.total !== '' && geo.toe?.total != null) s.toe = parseFloat(geo.toe.total) / 2;
   return s;
 }
 
@@ -193,6 +207,7 @@ export default function TheoreticalResults() {
   const [trackType, setTrackType] = useState('oval');
   const [numCars, setNumCars] = useState(25);
   const [inflationTemp, setInflationTemp] = useState(85);
+  const [coldPsi, setColdPsi] = useState({ ...DEFAULT_COLD_PSI });
   const [calcError, setCalcError] = useState(null);
 
   const selectedGeo = useMemo(
@@ -200,11 +215,16 @@ export default function TheoreticalResults() {
     [geoProfiles, selectedGeoId]
   );
 
+  // Auto-populate cold PSI from profile when selection changes
+  useEffect(() => {
+    setColdPsi(psiFromGeo(selectedGeo));
+  }, [selectedGeo]);
+
   const results = useMemo(() => {
     if (!selectedGeo) return null;
     setCalcError(null);
     try {
-      const setup = setupFromGeo(selectedGeo);
+      const setup = setupFromGeo(selectedGeo, coldPsi);
       const geoOverrides = buildGeoOverrides(selectedGeo);
 
       if (trackType === 'oval') {
@@ -219,7 +239,7 @@ export default function TheoreticalResults() {
       setCalcError(e.message);
       return null;
     }
-  }, [selectedGeo, ambient, trackType, inflationTemp]);
+  }, [selectedGeo, ambient, trackType, inflationTemp, coldPsi]);
 
   // Derive final tire temps from simulation (last lap of 25) or equilibrium from analysis
   const finalTemps = useMemo(() => {
@@ -329,6 +349,26 @@ export default function TheoreticalResults() {
             onChange={e => setNumCars(Number(e.target.value))}
             min={5} max={50} step={1}
           />
+        </div>
+      </div>
+
+      {/* ── Cold PSI inputs ── */}
+      <div className="tr-psi-row">
+        <span className="tr-psi-heading">Cold Tire Pressures (PSI)</span>
+        <span className="tr-psi-note">Pre-filled from profile · edit to try different pressures</span>
+        <div className="tr-psi-inputs">
+          {CORNERS.map(c => (
+            <div key={c} className="tr-psi-group">
+              <label className="tr-psi-label">{c}</label>
+              <input
+                type="number"
+                className="tr-input tr-psi-field"
+                value={coldPsi[c]}
+                onChange={e => setColdPsi(prev => ({ ...prev, [c]: Number(e.target.value) }))}
+                min={5} max={60} step={1}
+              />
+            </div>
+          ))}
         </div>
       </div>
 
