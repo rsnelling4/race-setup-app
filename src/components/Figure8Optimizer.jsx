@@ -211,10 +211,13 @@ function BalanceGaugeF8({ frontGripPct, frontLLTD, springLLTD, corners, setup })
   const entryBias = 0.35 * entryShockBias + 0.20 * frontLLTD + 0.20 * toeEntryBias + 0.15 * camberEntryBias + 0.10 * presEntryBias;
   const entry = phaseLabelF8(entryBias);
 
-  // MID — steady-state: shocks stopped moving, only springs determine LLTD.
-  // frontGripPct > 0.55 = front is the limiting axle = push; < 0.55 = rear is limiting = loose.
-  const midGripBias = Math.max(0.1, Math.min(0.9, 0.5 + (frontGripPct - 0.55) * 3));
-  const midBias = 0.55 * midGripBias + 0.45 * springLLTD;
+  // MID — steady-state: shocks settled, spring LLTD and grip balance determine handling.
+  // Use grip share deviation directly — frontGripPct > 0.55 = push, < 0.55 = loose.
+  // springLLTD > 0.50 also biases push (front spring doing more cornering work).
+  // Weight grip deviation 70%, LLTD deviation 30% — both on same 0..1 scale around 0.5.
+  const midGripDev  = (frontGripPct - 0.55) * 3;   // scaled: ±0.05 → ±0.15
+  const midLLTDDev  = (springLLTD   - 0.50) * 0.5; // scaled: ±0.10 → ±0.05
+  const midBias = Math.max(0.1, Math.min(0.9, 0.5 + 0.70 * midGripDev + 0.30 * midLLTDDev));
   const mid = phaseLabelF8(midBias);
 
   // EXIT — off throttle in both directions.
@@ -286,8 +289,17 @@ function BalanceGaugeF8({ frontGripPct, frontLLTD, springLLTD, corners, setup })
       : 'Rear axle working harder than front in both turn directions.';
     action = 'To tighten: stiffen front struts relative to rear shocks, check rear pressures.';
   } else {
-    description = 'Front and rear axles are well-balanced across both turn directions.';
-    action = null;
+    // Neutral overall, but flag if any phase is still off
+    const phaseIssues = [];
+    if (mid.label !== 'Neutral')   phaseIssues.push(`${mid.label} mid-corner (spring LLTD ${(springLLTD * 100).toFixed(0)}%)`);
+    if (exit.label !== 'Neutral')  phaseIssues.push(`${exit.label} on exit`);
+    if (entry.label !== 'Neutral') phaseIssues.push(`${entry.label} on entry`);
+    description = phaseIssues.length
+      ? `Overall balance is neutral, but phase tendencies detected: ${phaseIssues.join('; ')}.`
+      : 'Front and rear axles are well-balanced across all corner phases.';
+    action = phaseIssues.length
+      ? 'Overall grip is balanced — fine-tune spring LLTD or shock balance to address phase-specific tendencies.'
+      : null;
   }
 
   return (
