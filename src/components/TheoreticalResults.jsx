@@ -193,6 +193,7 @@ export default function TheoreticalResults() {
   const [trackType, setTrackType] = useState('oval');
   const [numCars, setNumCars] = useState(25);
   const [inflationTemp, setInflationTemp] = useState(85);
+  const [calcError, setCalcError] = useState(null);
 
   const selectedGeo = useMemo(
     () => geoProfiles?.find(g => String(g.id) === selectedGeoId) ?? null,
@@ -201,16 +202,22 @@ export default function TheoreticalResults() {
 
   const results = useMemo(() => {
     if (!selectedGeo) return null;
-    const setup = setupFromGeo(selectedGeo);
-    const geoOverrides = buildGeoOverrides(selectedGeo);
+    setCalcError(null);
+    try {
+      const setup = setupFromGeo(selectedGeo);
+      const geoOverrides = buildGeoOverrides(selectedGeo);
 
-    if (trackType === 'oval') {
-      const analysis = analyzeSetup(setup, ambient, inflationTemp, geoOverrides);
-      const sim = simulateRace(setup, ambient, 25, inflationTemp);
-      return { analysis, sim, setup, trackType: 'oval' };
-    } else {
-      const analysis = analyzeSetupF8(setup, ambient, inflationTemp, geoOverrides);
-      return { analysis, sim: null, setup, trackType: 'f8' };
+      if (trackType === 'oval') {
+        const analysis = analyzeSetup(setup, ambient, inflationTemp, geoOverrides);
+        const sim = simulateRace(setup, ambient, 25, inflationTemp);
+        return { analysis, sim, setup, trackType: 'oval' };
+      } else {
+        const analysis = analyzeSetupF8(setup, ambient, inflationTemp, geoOverrides);
+        return { analysis, sim: null, setup, trackType: 'f8' };
+      }
+    } catch (e) {
+      setCalcError(e.message);
+      return null;
     }
   }, [selectedGeo, ambient, trackType, inflationTemp]);
 
@@ -325,7 +332,13 @@ export default function TheoreticalResults() {
         </div>
       </div>
 
-      {!results && (
+      {calcError && (
+        <div className="tr-error">
+          <strong>Calculation error:</strong> {calcError}
+        </div>
+      )}
+
+      {!results && !calcError && (
         <div className="tr-empty">
           Select a car geometry profile to generate theoretical results.
         </div>

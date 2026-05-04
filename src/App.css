@@ -5231,6 +5231,14 @@
   border: 1px dashed var(--border);
   border-radius: 10px;
 }
+.tr-error {
+  background: #2d1a1a;
+  border: 1px solid #ef4444;
+  border-radius: 8px;
+  color: #fca5a5;
+  font-size: 0.85rem;
+  padding: 14px 18px;
+}
 
 /* Sections */
 .tr-section {
