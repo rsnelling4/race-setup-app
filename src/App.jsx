@@ -11,7 +11,6 @@ import SuggestedSetup from './components/SuggestedSetup';
 import { SuspensionGeometry } from './components/MeasurementLogger';
 import TrackDay from './components/TrackDay';
 import TheoreticalResults from './components/TheoreticalResults';
-import Settings from './components/Settings';
 import { analyzeFullCar } from './utils/tireAnalysis';
 import { DEFAULT_SETUP } from './utils/raceSimulation';
 import { SyncProvider } from './utils/SyncContext';
@@ -27,7 +26,6 @@ const TABS = [
   { id: 'trackday',     label: 'Track Day' },
   { id: 'theoretical',  label: 'Theoretical Results' },
   { id: 'geometry',     label: 'Suspension Geometry' },
-  { id: 'settings',     label: 'Settings' },
 ];
 
 // Archived tabs — hidden from nav but code preserved:
@@ -145,7 +143,6 @@ function App() {
         )}
         {activeTab === 'theoretical'   && <TheoreticalResults />}
         {activeTab === 'geometry'     && <SuspensionGeometry />}
-        {activeTab === 'settings'     && <Settings />}
       </main>
 
       <footer className="app-footer">

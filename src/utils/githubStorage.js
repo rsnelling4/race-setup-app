@@ -2,15 +2,14 @@
 // Each data store is a single JSON file in the configured repo.
 // All reads/writes go through the GitHub REST API using a PAT stored in localStorage.
 
-const CONFIG_KEY = 'race_github_config';
+const HARDCODED_CONFIG = {
+  token: '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',
+  owner: 'rsnelling4',
+  repo:  'race-setup-data',
+};
 
-export function getConfig() {
-  try { return JSON.parse(localStorage.getItem(CONFIG_KEY)) || {}; } catch { return {}; }
-}
-
-export function saveConfig(config) {
-  localStorage.setItem(CONFIG_KEY, JSON.stringify(config));
-}
+export function getConfig() { return HARDCODED_CONFIG; }
+export function saveConfig() {}
 
 // ─── Low-level GitHub API helpers ─────────────────────────────────────────────
 
