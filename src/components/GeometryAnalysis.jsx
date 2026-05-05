@@ -9,6 +9,19 @@ const P71_WHEEL_OFFSET     = 1.75;
 const P71_FRONT_AXLE_FRAC  = 0.57;
 const P71_TOTAL_WEIGHT     = 3700;
 
+// Camber-related platform limits (Sec 2 / Synopsis use these).
+// P71 with aftermarket camber bolt typically tops out around −3.0° to −3.2°
+// before strut/spindle interference. Some classes also rule-cap static at
+// −4.0°. We use −3.0° as the realistic shop maximum.
+const P71_MAX_STATIC_NEG_CAMBER = -3.0;   // deg, realistic max with cam bolt
+const P71_RULES_STATIC_LIMIT    = -4.0;   // deg, common class rule cap
+// Sidewall compliance scales with vertical load. Empirical fit from
+// Hoosier/Michelin 235/55R17 sidewall data: ~0.0004°/lb above ~600 lb baseline,
+// referenced at 1400 lb where the model previously hardcoded 0.48°.
+const SIDEWALL_DEFL_REF_LOAD    = 1400;   // lbs — calibration point
+const SIDEWALL_DEFL_REF_DEG     = 0.48;   // deg at ref load
+const SIDEWALL_DEFL_RATE        = 0.0004; // deg/lb above ref
+
 // Track-type specific targets
 const TARGETS = {
   oval: {
@@ -74,7 +87,6 @@ export function analyzeGeometry(geo, trackType = 'oval') {
   const rearRC      = num(geo.rearRollCenter || 14.5);
   const cgH         = T.cgHeight - (num(geo.rideLowering) * 0.65);
   const momentArm   = rcAvg != null ? cgH - rcAvg : null;
-  const rollAtApex  = T.bodyRollPerG * T.trackG;
 
   // Static alignment from geo profile (falls back to sensible defaults)
   const rfStatic = num(geo.camber?.RF || -2.25);
@@ -82,18 +94,80 @@ export function analyzeGeometry(geo, trackType = 'oval') {
   const rfCaster = num(geo.caster?.RF ||  6.0);
   const lfCaster = num(geo.caster?.LF ||  9.0);
 
+  // ── (A) Use COMPUTED body roll from springs/ARB (not constant T.bodyRollPerG)
+  // We need rollGradient here, but it depends on spring rates which are read
+  // below. So compute springs early enough to feed the camber chain.
+  // If no spring rates entered, fall back to T.bodyRollPerG (the old constant).
+  const _ksLF = parseFloat(geo.springRate?.LF) || null;
+  const _ksRF = parseFloat(geo.springRate?.RF) || null;
+  const _ksLR = parseFloat(geo.springRate?.LR) || null;
+  const _ksRR = parseFloat(geo.springRate?.RR) || null;
+  const _irF  = parseFloat(geo.installRatio?.front) || 0.52;
+  const _irR  = parseFloat(geo.installRatio?.rear)  || 1.0;
+  const _tsRear = parseFloat(geo.rearSpringTrack) || num(geo.rearSpringBase) || 44;
+  const _kwFavg_pre = (_ksLF && _ksRF) ? ((_ksLF + _ksRF)/2) * _irF * _irF
+                    : (_ksLF || _ksRF) ? (_ksLF || _ksRF) * _irF * _irF : null;
+  const _kwRavg_pre = (_ksLR && _ksRR) ? ((_ksLR + _ksRR)/2) * _irR * _irR
+                    : (_ksLR || _ksRR) ? (_ksLR || _ksRR) * _irR * _irR : null;
+  const _trackFt_F = trackWidthF / 12;
+  const _trackFt_R = trackWidthR / 12;
+  const _tsFt_pre  = _tsRear / 12;
+  const _kPhiF_spring_pre = _kwFavg_pre ? (_kwFavg_pre * _trackFt_F * _trackFt_F * 12 / 2) : null;
+  const _kPhiR_spring_pre = _kwRavg_pre ? (_kwRavg_pre * _tsFt_pre * _tsFt_pre * 12 / 2) : null;
+  // Add ARB contribution if entered (lb-ft/deg → lb-ft/rad)
+  const _arbFEntered_deg = parseFloat(geo.arbStiffness?.front) || 0;
+  const _arbREntered_deg = parseFloat(geo.arbStiffness?.rear)  || 0;
+  const _arbF_rad = _arbFEntered_deg * (180/Math.PI);
+  const _arbR_rad = _arbREntered_deg * (180/Math.PI);
+  const _kPhiF_total_pre = _kPhiF_spring_pre != null ? _kPhiF_spring_pre + _arbF_rad : null;
+  const _kPhiR_total_pre = _kPhiR_spring_pre != null ? _kPhiR_spring_pre + _arbR_rad : null;
+  const _kPhiTotal_pre = (_kPhiF_total_pre && _kPhiR_total_pre) ? _kPhiF_total_pre + _kPhiR_total_pre : null;
+  const _cgH_ft_pre = cgH / 12;
+  const rollGradient_total = _kPhiTotal_pre
+    ? ((P71_TOTAL_WEIGHT * _cgH_ft_pre) / _kPhiTotal_pre) * (180/Math.PI)
+    : null; // deg/g including ARB
+  // Use computed roll if springs available, else fall back to literature constant.
+  const rollPerG_used = rollGradient_total ?? T.bodyRollPerG;
+  const rollAtApex    = rollPerG_used * T.trackG;
+  const rollIsComputed = rollGradient_total != null;
+
+  // ── (B) Sidewall compliance scales with RF apex load ──────────────────────
+  // RF outside vertical load = static corner weight + lateral load transfer
+  //   F_RF = W_corner_F + (W_F × G × CG/track)  — for left turn, all front LT
+  //   goes to RF (only on a single-track-front simplification, but close)
+  const _wCornerF_pre = (P71_TOTAL_WEIGHT * P71_FRONT_AXLE_FRAC) / 2;
+  const _latLoadTransferF = (rcAvg != null)
+    ? (P71_TOTAL_WEIGHT * P71_FRONT_AXLE_FRAC * T.trackG * (cgH / 12)) / (trackWidthF / 12)
+    : (P71_TOTAL_WEIGHT * P71_FRONT_AXLE_FRAC * T.trackG * 0.3); // fallback
+  const rfApexLoad = _wCornerF_pre + _latLoadTransferF;
+  // Sidewall deflection: linear above 600 lb baseline, 0.48° at 1400 lb ref
+  const swCamber = Math.max(
+    0,
+    SIDEWALL_DEFL_REF_DEG + (rfApexLoad - SIDEWALL_DEFL_REF_LOAD) * SIDEWALL_DEFL_RATE
+  );
+
   // ── Oval: left turn only ──────────────────────────────────────────────────
   const rfCasterGain = -(rfCaster * T.casterCoeffRF);
   const lfCasterGain =  (lfCaster * T.casterCoeffLF);
   const rfBodyRoll   = -(rollAtApex * T.slaJounceCoeff);
   const lfBodyRoll   =  (rollAtApex * T.slaDroopCoeff);
-  const swCamber     = 0.48; // sidewall compliance at RF load ~1400 lbs
 
   // Ground camber: RF is outside, LF is inside (for oval left turn)
   const rfGroundCamber = rfStatic + rfCasterGain + rfBodyRoll + rollAtApex + swCamber;
   const lfGroundCamber = lfStatic + lfCasterGain + lfBodyRoll - rollAtApex;
   const rfCamberDev    = rfGroundCamber - T.idealRFGroundCamber;
   const lfCamberDev    = lfGroundCamber - T.idealLFGroundCamber;
+
+  // ── (C) Static camber demand check ────────────────────────────────────────
+  // Static needed to reach the ideal RF ground camber, given current dynamic
+  // contributions. If demanded > P71 cam-bolt limit, the chain CANNOT reach
+  // ideal via static alone — driver must reduce roll/load/sidewall instead.
+  const rfStaticDemanded = T.idealRFGroundCamber
+    - (rfCasterGain + rfBodyRoll + rollAtApex + swCamber);
+  // Reachable on P71 with cam bolt (~−3.0°); rules cap typically −4.0°.
+  const rfStaticReachable    = rfStaticDemanded >= P71_MAX_STATIC_NEG_CAMBER; // less negative than limit
+  const rfStaticWithinRules  = rfStaticDemanded >= P71_RULES_STATIC_LIMIT;
+  const rfStaticGapToReach   = rfStaticReachable ? 0 : (P71_MAX_STATIC_NEG_CAMBER - rfStaticDemanded); // positive = how many more degrees of negative would be needed
 
   // ── Figure-8: also compute right turn (roles swap) ────────────────────────
   // In a right turn: LF becomes outside, RF becomes inside
@@ -395,9 +469,11 @@ export function analyzeGeometry(geo, trackType = 'oval') {
     T,
     rf, lf, halfTrack, trackWidthF, trackWidthR, wh,
     rcAvg, rearRC, cgH, momentArm,
-    rollAtApex, rfStatic, lfStatic, rfCaster, lfCaster,
+    rollAtApex, rollPerG_used, rollIsComputed, rfApexLoad,
+    rfStatic, lfStatic, rfCaster, lfCaster,
     rfCasterGain, lfCasterGain, rfBodyRoll, lfBodyRoll, swCamber,
     rfGroundCamber, lfGroundCamber, rfCamberDev, lfCamberDev,
+    rfStaticDemanded, rfStaticReachable, rfStaticWithinRules, rfStaticGapToReach,
     rfGroundCamberRight, lfGroundCamberRight, rfCamberDevRight, lfCamberDevRight,
     armRatio, scrubRadius, bjAsymmetry, pivotAsymmetry, fvsaAsymmetry,
     rcDiff, geoLLTDF, geoLLTDR,
@@ -918,16 +994,28 @@ export default function GeometryAnalysis({ geo }) {
           measured={`${rfGroundStr}°`}
           stock={`${sign(STOCK_P71.rfGroundCamber)}° at street 0.5G (positive — flat-foot)`}
           optimal={`${T.idealRFGroundCamber}° for ${T.label}`}
-          sev={rfCamberSev}
-          handling={Math.abs(a.rfCamberDev) < 0.3
-            ? `Contact patch fully loaded across the full tread width at apex. Maximum lateral grip from RF — pyrometer should show even temps inside-to-outside.`
+          sev={!a.rfStaticReachable ? 'critical' : rfCamberSev}
+          handling={!a.rfStaticReachable
+            ? `⚠ STATIC CAMBER LIMITED. To hit −2.0° ground camber the chain demands ${a.rfStaticDemanded.toFixed(2)}° static — beyond the P71 cam bolt's ~−3.0° limit by ${a.rfStaticGapToReach.toFixed(2)}°. RF will roll onto outside edge at apex regardless of alignment. Real fix is to REDUCE the dynamic terms: stiffer front spring/ARB to cut body roll, +2 psi RF cold to cut sidewall compliance, or lower CG. ${a.rollIsComputed ? `Current computed body roll is ${a.rollAtApex.toFixed(2)}° (from your spring rates) — every 1° less roll buys back 1° of negative ground camber.` : 'Enter your spring rates to get a real-roll number — current calc uses literature 3.1°/g.'}`
+            : Math.abs(a.rfCamberDev) < 0.3
+              ? `Contact patch fully loaded across the full tread width at apex. Maximum lateral grip from RF — pyrometer should show even temps inside-to-outside.`
             : a.rfCamberDev > 0.3
-              ? `${a.rfCamberDev.toFixed(2)}° short of ideal (not enough negative). Outside tread will overload at apex — pyrometer outside zone hottest. Lateral grip reduced ~5–15% depending on severity → mid-corner push. Fix: bring static to ${(a.rfStatic - a.rfCamberDev).toFixed(2)}°.`
-            : `${Math.abs(a.rfCamberDev).toFixed(2)}° past ideal (over-cambered). Only inside edge contacts at apex — pyrometer inside zone hottest. Inside edge wears fast, lateral grip reduced. Reduce static negative.`}
+              ? `${a.rfCamberDev.toFixed(2)}° short of ideal (not enough negative). Outside tread will overload — pyrometer outside zone hottest = ROLLED OUTSIDE EDGE. Lateral grip reduced 5–15% → mid-corner push. Fix: bring static to ${a.rfStaticDemanded.toFixed(2)}°.`
+            : `${Math.abs(a.rfCamberDev).toFixed(2)}° past ideal (over-cambered). Only inside edge contacts at apex — pyrometer inside zone hottest. Inside edge wears fast. Reduce static negative.`}
           tip={<Tip
             changeable={true}
-            text={`Ground camber is what the tire actually sees at the contact patch during cornering. Chain at ${T.trackG}G (${a.rollAtApex.toFixed(2)}° body roll): static ${sign(a.rfStatic)}° + caster gain ${a.rfCasterGain.toFixed(2)}° + SLA jounce ${a.rfBodyRoll.toFixed(2)}° + roll-frame ${'+'+a.rollAtApex.toFixed(2)}° + sidewall +0.48° = ${rfGroundStr}°. ${isOval ? 'On oval, RF is always the outside tire — needs −2.0° ideal.' : 'On figure-8 left turn, RF is the outside tire — target −1.75°.'}`}
-            fixMethod={`Increase negative RF static camber. Target static ≈ ${(a.rfStatic - a.rfCamberDev).toFixed(2)}°. Install P71 camber bolt (replaces one strut pinch bolt) to extend range to ~−4°. Set at alignment rack.`}
+            text={`Ground camber chain at ${T.trackG}G (${a.rollAtApex.toFixed(2)}° body roll ${a.rollIsComputed ? '— COMPUTED from your springs/ARB' : '— literature constant, enter spring rates for real value'}):
+  static          ${sign(a.rfStatic)}°
+  caster gain     ${a.rfCasterGain.toFixed(2)}°  (${a.rfCaster}° × −${T.casterCoeffRF}°/° at ${T.apexSteer}° steer)
+  SLA jounce      ${a.rfBodyRoll.toFixed(2)}°  (${a.rollAtApex.toFixed(2)}° × −${T.slaJounceCoeff}°/°)
+  roll-frame      +${a.rollAtApex.toFixed(2)}°
+  sidewall        +${a.swCamber.toFixed(2)}°  (RF apex load ≈ ${a.rfApexLoad.toFixed(0)} lb, scales with load)
+  = ground        ${rfGroundStr}°  (ideal ${T.idealRFGroundCamber}°)
+
+To reach the ideal at current dynamic terms, static would need to be ${a.rfStaticDemanded.toFixed(2)}°. P71 cam bolt limit is ~−3.0°.`}
+            fixMethod={!a.rfStaticReachable
+              ? `Static maxed out — cannot cure the rolled edge with alignment alone. Reduce body roll (stiffer front spring/ARB), reduce RF apex load (lower CG, less weight), or stiffen sidewall (+2 psi cold RF, R-comp tire). Each 1° less roll = ~1° more negative ground camber.`
+              : `Increase negative RF static camber to ${a.rfStaticDemanded.toFixed(2)}°. Install P71 camber bolt (replaces strut pinch bolt) to extend range to ~−3.0°. Set at alignment rack.`}
           />}
         />
 
@@ -1895,11 +1983,13 @@ function TrackPositionSynopsis({ a, isOval, T }) {
   }
 
   // ── MID-CORNER (steady-state lateral G) ─────────────────────────────────
-  if (a.rfCamberDev != null) {
+  if (!a.rfStaticReachable) {
+    lines.mid.push(`⚠ RF ROLLING ONTO OUTSIDE EDGE — chain demands ${a.rfStaticDemanded.toFixed(2)}° static to reach −2.0° ground camber, beyond P71 cam bolt limit (−3.0°). Cannot fix with alignment. Real levers: stiffer front spring/ARB to cut body roll (each 1° less roll = ~1° more negative ground camber), +2 psi RF cold to cut sidewall flex (apex load ≈ ${a.rfApexLoad.toFixed(0)} lb), or lower CG.`);
+  } else if (a.rfCamberDev != null) {
     if (Math.abs(a.rfCamberDev) < 0.3) {
       lines.mid.push(`RF camber dialed in for ${T.label} apex — full contact patch loaded, max lateral grip.`);
     } else if (a.rfCamberDev > 0) {
-      lines.mid.push(`RF ${a.rfCamberDev.toFixed(2)}° short of ideal at apex → outside tread overheats, mid-corner PUSH. Pyrometer outside zone hottest.`);
+      lines.mid.push(`RF ${a.rfCamberDev.toFixed(2)}° short of ideal at apex → outside tread overheats, mid-corner PUSH. Pyrometer outside zone hottest. Take static to ${a.rfStaticDemanded.toFixed(2)}°.`);
     } else {
       lines.mid.push(`RF over-cambered ${Math.abs(a.rfCamberDev).toFixed(2)}° → only inside edge contacts at apex, reduced lateral grip.`);
     }
