@@ -505,6 +505,110 @@ function Finding({ title, value, unit, sev, children, tip }) {
   );
 }
 
+// ─── Stock P71 reference baselines ────────────────────────────────────────────
+// All values are factory stock at stock ride height (no lowering, OEM springs/struts).
+// Sources: Ford service manual, Crown Vic Police Interceptor specs, prior measurements.
+const STOCK_P71 = {
+  // Roll centers
+  frontRC:        10.5,    // " — stock ride height with stock 440/475 lb/in struts
+  rearRC:         13.0,    // " — stock Watts link / Panhard equivalent
+  rcDiff:         -2.5,    // " — front lower than rear stock
+  cgHeight:       22.0,    // " — measured COG of unloaded P71
+  momentArm:      11.5,    // " — CG (22) − front RC (10.5)
+
+  // Static alignment (Ford spec, symmetric)
+  camberRF:       -0.3,    // ° — Ford spec ±0.5
+  camberLF:       -0.3,
+  casterRF:       4.5,     // ° — Ford spec
+  casterLF:       4.5,
+
+  // Camber chain output at 0.5G (street use, gentle cornering)
+  rfGroundCamber: +0.8,    // ° — outside tire goes positive on street car
+  lfGroundCamber: +0.5,
+
+  // Suspension geometry
+  bjAsymmetry:    0.0,     // " — symmetric stock
+  pivotAsymmetry: 0.0,
+  fvsa:           18.0,    // " — typical SLA FVSA
+  scrubRadius:    0.45,    // " — stock 16x7 wheel, 1.75 offset
+  wheelHeight:    13.6,    // " — stock 235/55R17 radius
+
+  // LLTD
+  geoLLTDF:       0.50,    // 50/50 stock geometric split
+  rollRateFront:  0.50,
+
+  // Springs / wheel rates / frequencies
+  springF:        475,     // lb/in — Police/Taxi front (most common)
+  springR:        160,     // lb/in — stock rear coil
+  irF:            0.52,
+  irR:            1.0,
+  kwF:            128,     // lb/in — 475 × 0.52²
+  kwR:            160,
+  rideFreqF:      80,      // cpm — stock comfort tuning
+  rideFreqR:      88,
+  rollGradient:   5.5,     // deg/g — stock comfort
+
+  // ARB
+  arbDiameter:    1.161,   // " — stock 29.5mm front bar
+  arbR:           0,       // no rear bar stock
+
+  // Bumpstop / shock
+  shockGapF:      2.0,     // " — stock at ride height
+  shockGapR:      2.0,
+  rideHeight:     0,       // " from stock (zero by definition)
+  rake:           0.5,     // " — slight nose-up stock
+
+  // Damping
+  zetaBumpF:      0.25,    // ζ — passenger car comfort
+  zetaRebF:       0.50,
+  zetaBumpR:      0.25,
+  zetaRebR:       0.50,
+  brRatio:        2.0,     // 1:2 standard
+};
+
+// ─── Metric tile — structured 4-row layout ────────────────────────────────────
+// Replaces free-form Finding for measurable values. Shows Measured / Stock P71 /
+// Optimal / Handling Effect at a glance. Tip stays for deep-dive.
+function Metric({
+  title,           // e.g. "Front Roll Center"
+  measured,        // string formatted value e.g. "18.5" or "+1.50°"
+  stock,           // string formatted stock value e.g. "10.5" (factory)"
+  optimal,         // string optimal range/target e.g. "15–25" (in range ✓)"
+  handling,        // string — what this measured value is doing to the car
+  sev,             // 'good' | 'info' | 'warning' | 'critical'
+  tip,             // existing <Tip /> element for deep dive
+  unit = '',
+}) {
+  const s = SEV[sev] || SEV.info;
+  return (
+    <div style={{
+      background: s.bg, border: `1px solid ${s.border}`, borderRadius: 6,
+      padding: '10px 14px', marginBottom: 8,
+    }}>
+      <div style={{ display: 'flex', alignItems: 'baseline', gap: 10, flexWrap: 'wrap', marginBottom: 8 }}>
+        <span style={{ color: s.color, fontWeight: 700, fontSize: 13, fontFamily: 'monospace' }}>
+          {s.icon} {title}
+        </span>
+        {tip}
+      </div>
+
+      <div style={{ display: 'grid', gridTemplateColumns: '90px 1fr', rowGap: 4, columnGap: 10, fontFamily: 'monospace', fontSize: 11.5, lineHeight: 1.5 }}>
+        <span style={{ color: '#64748b', fontWeight: 700 }}>MEASURED</span>
+        <span style={{ color: '#e2e8f0', fontWeight: 600 }}>{measured ?? '—'}{unit && measured != null ? unit : ''}</span>
+
+        <span style={{ color: '#64748b', fontWeight: 700 }}>STOCK P71</span>
+        <span style={{ color: '#94a3b8' }}>{stock ?? '—'}</span>
+
+        <span style={{ color: '#64748b', fontWeight: 700 }}>OPTIMAL</span>
+        <span style={{ color: '#94a3b8' }}>{optimal ?? '—'}</span>
+
+        <span style={{ color: s.color, fontWeight: 700 }}>HANDLING</span>
+        <span style={{ color: '#cbd5e1' }}>{handling ?? '—'}</span>
+      </div>
+    </div>
+  );
+}
+
 function Section({ title, color = '#60a5fa', children }) {
   const [collapsed, setCollapsed] = useState(false);
   return (
@@ -708,68 +812,84 @@ export default function GeometryAnalysis({ geo }) {
           SECTION 1 — ROLL CENTER
       ══════════════════════════════════════════════════════════════════ */}
       <Section title="1 — ROLL CENTER HEIGHTS" color="#22c55e">
-        <Finding
+        <Metric
           title="Front Roll Center"
-          value={a.rcAvg?.toFixed(2)} unit='"'
+          measured={a.rcAvg != null ? `${a.rcAvg.toFixed(2)}"` : null}
+          stock={`${STOCK_P71.frontRC}" (stock ride height, OEM struts)`}
+          optimal={`${T.idealFrontRC_low}–${T.idealFrontRC_high}" for ${T.label}`}
           sev={frontRCSev}
+          handling={a.rcAvg == null ? 'Enter front hardpoints to compute.'
+            : a.rcAvg > T.idealFrontRC_high
+              ? `High front RC = lateral load transferred through control arms before springs/ARB engage. Car loads RF abruptly on entry — sharp turn-in but reduced ARB tuning authority. Increases jacking force tendency (body rises in cornering rather than rolling).`
+            : a.rcAvg < T.idealFrontRC_low
+              ? `Low front RC = elastic (spring/ARB) load transfer dominates. Slower, smoother weight transfer to RF. Body rolls more for the same lateral G — front end "leans into" the corner. Spring/ARB changes have strong tuning authority.`
+            : `RC in target range — balance of geometric and elastic load transfer. ARB and spring changes will produce predictable, proportional handling adjustments.`}
           tip={<Tip
             changeable={false}
             text="On the P71 SLA front suspension, roll center height is set by the control arm geometry — hardpoints welded/bolted to the factory subframe. The only shop-adjustable input is ride height: lowering changes arm angles and migrates the RC downward."
             fixMethod='Ride height adjustment (spring swap or spring spacers) shifts RC. Each 1" of lowering drops front RC approximately 1–2" depending on arm angles. On a figure-8, a lower RC (10–20") is preferred to allow more elastic roll and spring/ARB tuning authority.'
           />}
-        >
-          Front RC at {a.rcAvg?.toFixed(1)}" — target range {T.idealFrontRC_low}–{T.idealFrontRC_high}". RF line intersects CL at {a.rf.rcHeight?.toFixed(1)}", LF at {a.lf.rcHeight?.toFixed(1)}".
-          {a.rcAvg != null && a.rcAvg > T.idealFrontRC_high
-            ? ` RC is above the target range — most front lateral load transfer is geometric (through arms), reducing spring/ARB effectiveness.`
-            : a.rcAvg != null && a.rcAvg < T.idealFrontRC_low
-            ? ` RC is below target — more elastic roll expected, spring/ARB tuning is dominant.`
-            : ` RC is within target range.`}
-        </Finding>
+        />
 
-        <Finding
+        <Metric
           title="Rear Roll Center (Watts Link)"
-          value={a.rearRC.toFixed(2)} unit='"'
+          measured={`${a.rearRC.toFixed(2)}"`}
+          stock={`${STOCK_P71.rearRC}" (stock Panhard bar / Watts equivalent)`}
+          optimal={`${T.idealRearRC_low}–${T.idealRearRC_high}" for ${T.label}`}
           sev={rearRCSev}
+          handling={a.rearRC > T.idealRearRC_high
+            ? `Rear RC too high — rear axle loads up geometrically faster than front. Tail sets first in corner = oversteer / loose entry. Watts link likely needs to drop ${(a.rearRC - T.idealRearRC_high).toFixed(1)}–${(a.rearRC - (T.idealRearRC_high + T.idealRearRC_low)/2).toFixed(1)}".`
+            : a.rearRC < T.idealRearRC_low
+              ? `Rear RC too low — rear elastic transfer dominates, slow weight build on rear tires. Car may understeer mid-corner as front loads up before rear catches up.`
+            : `In target — Watts link providing balanced geometric transfer to rear. Predictable rotation through corner.`}
           tip={<Tip
             changeable={true}
             text={`The Watts link pivot height sets rear RC. Target ${T.idealRearRC_low}–${T.idealRearRC_high}" for ${T.label}. Aftermarket adjustable Watts link brackets allow raising or lowering by 1–4". Note: the Watts link roll axis (line connecting front and rear lateral restraint centers in the side view) also controls roll steer — if the roll axis tilts downward toward the front, the axle has roll understeer geometry; tilted up toward the front = roll oversteer. (Milliken §17.4)`}
-            fixMethod={`Adjustable Watts link center pivot bracket. Each 1" raise increases rear geometric LLTD ~0.5–1%. ${isOval ? 'Target 12–16" for oval.' : 'For figure-8 target 10–18" — symmetric handling, lower RC reduces rear-end stiffness in both directions.'} Keep Watts link as level as possible in the side view to minimize roll steer — a heavily angled Watts link imparts a steering correction on the rear axle as the suspension rolls, which is difficult to predict and tune around.`}
+            fixMethod={`Adjustable Watts link center pivot bracket. Each 1" raise increases rear geometric LLTD ~0.5–1%. ${isOval ? 'Target 12–16" for oval.' : 'For figure-8 target 10–18" — symmetric handling, lower RC reduces rear-end stiffness in both directions.'} Keep Watts link as level as possible in the side view to minimize roll steer.`}
           />}
-        >
-          Rear RC at {a.rearRC.toFixed(1)}" — target {T.idealRearRC_low}–{T.idealRearRC_high}". {rearRCSev === 'good' ? 'Within target range.' : 'Outside target range — see fix method.'} Watts link provides near-linear lateral motion for the axle (better than a Panhard bar, which arcs laterally as it rotates). Roll steer is controlled by the fore-aft inclination of the Watts link in the side view — a level Watts link minimizes roll steer tendency.
-        </Finding>
+        />
 
-        <Finding
+        <Metric
           title="Front vs Rear RC Differential"
-          value={a.rcDiff != null ? sign(a.rcDiff) : '—'} unit='"'
+          measured={a.rcDiff != null ? `${sign(a.rcDiff)}"` : null}
+          stock={`${sign(STOCK_P71.rcDiff)}" (rear higher than front stock)`}
+          optimal={isOval ? '+2 to +6" (front higher — biases load to RF on left turn)' : '−1 to +1" (near-equal for symmetric figure-8)'}
           sev={a.rcDiff != null ? (isOval ? (a.rcDiff > 0 ? 'good' : 'warning') : (Math.abs(a.rcDiff) < 3 ? 'good' : 'warning')) : 'info'}
+          handling={a.rcDiff == null ? '—'
+            : isOval && a.rcDiff > 2
+              ? `Front-biased geometric split working in your favor on oval — RF loads up first through links, biasing weight to the heavily loaded outside-front tire. Sharp turn-in.`
+            : isOval && a.rcDiff < 0
+              ? `Rear higher than front on an oval = rear loads up first = corner-entry oversteer / loose. Raise front RC (taller springs) or lower rear Watts pivot.`
+            : !isOval && Math.abs(a.rcDiff) > 3
+              ? `Large RC differential on figure-8 = car will handle differently in left vs right turns. Equalize by adjusting Watts link to match front RC.`
+            : `Differential is appropriate for ${T.label}. Geometric load transfer split is balanced for the track type.`}
           tip={<Tip
             changeable={false}
             text={`The front/rear RC differential sets the balance of geometric vs elastic load transfer. ${isOval ? 'On oval, front higher than rear is intentional — biases load to the outside (RF) in left turns.' : 'On figure-8, a small differential (front ≈ rear) helps keep the car balanced through both left and right turns.'}`}
             fixMethod="Adjust rear Watts link pivot height to change differential. Front RC only moves with ride height changes."
           />}
-        >
-          {rcDiffNote}
-        </Finding>
+        />
 
-        <Finding
+        <Metric
           title="CG-to-Roll-Center Moment Arm"
-          value={a.momentArm?.toFixed(2)} unit='"'
+          measured={a.momentArm != null ? `${a.momentArm.toFixed(2)}"` : null}
+          stock={`${STOCK_P71.momentArm}" (CG 22" − stock RC 10.5")`}
+          optimal={`6–14" (gives springs/ARB authority while limiting body roll)`}
           sev={momentArmSev}
+          handling={a.momentArm == null ? '—'
+            : a.momentArm < 0
+              ? `⚠ RC is ABOVE the CG by ${Math.abs(a.momentArm).toFixed(2)}". Body moves OUTWARD in cornering rather than rolling — extreme jacking force. Car will skip and feel completely unpredictable. Raise ride height immediately.`
+            : a.momentArm < 3
+              ? `Moment arm nearly zero — geometry dominates load transfer. Springs and ARB have weak effect on balance. Adjusting front ARB stiffness will barely move LLTD. Raise the car on taller/stiffer springs to restore tuning authority.`
+            : a.momentArm > 16
+              ? `Long moment arm — heavy elastic body roll. Front end "wallows" into corners. Stiffen springs or add ARB to control roll angle.`
+            : `Healthy moment arm — springs and ARB are providing meaningful elastic load transfer. ARB stiffness changes will produce ~1–2% LLTD shift per increment. Spring changes affect balance directly.`}
           tip={<Tip
             changeable={false}
             text="The moment arm is the vertical distance between CG height and front RC height. Near-zero = ARB and springs transfer almost no elastic load, geometry dominates. Larger arm = springs and ARB dominate."
             fixMethod="Grow the moment arm by lowering the RC (raise the car on taller/stiffer springs) or by reducing RC height via fabrication. Not directly adjustable on P71."
           />}
-        >
-          {a.momentArm != null && (
-            a.momentArm < 3 && a.momentArm > 0
-              ? `Moment arm of ${a.momentArm.toFixed(2)}" — elastic load transfer through springs and ARB is nearly zero. Front LLTD is geometry-dominated. ARB stiffness changes have minimal effect on balance at this RC height.`
-              : a.momentArm < 0
-              ? `⚠ Roll center is ABOVE the CG (${Math.abs(a.momentArm).toFixed(2)}" above). Body moves toward the outside of the corner rather than rolling normally. Check ride height — likely too low.`
-              : `Moment arm of ${a.momentArm.toFixed(2)}" — elastic load transfer through springs and ARB is active. Standard spring/ARB tuning applies.`
-          )}
-        </Finding>
+        />
       </Section>
 
       {/* ══════════════════════════════════════════════════════════════════
@@ -777,34 +897,71 @@ export default function GeometryAnalysis({ geo }) {
       ══════════════════════════════════════════════════════════════════ */}
       <Section title={isOval ? '2 — CAMBER CHAIN (LEFT TURN ONLY)' : '2 — CAMBER CHAIN (LEFT TURN)'} color="#f97316">
 
-        <Finding
-          title="RF Ground Camber at Apex"
-          value={rfGroundStr} unit="°"
-          sev={rfCamberSev}
+        <Metric
+          title="RF Static Camber"
+          measured={`${sign(a.rfStatic)}°`}
+          stock={`${sign(STOCK_P71.camberRF)}° (Ford spec)`}
+          optimal={`−2.0° to −3.0° for oval RF (most negative — outside tire needs it)`}
+          sev={a.rfStatic > -1.0 ? 'warning' : a.rfStatic > -3.5 ? 'good' : 'info'}
+          handling={a.rfStatic > -1.0
+            ? `Far from race-needed negative — outside RF tire will run flat-foot or positive at apex once body roll is added in. Outside tread will overheat (pyrometer outside zone hot). Install P71 camber bolt and dial to −2.5°.`
+            : `Static camber set in race window. Combined with caster gain and body roll droop, gives the RF the negative camber it needs at apex.`}
           tip={<Tip
             changeable={true}
-            text={`Ground camber is what the tire actually sees at the contact patch during cornering. ${isOval ? 'On oval, RF is always the outside tire — needs −2.0° ideal.' : 'On figure-8 left turn, RF is the outside tire — target −1.75°.'}`}
+            text="Static camber is the alignment-rack measurement at ride height with the wheel pointed straight. The RF on oval needs heavy negative because body roll, caster gain, and sidewall compliance all add positive camber once the car is loaded."
+            fixMethod="Install P71 camber bolt (replaces one strut pinch bolt) to extend range to ~−4°. Set at alignment rack with the car at race ride height and full fluid load."
+          />}
+        />
+
+        <Metric
+          title="RF Ground Camber at Apex"
+          measured={`${rfGroundStr}°`}
+          stock={`${sign(STOCK_P71.rfGroundCamber)}° at street 0.5G (positive — flat-foot)`}
+          optimal={`${T.idealRFGroundCamber}° for ${T.label}`}
+          sev={rfCamberSev}
+          handling={Math.abs(a.rfCamberDev) < 0.3
+            ? `Contact patch fully loaded across the full tread width at apex. Maximum lateral grip from RF — pyrometer should show even temps inside-to-outside.`
+            : a.rfCamberDev > 0.3
+              ? `${a.rfCamberDev.toFixed(2)}° short of ideal (not enough negative). Outside tread will overload at apex — pyrometer outside zone hottest. Lateral grip reduced ~5–15% depending on severity → mid-corner push. Fix: bring static to ${(a.rfStatic - a.rfCamberDev).toFixed(2)}°.`
+            : `${Math.abs(a.rfCamberDev).toFixed(2)}° past ideal (over-cambered). Only inside edge contacts at apex — pyrometer inside zone hottest. Inside edge wears fast, lateral grip reduced. Reduce static negative.`}
+          tip={<Tip
+            changeable={true}
+            text={`Ground camber is what the tire actually sees at the contact patch during cornering. Chain at ${T.trackG}G (${a.rollAtApex.toFixed(2)}° body roll): static ${sign(a.rfStatic)}° + caster gain ${a.rfCasterGain.toFixed(2)}° + SLA jounce ${a.rfBodyRoll.toFixed(2)}° + roll-frame ${'+'+a.rollAtApex.toFixed(2)}° + sidewall +0.48° = ${rfGroundStr}°. ${isOval ? 'On oval, RF is always the outside tire — needs −2.0° ideal.' : 'On figure-8 left turn, RF is the outside tire — target −1.75°.'}`}
             fixMethod={`Increase negative RF static camber. Target static ≈ ${(a.rfStatic - a.rfCamberDev).toFixed(2)}°. Install P71 camber bolt (replaces one strut pinch bolt) to extend range to ~−4°. Set at alignment rack.`}
           />}
-        >
-          Chain at {T.trackG}G ({a.rollAtApex.toFixed(2)}° body roll):{'\n'}
-          {'  '}Static: {sign(a.rfStatic)}°{'\n'}
-          {'  '}+ Caster gain ({a.rfCaster}° × −{T.casterCoeffRF}°/° at {T.apexSteer}° steer): {a.rfCasterGain.toFixed(2)}°{'\n'}
-          {'  '}+ SLA jounce ({a.rollAtApex.toFixed(2)}° × −{T.slaJounceCoeff}°/°): {a.rfBodyRoll.toFixed(2)}°{'\n'}
-          {'  '}+ Roll-frame conversion: +{a.rollAtApex.toFixed(2)}°{'\n'}
-          {'  '}+ Sidewall compliance: +0.48°{'\n'}
-          {'  '}= Ground camber: {rfGroundStr}° (ideal {T.idealRFGroundCamber}°){'\n\n'}
-          {Math.abs(a.rfCamberDev) < 0.3
-            ? 'Within 0.3° of ideal — contact patch well loaded.'
-            : a.rfCamberDev > 0
-            ? `${a.rfCamberDev.toFixed(2)}° short of ideal (INSUFFICIENT negative). Outside tread overloaded — pyrometer will show outside hotter. Fix: increase static negative camber to ≈ ${(a.rfStatic - a.rfCamberDev).toFixed(2)}°.`
-            : `${Math.abs(a.rfCamberDev).toFixed(2)}° past ideal (OVER-CAMBERED). Inside tread overloaded — inside zone hotter on pyrometer. Reduce negative camber.`}
-        </Finding>
+        />
 
-        <Finding
+        <Metric
+          title="LF Static Camber"
+          measured={`${sign(a.lfStatic)}°`}
+          stock={`${sign(STOCK_P71.camberLF)}° (Ford spec)`}
+          optimal={isOval ? `+2° to +3° (positive — inside tire droops in left turn)` : `−1.5° to −2° (symmetric for figure-8)`}
+          sev={isOval ? (a.lfStatic < 1.5 ? 'warning' : 'good') : (Math.abs(a.lfStatic + 1.75) < 1 ? 'good' : 'warning')}
+          handling={isOval && a.lfStatic < 1.5
+            ? `Insufficient positive LF camber for oval — when LF droops in left turn, contact patch will lift onto the outer edge. Set LF static to +2.5°.`
+            : isOval
+              ? `Set up correctly for oval — LF positive static lets the inside tire stay flat as it droops.`
+            : Math.abs(a.lfStatic + 1.75) < 1
+              ? `Symmetric setting suitable for figure-8 — LF can handle being outside tire in right turns.`
+            : `Asymmetric LF setting — figure-8 needs LF and RF static camber to match within ±0.5°.`}
+          tip={<Tip
+            changeable={true}
+            text={isOval ? 'LF on oval needs positive static camber so it lays flat when it droops during left turn cornering.' : 'For figure-8 LF must handle being outside in right turns — match RF static settings.'}
+            fixMethod="Adjust at alignment rack. P71 camber bolt provides ±4° range from stock."
+          />}
+        />
+
+        <Metric
           title="LF Ground Camber at Apex"
-          value={lfGroundStr} unit="°"
+          measured={`${lfGroundStr}°`}
+          stock={`${sign(STOCK_P71.lfGroundCamber)}° at street 0.5G`}
+          optimal={`${T.idealLFGroundCamber}° for ${T.label}`}
           sev={lfCamberSev}
+          handling={Math.abs(a.lfCamberDev) < 0.3
+            ? `LF inside tire contact patch balanced at apex.`
+            : a.lfCamberDev > 0.3
+              ? `LF too positive at apex — inside tire on its inner edge. ${isOval ? 'Inside tire is unloaded so the effect on grip is small, but tire wear will be biased.' : 'Reduce static LF camber.'}`
+            : `LF too negative — outer edge overloaded. Increase static LF camber.`}
           tip={<Tip
             changeable={true}
             text={isOval
@@ -814,49 +971,67 @@ export default function GeometryAnalysis({ geo }) {
               ? 'Adjust LF static camber at alignment rack. Oval typical: +2° to +3° static — SLA droop subtracts ~1.4° during cornering. Camber bolt provides ±4° range.'
               : 'For figure-8: LF and RF static camber should be nearly equal (both slightly negative, −1° to −2°). Adjust at alignment rack.'}
           />}
-        >
-          {isOval
-            ? `Chain: static ${sign(a.lfStatic)}° + caster gain ${a.lfCasterGain.toFixed(2)}° + SLA droop +${a.lfBodyRoll.toFixed(2)}° − roll frame ${a.rollAtApex.toFixed(2)}° = ${lfGroundStr}° (ideal ${T.idealLFGroundCamber}°).`
-            : `Left turn (inside): static ${sign(a.lfStatic)}° + caster ${a.lfCasterGain.toFixed(2)}° + droop +${a.lfBodyRoll.toFixed(2)}° − roll ${a.rollAtApex.toFixed(2)}° = ${lfGroundStr}° (ideal ${T.idealLFGroundCamber}°).`}
-          {'\n\n'}
-          {Math.abs(a.lfCamberDev) < 0.3
-            ? 'LF contact patch well balanced.'
-            : a.lfCamberDev > 0
-            ? `LF is ${a.lfCamberDev.toFixed(2)}° too positive — inside edge overloaded. Reduce static LF camber.`
-            : `LF is ${Math.abs(a.lfCamberDev).toFixed(2)}° too negative — outer edge overloaded. Increase static LF camber.`}
-        </Finding>
+        />
+
+        <Metric
+          title="Caster (RF / LF)"
+          measured={`RF ${a.rfCaster}° / LF ${a.lfCaster}°`}
+          stock={`${STOCK_P71.casterRF}° / ${STOCK_P71.casterLF}° (Ford spec — symmetric)`}
+          optimal={isOval ? `RF 5–7° / LF 8–10° (asymmetric — LF higher pulls the car LEFT down straights)` : `Both 5–7° symmetric (figure-8 turns both directions)`}
+          sev={isOval ? ((a.lfCaster - a.rfCaster) > 1.5 && (a.lfCaster - a.rfCaster) < 4 ? 'good' : 'warning') : (Math.abs(a.lfCaster - a.rfCaster) < 1 ? 'good' : 'warning')}
+          handling={isOval
+            ? (a.lfCaster - a.rfCaster) >= 1.5 && (a.lfCaster - a.rfCaster) <= 4
+              ? `Caster split working in your favor — the higher LF caster pulls the car gently left down straights, reducing steering effort and adding self-centering on left turn entry.`
+              : (a.lfCaster - a.rfCaster) < 1.5
+                ? `Caster split too small or symmetric — car wanders straight, no left-pull benefit. Set LF to 8–9° to add left-pull.`
+              : `LF caster MUCH higher than RF — heavy left-pull, may make right corrections difficult on straights.`
+            : Math.abs(a.lfCaster - a.rfCaster) < 1
+              ? `Symmetric caster — figure-8 will turn left and right with equal effort.`
+              : `Asymmetric caster on figure-8 — car will pull to one side on straights, asymmetric camber gain L vs R turns.`}
+          tip={<Tip
+            changeable={true}
+            text="Caster is the fore-aft tilt of the steering axis. Higher caster = more self-centering, more camber gain at steer. On oval, asymmetric caster (LF higher) creates a constant pull toward the inside of the corner, reducing driver effort."
+            fixMethod="P71 lower control arm uses eccentric caster bolts — turn each to shift the lower arm pivot fore/aft. ±2° range typical. Set at alignment rack."
+          />}
+        />
       </Section>
 
       {/* Figure-8: right turn camber chain */}
       {!isOval && a.rfGroundCamberRight != null && (
         <Section title="2B — CAMBER CHAIN (RIGHT TURN)" color="#f97316">
-          <Finding
+          <Metric
             title="LF Ground Camber — Right Turn (LF is now outside)"
-            value={sign(a.lfGroundCamberRight)} unit="°"
+            measured={`${sign(a.lfGroundCamberRight)}°`}
+            stock={`+0.8° at street 0.5G (positive — flat-foot)`}
+            optimal={`${T.idealRFGroundCamber}° (LF is outside in right turn)`}
             sev={camberSev(a.lfCamberDevRight)}
+            handling={Math.abs(a.lfCamberDevRight) < 0.3
+              ? `LF outside contact patch loaded correctly in right turn — full lateral grip.`
+              : a.lfCamberDevRight > 0.3
+                ? `${a.lfCamberDevRight.toFixed(2)}° short of ideal — outside tread overloaded in right turn. Push tendency right turns. Add negative LF static.`
+              : `${Math.abs(a.lfCamberDevRight).toFixed(2)}° over-cambered for right-turn outside — inside edge overloaded.`}
             tip={<Tip
               changeable={true}
               text="In a right turn on figure-8, LF becomes the outside tire. It jounces (compresses), caster gain reverses direction, and roll-frame conversion reverses. Target: −1.75°."
               fixMethod="Reduce LF static camber toward −1° to −2° to handle being the outside tire in right turns. This is a compromise — symmetric static settings are the only way to balance both turn directions."
             />}
-          >
-            Right turn LF (outside): static {sign(a.lfStatic)}° − caster {Math.abs(a.lfCasterGain).toFixed(2)}° + jounce {(a.rollAtApex * T.slaJounceCoeff * -1).toFixed(2)}° + roll +{a.rollAtApex.toFixed(2)}° + sidewall +0.48° = {sign(a.lfGroundCamberRight)}° (ideal {T.idealRFGroundCamber}°).{'\n\n'}
-            {Math.abs(a.lfCamberDevRight) < 0.3 ? 'Within 0.3° of ideal.' : a.lfCamberDevRight > 0 ? `${a.lfCamberDevRight.toFixed(2)}° short of ideal — add more negative LF static camber.` : `${Math.abs(a.lfCamberDevRight).toFixed(2)}° over-cambered for right turn outside.`}
-          </Finding>
+          />
 
-          <Finding
+          <Metric
             title="RF Ground Camber — Right Turn (RF is now inside)"
-            value={sign(a.rfGroundCamberRight)} unit="°"
+            measured={`${sign(a.rfGroundCamberRight)}°`}
+            stock={`+0.8° at street 0.5G`}
+            optimal={`${T.idealLFGroundCamber}° (RF is inside in right turn)`}
             sev={camberSev(a.rfCamberDevRight)}
+            handling={Math.abs(a.rfCamberDevRight) < 0.3
+              ? `RF inside contact patch balanced in right turn.`
+              : `${Math.abs(a.rfCamberDevRight).toFixed(2)}° from ideal — figure-8 requires compromise; pyrometer data needed.`}
             tip={<Tip
               changeable={true}
-              text="In a right turn, RF becomes the inside tire. It droops, caster gain reverses, and roll-frame conversion reverses. For a balanced figure-8 setup, RF inside camber at right turn should be near −1.75° as well (same target as inside tire)."
-              fixMethod="RF camber at right-turn inside is determined by static setting minus all the dynamic gains (which work against negative camber when on the inside). Symmetric static around −1.5° to −2° is the target."
+              text="In a right turn, RF becomes the inside tire. It droops, caster gain reverses, and roll-frame conversion reverses."
+              fixMethod="Symmetric static around −1.5° to −2° is the target for figure-8."
             />}
-          >
-            Right turn RF (inside): static {sign(a.rfStatic)}° − caster {Math.abs(a.rfCasterGain).toFixed(2)}° + droop +{(a.rollAtApex * T.slaDroopCoeff).toFixed(2)}° − roll {a.rollAtApex.toFixed(2)}° = {sign(a.rfGroundCamberRight)}°.{'\n\n'}
-            {Math.abs(a.rfCamberDevRight) < 0.3 ? 'Within 0.3° of ideal for inside tire.' : `${Math.abs(a.rfCamberDevRight).toFixed(2)}° from ideal — figure-8 requires compromise between left and right turn camber.`}
-          </Finding>
+          />
 
           <Finding title="Figure-8 Camber Compromise Summary" sev="info">
             Left turn: RF outside {rfGroundStr}° (ideal {T.idealRFGroundCamber}°) / LF inside {lfGroundStr}° (ideal {T.idealLFGroundCamber}°){'\n'}
@@ -870,249 +1045,273 @@ export default function GeometryAnalysis({ geo }) {
           SECTION 3 — INSTANT CENTER & FVSA
       ══════════════════════════════════════════════════════════════════ */}
       <Section title="3 — INSTANT CENTER & SWING ARM LENGTH" color="#a78bfa">
-        <Finding
+        <Metric
           title="RF Instant Center"
-          value={a.rf.ic ? `(${a.rf.ic.x.toFixed(1)}", ${a.rf.ic.y.toFixed(1)}")` : '—'}
-          unit=""
+          measured={a.rf.ic ? `(${a.rf.ic.x.toFixed(1)}", ${a.rf.ic.y.toFixed(1)}")` : null}
+          stock={`(~−18", ~10") (typical SLA stock geometry)`}
+          optimal={`IC inboard of wheel, above ground — fixed by P71 hardpoints`}
           sev={a.rf.ic ? 'info' : 'warning'}
+          handling={a.rf.ic
+            ? `IC ${Math.abs(a.rf.ic.x).toFixed(1)}" inboard at ${a.rf.ic.y.toFixed(1)}" height = camber gain rate of ${(57.3 / (a.rf.fvsa ?? 1)).toFixed(2)}°/in of suspension travel. As RF jounces in cornering, this rate continuously adds negative camber to keep the outside tire flat — this is the P71's biggest oval advantage over MacPherson cars.`
+            : 'Enter all four front hardpoints to compute.'}
           tip={<Tip
             changeable={false}
             text="The IC is where the upper and lower control arm lines intersect when extended. Its location sets camber gain rate per inch of suspension travel. Fixed by factory arm geometry."
             fixMethod="IC location cannot be changed without fabricating new pickup points. Slight shift possible via ride height change (arm angle changes)."
           />}
-        >
-          {a.rf.ic
-            ? `RF IC: ${Math.abs(a.rf.ic.x).toFixed(1)}" inboard of wheel CL at ${a.rf.ic.y.toFixed(1)}" height. Camber gain: ${(57.3 / (a.rf.fvsa ?? 1)).toFixed(3)}°/inch of travel.`
-            : 'RF IC could not be computed — check all four hardpoints are entered.'}
-        </Finding>
+        />
 
-        <Finding
+        <Metric
           title="LF Instant Center"
-          value={a.lf.ic ? `(${a.lf.ic.x.toFixed(1)}", ${a.lf.ic.y.toFixed(1)}")` : '—'}
-          unit=""
+          measured={a.lf.ic ? `(${a.lf.ic.x.toFixed(1)}", ${a.lf.ic.y.toFixed(1)}")` : null}
+          stock={`Symmetric to RF (~+18", ~10")`}
+          optimal={isOval ? `Slight L/R asymmetry acceptable on oval` : `Match RF within ±1" for figure-8`}
           sev={a.lf.ic ? 'info' : 'warning'}
-          tip={<Tip changeable={false} text="The LF IC is typically slightly further from the wheel than RF on an asymmetric oval setup. For figure-8, LF and RF ICs should be nearly symmetric." fixMethod="Fixed geometry." />}
-        >
-          {a.lf.ic
-            ? `LF IC: ${Math.abs(a.lf.ic.x).toFixed(1)}" inboard, ${a.lf.ic.y.toFixed(1)}" height. L/R IC height difference: ${Math.abs((a.rf.ic?.y ?? 0) - a.lf.ic.y).toFixed(2)}"${!isOval && Math.abs((a.rf.ic?.y ?? 0) - a.lf.ic.y) > 1.5 ? ' — significant asymmetry for figure-8, will produce different camber gain rates L vs R' : ''}.`
+          handling={a.lf.ic && a.rf.ic
+            ? `L/R IC height differs by ${Math.abs((a.rf.ic?.y ?? 0) - a.lf.ic.y).toFixed(2)}". ${!isOval && Math.abs((a.rf.ic?.y ?? 0) - a.lf.ic.y) > 1.5 ? 'Significant asymmetry for figure-8 — different camber gain rates L vs R will make the car feel inconsistent corner-to-corner.' : 'Acceptable symmetry.'}`
             : 'LF IC could not be computed.'}
-        </Finding>
+          tip={<Tip changeable={false} text="LF IC: typically symmetric to RF on stock platform. Asymmetry in measurements points to LF/RF spring or arm height differences." fixMethod="Fixed geometry." />}
+        />
 
-        <Finding
-          title="RF FVSA"
-          value={a.rf.fvsa?.toFixed(1)} unit='"'
+        <Metric
+          title="RF FVSA (Front View Swing Arm)"
+          measured={a.rf.fvsa != null ? `${a.rf.fvsa.toFixed(1)}"` : null}
+          stock={`${STOCK_P71.fvsa}" (typical SLA stock)`}
+          optimal={`${T.idealFVSA_low}–${T.idealFVSA_high}" for ${T.label}`}
           sev={fvsaSev(a.rf.fvsa)}
+          handling={a.rf.fvsa == null ? 'Cannot compute — IC not found.'
+            : a.rf.fvsa < T.idealFVSA_low
+              ? `Very short FVSA = aggressive ${(Math.atan(1/a.rf.fvsa) * 180/Math.PI).toFixed(2)}°/in camber gain. Outside tire stays well-cambered but susceptible to scrub on rough surfaces (lateral movement of contact patch in jounce).`
+            : a.rf.fvsa > T.idealFVSA_high
+              ? `Long FVSA = gentle ${(Math.atan(1/a.rf.fvsa) * 180/Math.PI).toFixed(2)}°/in camber gain. Less roll compensation — more burden on static camber to keep RF outside tire flat. Less scrub disturbance.`
+            : `In target — ${(Math.atan(1/a.rf.fvsa) * 180/Math.PI).toFixed(2)}°/in camber gain provides good roll compensation without excessive scrub.`}
           tip={<Tip
             changeable={false}
-            text={`FVSA (Front View Swing Arm) = distance from front-view IC to wheel center. Sets camber change rate per inch of travel: rate = arctan(1/FVSA) ≈ 57.3/FVSA °/in. Target ${T.idealFVSA_low}–${T.idealFVSA_high}" for ${T.label}. NOTE: do not confuse with SVSA (Side View Swing Arm) — Milliken §17.4 states SVSA should be ≥60" to prevent power hop/brake hop. SVSA is a fore-aft measurement (controls anti-dive/squat and wheel path); FVSA is a lateral measurement (controls camber gain). The P71 short FVSA of 14–22" is intentionally short for high camber gain rate in roll — this is correct. (Milliken §17.3 Fig.17.9)`}
+            text={`FVSA = distance from front-view IC to wheel center. Sets camber change rate: rate = arctan(1/FVSA) ≈ 57.3/FVSA °/in. Target ${T.idealFVSA_low}–${T.idealFVSA_high}" for ${T.label}.`}
             fixMethod="Fixed by hardpoint geometry. Not adjustable without fabrication."
           />}
-        >
-          {a.rf.fvsa != null
-            ? `RF FVSA ${a.rf.fvsa.toFixed(1)}" — ${a.rf.fvsa >= T.idealFVSA_low && a.rf.fvsa <= T.idealFVSA_high ? 'within target' : 'outside target'} (${T.idealFVSA_low}–${T.idealFVSA_high}"). Camber gain = arctan(1/${a.rf.fvsa.toFixed(1)}) ≈ ${(Math.atan(1/a.rf.fvsa) * 180/Math.PI).toFixed(3)}°/in of travel.`
-            : 'Cannot compute — IC not found.'}
-        </Finding>
+        />
 
-        <Finding
+        <Metric
           title="LF FVSA"
-          value={a.lf.fvsa?.toFixed(1)} unit='"'
+          measured={a.lf.fvsa != null ? `${a.lf.fvsa.toFixed(1)}"` : null}
+          stock={`${STOCK_P71.fvsa}" (matches RF stock)`}
+          optimal={isOval ? `Within ±3" of RF FVSA` : `Match RF within ±1" for figure-8`}
           sev={fvsaSev(a.lf.fvsa)}
-          tip={<Tip changeable={false} text="LF FVSA sets how fast LF gains camber in droop (during cornering). For figure-8, LF and RF FVSA should be similar. Camber change rate = arctan(1/FVSA length) — Milliken §17.3." fixMethod="Fixed geometry." />}
-        >
-          {a.lf.fvsa != null && a.rf.fvsa != null
-            ? `LF ${a.lf.fvsa.toFixed(1)}" (${(Math.atan(1/a.lf.fvsa) * 180/Math.PI).toFixed(3)}°/in) vs RF ${a.rf.fvsa.toFixed(1)}" (${(Math.atan(1/a.rf.fvsa) * 180/Math.PI).toFixed(3)}°/in) — delta ${(a.lf.fvsa - a.rf.fvsa).toFixed(1)}". ${!isOval && Math.abs(a.lf.fvsa - a.rf.fvsa) > 3 ? 'Large FVSA asymmetry for figure-8 — expect noticeably different camber response L vs R turn.' : 'Asymmetry is manageable.'}`
+          handling={a.lf.fvsa != null && a.rf.fvsa != null
+            ? `Delta vs RF: ${(a.lf.fvsa - a.rf.fvsa).toFixed(1)}". ${!isOval && Math.abs(a.lf.fvsa - a.rf.fvsa) > 3 ? 'Large FVSA asymmetry for figure-8 — different camber gain L vs R = car will feel different turning each direction.' : 'Asymmetry within manageable range.'}`
             : '—'}
-        </Finding>
+          tip={<Tip changeable={false} text="LF FVSA sets how fast LF gains camber in droop (during cornering). Camber change rate = arctan(1/FVSA length) — Milliken §17.3." fixMethod="Fixed geometry." />}
+        />
 
-        <Finding
+        <Metric
           title="Camber Compensation (Milliken §7.3)"
-          value={a.rfCamberComp != null ? `~${a.rfCamberComp}` : '—'} unit="% (RF outside)"
+          measured={a.rfCamberComp != null ? `~${a.rfCamberComp}%` : null}
+          stock={`~50% (typical SLA at stock geometry)`}
+          optimal={`60–100% (more is better — outside tire stays vertical)`}
           sev={a.rfCamberComp == null ? 'info' : a.rfCamberComp >= 60 ? 'good' : a.rfCamberComp >= 40 ? 'warning' : 'critical'}
+          handling={a.rfCamberComp == null ? 'Enter all four front hardpoints.'
+            : a.rfCamberComp >= 60
+              ? `Geometry recovers ${a.rfCamberComp}% of body roll as camber gain — outside tire stays nearly vertical. Lateral grip near maximum.`
+            : a.rfCamberComp >= 40
+              ? `Moderate compensation — outside tire loses ${100-a.rfCamberComp}% of static camber to body roll. Static negative camber must compensate, increasing tire wear.`
+            : `Low compensation — outside tire loses most of static camber to body roll. RF will run heavily on outside edge. Need more aggressive static negative camber.`}
           tip={<Tip
             changeable={false}
-            text="Milliken §7.3: 'Camber compensation' is the fraction of body roll angle that is recovered as wheel camber change. 100% = outside wheel stays perfectly vertical (infinite FVSA). 0% = wheel leans with the body, adding positive camber to the outside tire and hurting lateral force. Milliken's MRA test case found MAXIMUM lateral track force with 100% camber compensation. The P71's short FVSA produces high camber gain rate, which is geometrically recovering body roll — this is the correct design direction. Longer FVSA = lower compensation = more camber loss. The formula: compensation ≈ arctan(1/FVSA) × (t/2) × (π/180) — fraction of 1° roll recovered per 1° body angle."
-            fixMethod="Fixed geometry — FVSA is set by arm hardpoints. Short FVSA (high gain) is intentionally chosen for high camber compensation on this vehicle. Do not increase FVSA to 'reduce camber gain' — it will reduce compensation and hurt outside tire performance."
+            text="Milliken §7.3: 'Camber compensation' is the fraction of body roll angle that is recovered as wheel camber change. 100% = outside wheel stays perfectly vertical."
+            fixMethod="Fixed geometry — FVSA is set by arm hardpoints."
           />}
-        >
-          {a.rfCamberComp != null
-            ? `RF outside tire camber compensation ≈ ${a.rfCamberComp}% (FVSA ${a.rf.fvsa?.toFixed(1)}" = ${(Math.atan(1/a.rf.fvsa) * 180/Math.PI).toFixed(3)}°/in gain rate). Milliken §7.3 optimum is 100%. ${a.rfCamberComp >= 60 ? 'Good — geometric compensation is working in the right direction.' : a.rfCamberComp >= 40 ? 'Moderate — outside tire is losing significant camber angle to body roll. Static negative camber is compensating.' : 'Low — outside tire is losing much of its static camber advantage to body roll. This means the −2° static camber target is doing most of the work rather than geometric recovery.'}`
-            : 'Enter all four front hardpoints to compute camber compensation.'}
-        </Finding>
+        />
       </Section>
 
       {/* ══════════════════════════════════════════════════════════════════
           SECTION 4 — SUSPENSION ASYMMETRY
       ══════════════════════════════════════════════════════════════════ */}
       <Section title="4 — LF/RF SUSPENSION ASYMMETRY" color="#f59e0b">
-        <Finding
+        <Metric
           title="Ball Joint Height Asymmetry (LF vs RF)"
-          value={(a.bjAsymmetry >= 0 ? '+' : '') + a.bjAsymmetry.toFixed(3)} unit='"'
+          measured={`${(a.bjAsymmetry >= 0 ? '+' : '')}${a.bjAsymmetry.toFixed(3)}"`}
+          stock={`${STOCK_P71.bjAsymmetry}" (symmetric stock — both sides equal)`}
+          optimal={isOval ? `+0.5 to +1.5" (LF higher — biases RF to more negative camber)` : `±0.25" (symmetric for figure-8)`}
           sev={isOval ? asymSev : (Math.abs(a.bjAsymmetry) > 0.5 ? 'warning' : 'good')}
+          handling={isOval
+            ? a.bjAsymmetry > 0.3 && a.bjAsymmetry < 1.8
+              ? `Oval-tuned asymmetry — RF rides lower, gaining built-in negative camber. Reduces static camber needed at the alignment rack.`
+              : Math.abs(a.bjAsymmetry) > 1.8
+                ? `Large asymmetry — verify against intended setup. May indicate sagging spring on one side.`
+              : `Symmetric — leaving lateral camber bias on the table. Could drop RF spring perch ½ turn for more RF negative camber.`
+            : Math.abs(a.bjAsymmetry) < 0.5
+              ? `Good figure-8 symmetry — car will handle the same in left vs right turns.`
+              : `Will cause noticeably different IC positions and camber gain rates L vs R turn — equalize spring perches.`}
           tip={<Tip
             changeable={true}
             text={isOval
-              ? 'LF higher than RF is common on oval setups — RF sits lower to bias RF corner toward more negative camber. On figure-8 this asymmetry causes the car to handle differently L vs R — undesirable.'
-              : 'For figure-8, LF and RF should be as symmetric as possible. More than 0.5" asymmetry will produce noticeably different IC positions and camber gain rates for left vs right turns.'}
+              ? 'LF higher than RF is common on oval setups — RF sits lower to bias RF corner toward more negative camber.'
+              : 'For figure-8, LF and RF should be as symmetric as possible.'}
             fixMethod={isOval
               ? 'If intentional for oval: document as baseline. If unintentional: check spring seats, spring free lengths, ride heights.'
               : 'For figure-8: normalize LF and RF ball joint heights by adjusting spring perch height or spring free length to equalize side-to-side ride height.'}
           />}
-        >
-          LF lower BJ {a.bjAsymmetry.toFixed(3)}" {a.bjAsymmetry > 0 ? 'higher' : 'lower'} than RF.
-          {isOval
-            ? (Math.abs(a.bjAsymmetry) < 1.5 ? ' Within typical oval asymmetry range.' : ' Large asymmetry — verify against intended setup.')
-            : (Math.abs(a.bjAsymmetry) < 0.5 ? ' Good symmetry for figure-8.' : ' Significant asymmetry will cause L/R handling difference on figure-8.')}
-        </Finding>
+        />
 
-        <Finding
+        <Metric
           title="Wheel Center Height vs Tire Radius"
-          value={a.wh.toFixed(3)} unit='"'
+          measured={`${a.wh.toFixed(3)}"`}
+          stock={`${STOCK_P71.wheelHeight}" (235/55R17 at 32 psi cold)`}
+          optimal={`13.59" (matches tire-neutral radius — neither over- nor under-loaded)`}
           sev={Math.abs(a.wh - 13.59) > 1.0 ? 'warning' : Math.abs(a.wh - 13.59) > 0.5 ? 'info' : 'good'}
+          handling={Math.abs(a.wh - 13.59) < 0.3
+            ? `At tire-neutral height — car is at design ride height, springs operating in their intended range.`
+            : a.wh < 13.59
+              ? `${(13.59 - a.wh).toFixed(2)}" lower than tire-neutral — car is sitting on compressed springs and may be near bumpstops in cornering. Lowered ride height tends to push, especially on rough surfaces.`
+            : `${(a.wh - 13.59).toFixed(2)}" higher than tire-neutral — car may be on droop side or pressures over-inflated. Body rolls more for given lateral G.`}
           tip={<Tip
             changeable={true}
-            text="Wheel center height should match tire radius (13.59 in for 235/55R17 at rated pressure). Below means car is running lower than tire-neutral ride height."
+            text="Wheel center height should match tire radius (13.59 in for 235/55R17 at rated pressure)."
             fixMethod="Check cold pressures first. If still low: stiffer or taller springs, or spring spacers."
           />}
-        >
-          Measured {a.wh.toFixed(3)}" vs 235/55R17 radius 13.59". Delta: {(a.wh - 13.59).toFixed(3)}". Car is {Math.abs(a.wh - 13.59).toFixed(2)}" {a.wh < 13.59 ? 'lower' : 'higher'} than tire-neutral.
-        </Finding>
+        />
       </Section>
 
       {/* ══════════════════════════════════════════════════════════════════
           SECTION 5 — SCRUB RADIUS & STEERING
       ══════════════════════════════════════════════════════════════════ */}
       <Section title="5 — SCRUB RADIUS & STEERING GEOMETRY" color="#60a5fa">
-        <Finding
-          title="Estimated Scrub Radius"
-          value={a.scrubRadius.toFixed(3)} unit='"'
+        <Metric
+          title="Scrub Radius"
+          measured={`${a.scrubRadius.toFixed(3)}"`}
+          stock={`${STOCK_P71.scrubRadius}" (stock 16x7 wheel, 1.75" offset)`}
+          optimal={`+0.3 to +1.5" (small positive = light, direct steering feel)`}
           sev={a.scrubRadius > 0 && a.scrubRadius < 1.5 ? 'good' : a.scrubRadius < 0 ? 'warning' : 'info'}
+          handling={a.scrubRadius < 0
+            ? `Negative scrub — steering will feel "floppy" and disconnected from the road. Wheel offset may be wrong (too far outboard).`
+            : a.scrubRadius < 0.5
+              ? `Very low scrub — light, low-effort steering with little road feel. Acceptable but quick to upset by single-wheel impacts.`
+            : a.scrubRadius < 1.5
+              ? `Healthy positive scrub — steering has clear road feel and self-centering. Single-wheel bumps cause manageable kickback.`
+            : `Moderate scrub — adequate feel but heavier steering. Single-wheel impacts cause noticeable kickback.`}
           tip={<Tip
             changeable={false}
-            text="Scrub radius is the distance between the kingpin axis projected to ground and the tire contact patch center. Small positive (0.3–1.5 in) = light direct steering. Fixed by KPI (9.5°, cast into spindle) and wheel offset. (Milliken §17.3)"
+            text="Scrub radius is the distance between the kingpin axis projected to ground and the tire contact patch center. Fixed by KPI (9.5°, cast into spindle) and wheel offset."
             fixMethod="Fixed on P71. Wheel spacers/different offset can modify slightly — do not change unless specific steering complaint."
           />}
-        >
-          Scrub radius = (wheel center {a.wh.toFixed(2)}" × tan({P71_KPI}° KPI)) − {P71_WHEEL_OFFSET}" offset = {a.scrubRadius.toFixed(3)}". {a.scrubRadius < 1.5 ? 'Low scrub — light steering feel.' : 'Moderate scrub — adequate feel.'}
-        </Finding>
+        />
 
-        <Finding
+        <Metric
           title="Scrub Motion Direction"
-          value={(() => {
+          measured={(() => {
             const icY = a.rf.ic?.y;
             const icX = a.rf.ic?.x;
-            if (icY == null) return '—';
+            if (icY == null) return null;
             if (icY > 0 && icX != null && icX < 0) return 'SCRUB OUT on jounce';
             if (icY < 0) return 'SCRUB IN on jounce';
             return 'Minimal scrub';
           })()}
-          unit=""
+          stock={`SCRUB OUT on jounce (stock SLA condition)`}
+          optimal={`SCRUB OUT or minimal — SCRUB IN is a measurement error indicator`}
           sev={(() => {
             const icY = a.rf.ic?.y;
             if (icY == null) return 'info';
             return icY > 0 ? 'info' : 'warning';
           })()}
-          tip={<Tip
-            changeable={false}
-            text="Scrub motion is lateral tire movement relative to the ground as the suspension travels. Milliken §17.3: if the front view IC is above ground level and inboard, the tire moves outward (scrubs out) as it rises in jounce. If IC is below ground, the tire moves inward. Scrub-out in jounce is the normal P71 condition — it means as the RF loads in a corner and jounces, the contact patch moves outward slightly, widening the effective track width and increasing mechanical advantage slightly. On rough tracks, scrub introduces lateral velocity at the tire that disturbs slip angles."
-            fixMethod="Fixed geometry — IC is set by control arm hardpoints. On a rough track where lateral disturbance is a concern, a longer FVSA (further-out IC) reduces the scrub rate per inch of travel."
-          />}
-        >
-          {(() => {
+          handling={(() => {
             const icY = a.rf.ic?.y;
             const icX = a.rf.ic?.x;
-            if (icY == null) return 'Enter all four hardpoints to determine IC and scrub direction.';
+            if (icY == null) return 'Enter all four hardpoints.';
             const rate = a.rf.fvsa != null ? (Math.abs(a.rf.ic.x) / a.rf.fvsa).toFixed(3) : '—';
             if (icY > 0 && icX != null && icX < 0) {
-              return `RF IC is above ground (${icY.toFixed(1)}" height) and inboard — tire scrubs outward in jounce. Scrub rate ≈ ${rate} in/in of travel. On smooth oval surfaces this is benign; on rough pavement lateral disturbances disturb slip angles and introduce understeer transients (Milliken §17.3 Fig.17.11).`;
+              return `As RF jounces in cornering, contact patch moves OUTWARD ~${rate} in per inch of travel. On smooth surfaces this widens effective track width slightly (helpful). On rough pavement, the lateral motion disturbs slip angles and introduces understeer transients over bumps.`;
             }
-            if (icY < 0) {
-              return `RF IC is below ground — tire scrubs inward in jounce. Less common for SLA front suspensions — check hardpoint measurements.`;
-            }
-            return `IC at ground level — minimum scrub condition. Ideal for rough tracks.`;
+            if (icY < 0) return `Tire scrubs inward in jounce — unusual for SLA. Likely a hardpoint measurement error. Verify IC position.`;
+            return `Minimum scrub — ideal for rough tracks. Suspension travel doesn't disturb slip angle.`;
           })()}
-        </Finding>
-
-        <Finding
-          title="Arm Length Ratio (Upper/Lower)"
-          value={(P71_UPPER_ARM_LENGTH / P71_LOWER_ARM_LENGTH).toFixed(3)} unit=""
-          sev="info"
           tip={<Tip
             changeable={false}
-            text="Ratio < 1.0 means shorter upper arm — wheel gains negative camber in jounce. P71 0.731 ratio produces the SLA jounce coefficient of −0.355°/° roll. Cannot change without custom fabrication."
+            text="Scrub motion is lateral tire movement relative to the ground as the suspension travels."
+            fixMethod="Fixed geometry — IC is set by control arm hardpoints."
+          />}
+        />
+
+        <Metric
+          title="Arm Length Ratio (Upper/Lower)"
+          measured={(P71_UPPER_ARM_LENGTH / P71_LOWER_ARM_LENGTH).toFixed(3)}
+          stock={`0.731 (P71 OEM — 9.5" upper / 13.0" lower)`}
+          optimal={`0.65–0.80 (shorter upper = more camber gain in jounce — race-favorable)`}
+          sev="info"
+          handling={`Shorter upper arm forces the outside wheel to gain negative camber as it jounces in cornering. This is the P71's key oval advantage over MacPherson cars — the SLA geometry actively recovers body roll. Ratio is fixed and not adjustable.`}
+          tip={<Tip
+            changeable={false}
+            text="Ratio < 1.0 means shorter upper arm — wheel gains negative camber in jounce. P71 0.731 ratio produces the SLA jounce coefficient of −0.355°/° roll."
             fixMethod="Fixed P71 geometry. Cannot be changed with available aftermarket parts."
           />}
-        >
-          Upper {P71_UPPER_ARM_LENGTH}" / lower {P71_LOWER_ARM_LENGTH}" = {(P71_UPPER_ARM_LENGTH / P71_LOWER_ARM_LENGTH).toFixed(3)}. Shorter upper arm forces wheel to gain negative camber in jounce — the SLA's key oval advantage over MacPherson struts.
-        </Finding>
+        />
       </Section>
 
       {/* ══════════════════════════════════════════════════════════════════
           SECTION 6 — LLTD
       ══════════════════════════════════════════════════════════════════ */}
       <Section title="6 — LATERAL LOAD TRANSFER DISTRIBUTION (LLTD)" color="#22c55e">
-        <Finding
-          title="Geometric LLTD Split (Front Share of Geometric Transfer)"
-          value={a.geoLLTDF != null ? (a.geoLLTDF * 100).toFixed(1) : '—'} unit="% of geometric LT to front"
+        <Metric
+          title="Geometric LLTD — Front Share"
+          measured={a.geoLLTDF != null ? `${(a.geoLLTDF * 100).toFixed(1)}%` : null}
+          stock={`~50% (stock front RC ≈ rear RC, balanced split)`}
+          optimal={isOval ? `60–70% front (oval — bias load to outside-front via geometry)` : `52–68% front (figure-8)`}
           sev={a.geoLLTDF != null
             ? (isOval
               ? (a.geoLLTDF >= 0.58 && a.geoLLTDF <= 0.72 ? 'good' : a.geoLLTDF < 0.50 ? 'warning' : 'info')
               : (a.geoLLTDF >= 0.52 && a.geoLLTDF <= 0.68 ? 'good' : 'warning'))
             : 'info'}
+          handling={a.geoLLTDF == null ? 'Enter front hardpoints.'
+            : isOval && a.geoLLTDF >= 0.58 && a.geoLLTDF <= 0.72
+              ? `Geometry biases load to RF outside tire — sharp turn-in, RF loads up before springs deflect. Springs/ARB add rear elastic transfer to bring total LLTD toward the 46% optimum target.`
+            : a.geoLLTDF < 0.55
+              ? `Front geometric fraction LOW — rear loads up faster than front in a corner = entry oversteer / loose. Front RC needs to come up or rear Watts needs to drop.`
+            : a.geoLLTDF > 0.72
+              ? `Front geometric fraction VERY HIGH — front tires take a disproportionate share of load before springs engage. Chronic push that ARBs cannot tune out (geometry bypasses elastic path). Lower front RC.`
+            : `Geometric split is workable — minor tuning via spring/ARB will bring total LLTD to optimum.`}
           tip={<Tip
             changeable={false}
-            text={`This is the fraction of GEOMETRIC load transfer (through RC links) that goes to the front axle vs rear axle. Formula: front_geo_LT / (front_geo_LT + rear_geo_LT) = (W_F × RC_F) / (W_F × RC_F + W_R × RC_R). This is NOT the same as the simulation's 46% total LLTD target — that 46% includes elastic (springs) + ARB + damper components on top of geometric. Geometric-only: with P71's 57% front weight and 20" front RC vs 14.5" rear RC, the normal result is ~62–66% of geometric transfer going to the front. A higher front RC vs rear RC means more geometric front bias, which is intentional on a left-turn oval — it loads the outside (RF) tire harder through the links before the springs even see the load.`}
-            fixMethod="Lower front RC (raise ride height on stiffer springs) to shift geometric transfer rearward. Raise rear Watts pivot to shift geometric transfer forward to the front. On oval, having front geometric fraction 60–70% is correct — the RF needs to be loaded."
+            text="Fraction of GEOMETRIC load transfer (through RC links) that goes to the front axle. Optimizer's 46% target is TOTAL (geometric + elastic + ARB); geometric-only is normally higher on a P71."
+            fixMethod="Lower front RC (raise ride height on stiffer springs) to shift geometric transfer rearward. Raise rear Watts pivot to shift geometric transfer forward."
           />}
-        >
-          {a.geoLLTDF != null
-            ? (() => {
-                const gF = (a.geoLLTDF * 100).toFixed(1);
-                const gR = (a.geoLLTDR * 100).toFixed(1);
-                const rcF = a.rcAvg?.toFixed(1) ?? '—';
-                const rcR = a.rearRC.toFixed(1);
-                const tgt = isOval ? '60–70%' : '55–65%';
-                const inRange = isOval ? (a.geoLLTDF >= 0.58 && a.geoLLTDF <= 0.72) : (a.geoLLTDF >= 0.52 && a.geoLLTDF <= 0.68);
-                const wF = (P71_TOTAL_WEIGHT * P71_FRONT_AXLE_FRAC).toFixed(0);
-                const wR = (P71_TOTAL_WEIGHT * (1 - P71_FRONT_AXLE_FRAC)).toFixed(0);
-                const ltF = (P71_TOTAL_WEIGHT * P71_FRONT_AXLE_FRAC * (a.rcAvg ?? 0) / 12).toFixed(0);
-                const ltR = (P71_TOTAL_WEIGHT * (1 - P71_FRONT_AXLE_FRAC) * a.rearRC / 12).toFixed(0);
-                return `Of the total geometric (link) load transfer, ${gF}% goes to the front axle and ${gR}% to the rear. Target range: ${tgt}.\n\nFront RC ${rcF}" → geo LT ∝ ${wF} lbs × ${rcF}" = ${ltF} lb·ft\nRear RC ${rcR}" → geo LT ∝ ${wR} lbs × ${rcR}" = ${ltR} lb·ft\n\n${inRange ? 'Geometric split is in target range.' : a.geoLLTDF < (isOval ? 0.58 : 0.52) ? 'Front geometric fraction below target — front RC is low relative to rear. Raise front RC or lower rear RC.' : 'Front geometric fraction above target — front RC is very high relative to rear. Consider lowering front RC to reduce geometric front bias.'}\n\nNOTE: The setup optimizer targets 46% TOTAL LLTD (geometric + elastic + ARB combined). Geometric-only fraction of 60–66% front is normal — elastic transfer (springs/ARB) adds rear stiffness to bring the total closer to neutral.`;
-              })()
-            : 'Enter front roll center hardpoints to compute geometric LLTD split.'}
-        </Finding>
+        />
 
-        <Finding
-          title="Geometric Rear Fraction"
-          value={a.geoLLTDF != null ? (a.geoLLTDR * 100).toFixed(1) : '—'} unit="% of geometric LT to rear"
+        <Metric
+          title="Geometric LLTD — Rear Share"
+          measured={a.geoLLTDF != null ? `${(a.geoLLTDR * 100).toFixed(1)}%` : null}
+          stock={`~50% (stock symmetric split)`}
+          optimal={`28–42% rear (most geometric LT to front because front RC is higher)`}
           sev={a.geoLLTDF != null ? (a.geoLLTDR >= 0.28 && a.geoLLTDR <= 0.42 ? 'good' : 'info') : 'info'}
+          handling={a.geoLLTDF == null ? '—'
+            : a.geoLLTDR > 0.45
+              ? `Rear taking too much geometric load = rear tires unevenly loaded, less combined grip, oversteer tendency. Lower the Watts link pivot.`
+            : a.geoLLTDR < 0.28
+              ? `Rear geometric load too low — rear tires loaded evenly, lots of grip back there. Car may push since rear is "stuck" while front is overloaded.`
+            : `Rear taking healthy minority share — rear stays planted while front geometry dominates load distribution. Predictable rotation.`}
           tip={<Tip
             changeable={true}
-            text="Rear geometric fraction = rear_geo_LT / (front_geo_LT + rear_geo_LT) = 1 − front fraction. The rear RC is set by the Watts link center pivot. Higher rear RC = more rear geometric transfer = rear tires load up sooner in a corner = oversteer tendency. Target rear fraction: 28–42% (most goes to front because front RC is higher on P71)."
-            fixMethod="Adjustable Watts link pivot bracket. Raising the pivot 1 inch increases rear geometric transfer — shifts more load to rear geometric path, increasing rear-end stiffness and oversteer tendency. Lowering reduces rear geometric fraction."
+            text="Higher rear RC = more rear geometric transfer = rear tires load up sooner = oversteer tendency. The Watts link pivot height directly controls this."
+            fixMethod="Adjustable Watts link pivot bracket. Raising the pivot 1 inch increases rear geometric transfer."
           />}
-        >
-          {a.geoLLTDF != null
-            ? `Rear Watts RC ${a.rearRC.toFixed(1)}" → ${(a.geoLLTDR * 100).toFixed(1)}% of geometric transfer to rear axle (front: ${(a.geoLLTDF * 100).toFixed(1)}%). Why LLTD matters: a pair of unevenly loaded tires produces less combined lateral force than the same total load split evenly (Milliken §12.3 item 11 — load sensitivity). More front LLTD = front tires more unequal = less front grip = understeer. More rear LLTD = rear tires more unequal = less rear grip = oversteer.`
-            : `Rear RC at ${a.rearRC.toFixed(1)}". Enter front hardpoints to compute geometric split.`}
-        </Finding>
+        />
 
-        <Finding
+        <Metric
           title="Geometric Roll Rate Distribution (Milliken §7.3)"
-          value={a.rollRateFrontFrac != null ? `${(a.rollRateFrontFrac * 100).toFixed(1)}` : '—'} unit="% of geometric LT to front"
+          measured={a.rollRateFrontFrac != null ? `${(a.rollRateFrontFrac * 100).toFixed(1)}%` : null}
+          stock={`~50% (stock balanced)`}
+          optimal={isOval ? `58–72% front (oval)` : `52–68% front (figure-8)`}
           sev={a.rollRateFrontFrac == null ? 'info'
             : isOval
               ? (a.rollRateFrontFrac >= 0.58 && a.rollRateFrontFrac <= 0.72 ? 'good' : 'warning')
               : (a.rollRateFrontFrac >= 0.52 && a.rollRateFrontFrac <= 0.68 ? 'good' : 'warning')}
+          handling={a.rollRateFrontFrac == null ? '—'
+            : `Geometric-only split. Springs and ARB add elastic transfer on TOP of this — bringing the total LLTD toward the 42–46% optimum found by Milliken's MRA testing. ${isOval ? 'Oval needs predominantly rear-biased elastic transfer to compensate for the front-heavy geometric split.' : 'Figure-8 wants near-symmetric front/rear elastic transfer.'}`}
           tip={<Tip
             changeable={true}
-            text="Milliken §7.3: MRA analysis of a 3570 lb sports sedan found MAXIMUM lateral acceleration with 42% TOTAL LLTD to the front — but that 42% is total (geometric + elastic + ARB). The geometric component alone is typically 60–70% front on this type of SLA/solid-axle car because the front RC is higher. The elastic (spring/ARB) component adds predominantly rearward transfer, bringing total down to the 42–46% range. These are additive: total LLTD = geometric + elastic + damper components. The geometric fraction shown here is geometric-only. To see total LLTD, use the Setup Optimizer tab with your geometry profile loaded."
-            fixMethod="Geometric fraction: lower front RC (raise ride height) to reduce front geometric fraction. Raise rear Watts link to increase rear geometric fraction. Spring/ARB stiffness then adds elastic transfer on top. For the total LLTD to hit 46% optimal, the springs and ARB need to contribute predominantly rearward transfer to counterbalance the front-biased geometric path."
+            text="Milliken §7.3: MRA analysis of a 3570 lb sports sedan found MAXIMUM lateral acceleration with 42% TOTAL LLTD to the front — geometric + elastic + ARB combined."
+            fixMethod="Geometric fraction: lower front RC to reduce front share. Spring/ARB stiffness adds elastic transfer on top."
           />}
-        >
-          {a.rollRateFrontFrac != null
-            ? `Geometric-only split: ${(a.rollRateFrontFrac * 100).toFixed(1)}% front / ${((1-a.rollRateFrontFrac)*100).toFixed(1)}% rear. Normal range ${isOval ? '58–72%' : '52–68%'} front for this platform. ${isOval ? 'Elastic transfer (springs+ARB) adds predominantly rear stiffness, pulling total LLTD down toward the 46% optimal target in the Setup Optimizer.' : 'For figure-8, target symmetric split — front RC close to rear RC height.'}`
-            : 'Enter front roll center data to compute roll rate distribution.'}
-        </Finding>
+        />
 
         {isOval && (
           <Finding
@@ -1121,11 +1320,11 @@ export default function GeometryAnalysis({ geo }) {
             sev="info"
             tip={<Tip
               changeable={true}
-              text="Milliken §7.1 (Model to Reality — Stagger): Tire stagger (diameter difference between left and right on an axle) has the same load effect as diagonal weight jacking. A larger right rear tire effectively pre-loads the RF/LR diagonal (wedge), shifting load to the RF corner. This is used on ovals to dial out the car's tendency to push at corner entry — adding RR stagger tightens corner entry by increasing RF and LR load. Stagger is measured as the difference in tire circumference: (RR circ) - (LR circ). Typical oval stagger: 0–3 inches depending on tire compound and track banking."
-              fixMethod="Select tires of different diameter for left vs right side. RR larger than LR adds wedge (tighter). LR larger adds reverse wedge (looser). Check with tape measure around tire sidewall — do not rely on nominal size. Measure hot after a session for accuracy."
+              text="Milliken §7.1: Tire stagger has the same load effect as diagonal weight jacking. RR larger than LR adds wedge (tighter). Used on ovals to dial out push."
+              fixMethod="Select tires of different diameter for left vs right side. Measure tire circumference with tape after session at operating temp."
             />}
           >
-            Stagger is the oval equivalent of diagonal weight jacking (Milliken §7.1). A larger RR tire shifts load toward the RF/LR diagonal — same effect as turning the LR spring perch up. Use to trim mid-corner balance: more RR stagger = tighter mid-corner. Measure tire circumference after session when tires are at operating temp. Enter stagger in the Track Day session notes to track changes vs. handling feedback.
+            Stagger is the oval equivalent of diagonal weight jacking. A larger RR tire shifts load toward the RF/LR diagonal — same effect as turning the LR spring perch up. Use to trim mid-corner balance: more RR stagger = tighter mid-corner. Measure tire circumference after session when tires are at operating temp.
           </Finding>
         )}
       </Section>
@@ -1135,93 +1334,83 @@ export default function GeometryAnalysis({ geo }) {
       ══════════════════════════════════════════════════════════════════ */}
       <Section title="7 — US/OS BALANCE — STEADY-STATE STABILITY" color="#fb923c">
 
-        <Finding
+        <Metric
           title="Ackermann Steer Angle"
-          value={a.ackermannDeg.toFixed(2)} unit="°"
+          measured={`${a.ackermannDeg.toFixed(2)}°`}
+          stock={`Same — set by P71 wheelbase (114.7") and turn radius`}
+          optimal={`Match actual steer to Ackermann + slip angles (no fixed target)`}
           sev="info"
+          handling={`δ_Ackermann = (9.558 ft wheelbase) / ${num(geo.apexRadius) || 145} ft radius × 180/π = ${a.ackermannDeg.toFixed(2)}°. At ${T.apexSteer}° actual steer, front slip angle contribution = ${(T.apexSteer - a.ackermannDeg).toFixed(2)}°. A neutral car would steer at exactly Ackermann; more steering needed = understeer, less = oversteer.`}
           tip={<Tip
             changeable={false}
-            text="Milliken §5.3: The Ackermann (geometric) steer angle δ = ℓ/R (radians) is the steer angle required to negotiate a turn of radius R with zero tire slip. For the P71: wheelbase = 114.7 in (9.558 ft). This is the baseline around which cornering stiffness and slip angles are measured. At race speeds the actual steer angle deviates from Ackermann by the sum of front and rear slip angles."
-            fixMethod="Not directly adjustable — set by wheelbase and turn radius. Increase apex radius (wider line) to reduce Ackermann angle and reduce required slip."
+            text="Milliken §5.3: The Ackermann (geometric) steer angle δ = ℓ/R is the angle required to negotiate a turn of radius R with zero tire slip."
+            fixMethod="Increase apex radius (wider line) to reduce Ackermann angle and reduce required slip."
           />}
-        >
-          δ_Ackermann = (9.558 ft wheelbase) / ({num(geo.apexRadius) || 145} ft radius) × (180/π) = {a.ackermannDeg.toFixed(2)}°. At {T.apexSteer}° actual steer, front slip angle contribution = {(T.apexSteer - a.ackermannDeg).toFixed(2)}° relative to geometric. This is the baseline from which over/understeer deviates — a neutral car would steer at exactly the Ackermann angle.
-        </Finding>
+        />
 
-        <Finding
-          title="Static Margin (Weight Distribution Baseline)"
-          value={(a.smEstimate * 100).toFixed(0)} unit="% (negative = slight OS tendency)"
+        <Metric
+          title="Static Margin (Weight Distribution)"
+          measured={`${(a.smEstimate * 100).toFixed(0)}%`}
+          stock={`−14% (P71 57% front weight is fixed)`}
+          optimal={`−5% to +5% near-neutral (negative = OS tendency, positive = US tendency)`}
           sev={a.smEstimate < -0.1 ? 'warning' : 'info'}
+          handling={`P71 weight distribution (57% front, 43% rear) puts CG ahead of the Neutral Steer Point → slight geometric understeer in the linear range. At ${T.trackG}G race speed the rear loads up from weight transfer and the car shifts toward OS — LLTD becomes the dominant diagnostic, not static margin.`}
           tip={<Tip
             changeable={false}
-            text="Milliken §5.11 (Eq.5.48a): Static Margin SM = [-(a/ℓ)CF + (b/ℓ)CR] / C. With equal cornering stiffness per unit load (CF/WF = CR/WR — neutral tire assumption), SM reduces to: SM = b/ℓ − a/ℓ = rear weight fraction − front weight fraction. P71: 57% front → SM = 0.43 − 0.57 = −0.14. Negative SM means the CG is ahead of the Neutral Steer Point → slight geometric understeer tendency in linear range. At race speeds (0.813G) the rear axle carries additional load from weight transfer, shifting effective cornering stiffness rearward and pushing toward oversteer — the geometric baseline reverses. This is why LLTD balance is the primary diagnostic at speed."
-            fixMethod="SM is set by wheelbase geometry and weight distribution. On the P71, 57% front bias is fixed. The operating point at 0.813G shifts away from the linear SM prediction — see LLTD section for the race-speed diagnostic."
+            text="SM = b/ℓ − a/ℓ = rear weight fraction − front weight fraction. P71: 57% front → SM ≈ −14%."
+            fixMethod="Weight distribution is fixed on P71. Use LLTD section for race-speed balance diagnosis."
           />}
-        >
-          P71 weight distribution: 57% front (2,109 lbs), 43% rear (1,591 lbs). Static Margin from weight distribution alone ≈ −14% (slight geometric OS tendency in linear range, &lt;0.3G). At {T.trackG}G race speed the vehicle operates far above the linear range — the bicycle model gives qualitative direction only. LLTD analysis (Section 6) is the dominant diagnostic at race speed.
-        </Finding>
+        />
 
-        <Finding
+        <Metric
           title="LLTD-Derived US/OS Tendency"
-          value={a.lltdUGSign ?? '—'}
-          unit=""
-          sev={
-            a.lltdUGSign == null ? 'info'
+          measured={a.lltdUGSign ?? null}
+          stock={`Stock LLTD ~50/50 = mild understeer at limit (front-heavy weight)`}
+          optimal={`NORMAL GEOMETRIC SPLIT (front fraction in 55–72% range)`}
+          sev={a.lltdUGSign == null ? 'info'
             : a.lltdUGSign.includes('UNDERSTEER') ? 'warning'
             : a.lltdUGSign.includes('OVERSTEER')  ? 'warning'
-            : 'good'
-          }
+            : 'good'}
+          handling={a.lltdFrontFrac == null ? 'Enter front RC data.'
+            : a.lltdFrontFrac > 0.72
+              ? `Front geometry-overloaded — chronic mid-corner push that ARB changes won't cure (geometry bypasses springs). Lower front RC (raise ride height) is the only real fix.`
+            : a.lltdFrontFrac < 0.55
+              ? `Front under-loaded geometrically — car loose on entry as rear loads up first. Raise front RC or lower rear Watts.`
+            : `Geometric split is in the normal P71 race window. Springs and ARB carry the elastic load transfer to bring total LLTD to optimum 46%.`}
           tip={<Tip
             changeable={true}
-            text="At 0.813G (nonlinear range), effective cornering stiffness drops with increasing load — whichever axle carries more geometric lateral load transfer will see its tires load up faster and degrade first. Front geometric fraction >72% → front tires load up harder geometrically → push tendency. Front fraction <55% → rear loads up harder → loose tendency. Normal P71 geometric split is 60–68% front (front RC is higher than rear). This geometric imbalance is corrected by elastic transfer (springs/ARB) which adds rear stiffness — the 46% total LLTD target in the optimizer combines all three components."
-            fixMethod="Lower front RC (raise car on taller/stiffer springs) to reduce front geometric fraction. Raise rear Watts link pivot to increase rear geometric fraction. These shift relative loading without changing spring rates. Spring and ARB changes add elastic LLTD on top."
+            text="Whichever axle carries more geometric load transfer will see its tires load up faster and degrade first. >72% front → push. <55% front → loose."
+            fixMethod="Lower front RC to reduce front geometric fraction. Raise rear Watts pivot to increase rear geometric fraction."
           />}
-        >
-          {a.lltdFrontFrac != null
-            ? `Geometric split: ${(a.lltdFrontFrac * 100).toFixed(1)}% of geometric LT to front / ${((1 - a.lltdFrontFrac) * 100).toFixed(1)}% to rear. Normal range ${isOval ? '60–70%' : '55–65%'} front. ${a.lltdFrontFrac > 0.72 ? 'Above 72% — front is heavily geometry-loaded. Consider lowering front RC or raising rear Watts pivot.' : a.lltdFrontFrac < 0.55 ? 'Below 55% — rear RC is high relative to front. Front is under-loaded geometrically — car may be loose on entry.' : 'Normal geometric split — front RC is appropriately higher than rear for this platform.'} The optimizer\'s 46% TOTAL LLTD target includes elastic (springs) + ARB on top of this geometric base.`
-            : 'Enter front roll center data (Section 1) to compute LLTD-derived US/OS tendency.'
-          }
-        </Finding>
+        />
 
-        <Finding
-          title="Linear Model Validity Caveat"
-          value={`${T.trackG}G — NONLINEAR`}
-          unit=""
-          sev="info"
-          tip={<Tip
-            changeable={false}
-            text="Milliken §5.11: The bicycle model (Bundorf UG, Static Margin, Characteristic/Critical Speed) is valid in the linear range — approximately 0 to 0.3G lateral acceleration. Above this, tire Cα drops with increasing load and the linear UG formulas overestimate stability. The P71 operates at 0.813G on the oval — well into the nonlinear range. Use pyrometer data and LLTD geometry as the primary diagnostics. The bicycle model provides qualitative direction (which end saturates first) but not quantitative values."
-            fixMethod="No fix needed — this is a physics boundary, not a setup issue. Use LLTD section (Section 6) and tire temperature analysis in the Simulation tab for race-speed balance diagnosis."
-          />}
-        >
-          Bicycle model linear range: ~0–0.3G. P71 at {T.trackG}G is {((T.trackG / 0.3) * 100 - 100).toFixed(0)}% above the linear limit. Characteristic speed (Vchar = √(1/K)) and Bundorf understeer gradient are directionally correct but not quantitatively reliable at race lateral G. The Static Margin and LLTD analysis give the correct qualitative push/loose diagnosis — pyrometer cross-check provides ground truth.
-        </Finding>
-
-        <Finding
-          title="Compliance Steer Audit — Front (Milliken §23)"
-          value="UNDERSTEER BIAS" unit=""
+        <Metric
+          title="Compliance Steer — Front (Milliken §23)"
+          measured={`UNDERSTEER BIAS (rubber-mounted P71 steering)`}
+          stock={`Same — stock rubber bushings everywhere`}
+          optimal={`Minimize compliance with poly bushings + solid steering box mount`}
           sev="warning"
+          handling={`At ${T.trackG}G, lateral force at the tires deflects rubber steering box mount and tie rod bushings — front wheels toe OUT slightly = adds understeer (~0.25–0.75°/g effective UG). This is in addition to the geometric setup. Driver feels: "more steering needed than expected" mid-corner.`}
           tip={<Tip
             changeable={true}
-            text="Milliken §23: Lateral force compliance steer on the front is understeer if the steering system is softer than the suspension links. The P71 uses a recirculating ball steering box with rubber mounts — under cornering lateral force, the steering box mount flexes and the tie rods deflect, allowing the front wheels to steer slightly away from the turn (toe-out on the outside wheel = understeer). This is in addition to the geometric aligning torque compliance steer (Milliken §23: 'almost always understeer on the front'). The effect is proportional to lateral force — at 0.813G it is significant."
-            fixMethod="(1) Replace rubber steering box mount with solid or poly mount — eliminates the largest single compliance source. (2) Replace rubber tie rod end bushings with poly or spherical rod ends. (3) Stiffen K-member control arm bushings with poly inserts. Each reduces lateral force compliance steer. Effect: 0.25–0.75°/g reduction in effective understeer gradient. Measure before/after by noting required steering wheel angle change at fixed speed in a constant-radius turn."
+            text="Milliken §23: Lateral force compliance steer on the front is almost always an understeer effect. Rubber bushings amplify this on the P71."
+            fixMethod="Replace rubber steering box mount with solid/poly. Replace tie rod end bushings with poly or spherical. Stiffen K-member control arm bushings with poly inserts."
           />}
-        >
-          P71 compliance sources adding understeer on the front (Milliken §23 — effects that steer tire away from turn center = understeer): (1) Rubber steering box mount — flexes under tie rod lateral load, allows box to move, toes front wheels out. (2) Rubber control arm bushings — allow arm to deflect rearward under braking/lateral load, altering effective caster and toe. (3) Aligning torque compliance — tire aligning torque tries to straighten front wheels (understeer direction). Solid axle rear is immune to lateral force compliance steer — this is the key advantage of the P71's solid rear over IRS.
-        </Finding>
+        />
 
-        <Finding
-          title="Compliance Camber Audit (Milliken §23)"
-          value="BOTH ENDS: OS tendency" unit=""
+        <Metric
+          title="Compliance Camber — Front & Rear"
+          measured={`Front: +0.48° outside (modeled) / Rear: 0° (solid axle)`}
+          stock={`Same — front rubber bushings deflect, rear solid axle does not`}
+          optimal={`Stiffer front bushings reduce the +0.48° front compliance gain`}
           sev="info"
+          handling={`Front: lateral force tilts the RF outside tire ~0.48° positive in cornering — already accounted for in the −2° static camber target. Rear: P71 solid beam axle doesn't tilt under load, so the rear compliance-camber oversteer found on IRS cars is eliminated. Key reason solid axle is preferred for ovals.`}
           tip={<Tip
             changeable={true}
-            text="Milliken §23: Lateral force compliance camber — the tire lateral force acts below all suspension components, causing the top of the tire to lean away from the turn center (positive camber on outside wheel). On the front: 'lateral force compliance camber on the front is always an understeer effect' — outside tire gains positive camber, loses lateral force. On the rear: 'lateral force compliance camber on the rear will be an oversteer effect.' P71 solid rear axle: the axle beam itself does not camber relative to the chassis — this oversteer source is eliminated on the rear. This is already modeled: the swCamber = 0.48° term in the camber chain represents front lateral force compliance camber (outside RF tire gaining ~0.48° positive camber under cornering load)."
-            fixMethod="Front compliance camber is partially addressed by: (1) static negative camber pre-loading the outside tire against compliance deflection — the −2° static target accounts for this. (2) Stiffer control arm bushings reduce the lateral deflection. (3) Spherical ball joint replacement removes elastic compliance from the joint itself. The solid rear axle already eliminates rear compliance camber."
+            text="Milliken §23: Lateral compliance camber tilts outside tire positive on the front (US effect). Rear solid axle is immune."
+            fixMethod="Front: poly control arm bushings or spherical ball joints reduce compliance. Already modeled in the camber chain."
           />}
-        >
-          Front: RF outside tire gains ~{(0.48).toFixed(2)}° positive camber under cornering load (lateral force compliance camber — already modeled as swCamber term in Section 2 camber chain). This is understeer-directional on the front. Static −2° RF camber target is sized to account for this deflection. Rear: P71 solid beam axle does not camber under lateral load — rear compliance camber oversteer source is eliminated. Key advantage of solid axle over IRS for oval racing.
-        </Finding>
+        />
       </Section>
 
       {/* ══════════════════════════════════════════════════════════════════
@@ -1230,23 +1419,26 @@ export default function GeometryAnalysis({ geo }) {
       {(a.kwFavg || a.kwRavg) ? (
         <Section title="8 — RIDE & ROLL RATE ANALYSIS" color="#c084fc">
 
-          <Finding
+          <Metric
             title="Wheel Rates"
-            value={a.kwFavg != null ? `F ${a.kwFavg.toFixed(0)} / R ${a.kwRavg?.toFixed(0) ?? '—'}` : '—'} unit="lb/in"
+            measured={a.kwFavg != null ? `F ${a.kwFavg.toFixed(0)} / R ${a.kwRavg?.toFixed(0) ?? '—'} lb/in` : null}
+            stock={`F ${STOCK_P71.kwF} / R ${STOCK_P71.kwR} lb/in (475 spring × 0.52² IR / 160 spring × 1.0² IR)`}
+            optimal={`F 130–250 / R 130–200 lb/in (race-tuned, depends on track roughness)`}
             sev={a.kwFavg != null ? 'info' : 'info'}
+            handling={a.kwFavg == null ? 'Enter spring rates to compute.'
+              : `Wheel rate determines how much load each tire sees per inch of wheel travel. Higher = stiffer ride, less body roll, more responsive but less compliant on rough surfaces. F: ${a.kwLF?.toFixed(0) ?? '—'}/${a.kwRF?.toFixed(0) ?? '—'}, R: ${a.kwLR?.toFixed(0) ?? '—'}/${a.kwRR?.toFixed(0) ?? '—'}. Note: wheel rate is ALWAYS lower than spring rate because IR² < 1.`}
             tip={<Tip
               changeable={true}
-              text="Milliken §16.1: Wheel center rate = spring rate × installation ratio². IR is the fraction of wheel travel that compresses the spring. P71 SLA front IR ≈ 0.52 (spring mounted part-way along lower arm). Wheel rate is always LOWER than spring rate because the spring moves less than the wheel. This is why switching to a stiffer spring rate has less effect on handling than expected — the IR squares the reduction."
-              fixMethod="Wheel rate is changed by selecting a different spring rate OR by moving the spring attachment point to change IR. Moving spring mount outboard (closer to wheel) increases IR and wheel rate. Moving inboard decreases both. Spring rate is the easier adjustment for P71."
+              text="Milliken §16.1: Wheel center rate = spring rate × installation ratio². P71 SLA front IR ≈ 0.52."
+              fixMethod="Change spring rate or move spring attachment outboard (increases IR). Spring rate is the easier P71 adjustment."
             />}
-          >
-            Front wheel rate: {a.kwLF?.toFixed(0) ?? '—'} lb/in (LF) / {a.kwRF?.toFixed(0) ?? '—'} lb/in (RF) — from {a.ksLF ?? a.ksRF ?? '—'} lb/in spring × {a.irF.toFixed(2)}² IR.{'\n'}
-            Rear wheel rate: {a.kwLR?.toFixed(0) ?? '—'} lb/in (LR) / {a.kwRR?.toFixed(0) ?? '—'} lb/in (RR) — from {a.ksLR ?? a.ksRR ?? '—'} lb/in spring × {a.irR.toFixed(2)}² IR.
-          </Finding>
+          />
 
-          <Finding
+          <Metric
             title="Ride Frequency"
-            value={a.rideFreqF_cpm != null ? `F ${a.rideFreqF_cpm.toFixed(0)} / R ${a.rideFreqR_cpm?.toFixed(0) ?? '—'}` : '—'} unit="cpm"
+            measured={a.rideFreqF_cpm != null ? `F ${a.rideFreqF_cpm.toFixed(0)} / R ${a.rideFreqR_cpm?.toFixed(0) ?? '—'} cpm` : null}
+            stock={`F ${STOCK_P71.rideFreqF} / R ${STOCK_P71.rideFreqR} cpm (passenger comfort tuning)`}
+            optimal={`F 95–120 / R 85–110 cpm — front MUST exceed rear (anti-pitch)`}
             sev={(() => {
               const f = a.rideFreqF_cpm; const r = a.rideFreqR_cpm;
               if (!f && !r) return 'info';
@@ -1257,20 +1449,26 @@ export default function GeometryAnalysis({ geo }) {
               if (!fOk || !rOk) return 'warning';
               return 'good';
             })()}
+            handling={a.rideFreqF_cpm == null ? 'Enter spring rates.'
+              : a.rideFreqF_cpm < a.rideFreqR_cpm
+                ? `⚠ REAR FREQ EXCEEDS FRONT — pitch coupling will produce hobby-horse motion. Car bobs front-rear over bumps, tires lose contact intermittently. Stiffen front or soften rear immediately.`
+              : a.rideFreqF_cpm < 95
+                ? `Front too soft for race — too much body motion, slow weight transfer to RF on entry. Add front spring rate.`
+              : a.rideFreqF_cpm > 130
+                ? `Front very stiff — fast weight transfer but tire contact patch will skip on bumps. Rough surfaces cost grip.`
+              : `In race window — front higher than rear means the chassis settles to a level attitude after a bump (anti-pitch). Predictable transient response.`}
             tip={<Tip
               changeable={true}
-              text="Milliken §16.2: Ride frequency ω = (1/2π)√(K_w×386.4/W_corner) in Hz × 60 = cpm. Older Indy-type race cars (no ground effects): 95–120 cpm. Passenger cars: 30–50 cpm. Racing sedans: 80–120 cpm. Front frequency MUST be higher than rear (front-heavy car) to prevent 'pitch coupling' where front and rear bounce reinforce each other. If rear frequency is higher than front, the car will exhibit a hobby-horse pitching resonance — very unsettling and reduces tire contact. Milliken §16.2: front higher than rear is the standard prescription for rear-drive race cars."
-              fixMethod="Increase front spring rate to raise front frequency. Reduce rear spring rate to lower rear frequency (or raise front). For the P71, target F: 100–120 cpm, R: 90–108 cpm with F always higher."
+              text="Milliken §16.2: Ride frequency ω = (1/2π)√(K_w×386.4/W_corner) in Hz × 60 = cpm. Front MUST be higher than rear to prevent pitch coupling."
+              fixMethod="Increase front spring rate to raise front frequency. P71 target: F 100–120 cpm, R 90–108 cpm."
             />}
-          >
-            {a.rideFreqF_cpm != null
-              ? `Front: ${a.rideFreqF_cpm.toFixed(0)} cpm (${(a.rideFreqF_cpm/60).toFixed(2)} Hz). Rear: ${a.rideFreqR_cpm?.toFixed(0) ?? '—'} cpm. Target range: front 95–120, rear 85–110, front always higher. ${a.rideFreqF_cpm && a.rideFreqR_cpm && a.rideFreqF_cpm < a.rideFreqR_cpm ? '⚠ REAR FREQUENCY EXCEEDS FRONT — pitch coupling likely. Increase front spring rate or reduce rear spring rate.' : a.rideFreqF_cpm >= 95 && a.rideFreqF_cpm <= 130 ? 'Front frequency in target range.' : a.rideFreqF_cpm < 95 ? 'Front frequency below race target — spring rate too soft for roll stiffness requirements.' : 'Front frequency above 130 cpm — very stiff, may cause issues on rough surfaces.'}`
-              : 'Enter spring rates to compute ride frequency.'}
-          </Finding>
+          />
 
-          <Finding
+          <Metric
             title="Spring Roll Rate & Roll Gradient"
-            value={a.rollGradient != null ? a.rollGradient.toFixed(2) : '—'} unit="deg/g (springs only)"
+            measured={a.rollGradient != null ? `${a.rollGradient.toFixed(2)} deg/g (springs only)` : null}
+            stock={`${STOCK_P71.rollGradient} deg/g (passenger comfort — body rolls heavily)`}
+            optimal={`1.0–1.8 deg/g (with ARBs) for non-aero racing sedan (Milliken Table 16.5)`}
             sev={(() => {
               const rg = a.rollGradient;
               if (rg == null) return 'info';
@@ -1278,44 +1476,51 @@ export default function GeometryAnalysis({ geo }) {
               if (rg <= 4.0) return 'warning';
               return 'critical';
             })()}
+            handling={a.rollGradient == null ? 'Enter springs and rear spring track.'
+              : a.rollGradient > 4.0
+                ? `Roll gradient much too high — at ${T.trackG}G apex car will roll ${a.rollFromSprings?.toFixed(1)}° from springs alone. Camber chain is stretched (outside tire goes positive), tires roll over onto sidewalls. Need stiffer springs AND ARBs.`
+              : a.rollGradient > 2.5
+                ? `Springs alone are soft — ARBs must add the rest. With ARB, total roll gradient should hit 1.5 deg/g (~${(a.rollFromSprings * 1.5/a.rollGradient).toFixed(1)}° at apex).`
+              : a.rollGradient < 1.5
+                ? `Springs already stiffer than 1.5 deg/g target — body barely rolls. ARBs not needed for roll control (can be used for LLTD balance only).`
+              : `Springs within expected range. ARBs will fine-tune to final target.`}
             tip={<Tip
               changeable={true}
-              text="Milliken §16.2, Table 16.1: Roll gradient (φ/A_Y) = body roll per g of lateral acceleration. Formula: (W×H_CG)/(K_φF+K_φR) × (180/π) in deg/g. Table 16.1 reference values: Passenger car 7–8.5, Very firm domestic 4.2, Extremely firm/sport 3.0, Racing car only 1.5. This section shows springs-only roll gradient. ARB adds additional roll stiffness — see ARB requirement below. Table 16.5: for non-aero sedans, target 1.0–1.8 deg/g with ARBs included."
-              fixMethod="Reduce roll gradient by: (1) stiffer springs, (2) front and/or rear ARB, (3) lowering CG height. For the P71 targeting 1.5 deg/g, the springs alone should provide 2–3 deg/g with ARBs making up the remainder. If springs provide <1.5 deg/g already, the car may be over-sprung for the chassis."
+              text="Milliken Table 16.1 reference: Passenger 7–8.5 deg/g, Firm domestic 4.2, Sport 3.0, Racing 1.5."
+              fixMethod="Reduce roll gradient with stiffer springs, ARBs, or lower CG. For P71 targeting 1.5 deg/g: springs alone should provide 2–3 deg/g, ARBs make up the rest."
             />}
-          >
-            {a.rollGradient != null
-              ? `Springs-only roll rate: K_φF ${a.kPhiF_spring?.toFixed(0) ?? '—'} + K_φR ${a.kPhiR_spring?.toFixed(0) ?? '—'} = ${a.kPhiTotal?.toFixed(0) ?? '—'} lb-ft/rad. Roll gradient (springs): ${a.rollGradient.toFixed(2)} deg/g. Body roll at ${T.trackG}G apex: ${a.rollFromSprings?.toFixed(1) ?? '—'}° from springs alone. ${a.rollGradient > 3.1 ? `Higher than current model assumption of 3.1°/g — springs are soft. ARBs will add stiffness (see below).` : a.rollGradient < 1.5 ? `Springs already stiffer than 1.5 deg/g target — ARBs may not be required for roll control. Check bumpstop contacts.` : `Springs within expected range. ARBs fine-tune to final target.`}`
-              : 'Enter spring rates and rear spring track to compute roll gradient.'}
-          </Finding>
+          />
 
-          <Finding
-            title="ARB Requirement (to reach 1.5 deg/g target)"
-            value={a.arbFRequired_deg != null ? `F ${a.arbFRequired_deg.toFixed(0)} / R ${a.arbRRequired_deg?.toFixed(0) ?? '—'}` : '—'} unit="lb-ft/deg"
+          <Metric
+            title="ARB Requirement (to reach 1.5 deg/g)"
+            measured={a.arbFRequired_deg != null ? `F ${a.arbFRequired_deg.toFixed(0)} / R ${a.arbRRequired_deg?.toFixed(0) ?? '—'} lb-ft/deg` : null}
+            stock={`F ~50 / R 0 lb-ft/deg (stock 29.5mm front bar, no rear bar)`}
+            optimal={`Whatever brings springs + ARBs to 1.5 deg/g total — varies with springs`}
             sev={a.arbFRequired_deg == null ? 'info' : (a.arbFRequired_deg > 0 || (a.arbRRequired_deg ?? 0) > 0) ? 'warning' : 'good'}
+            handling={a.arbFRequired_deg == null ? 'Enter spring rates.'
+              : (a.arbFRequired_deg > 0 || (a.arbRRequired_deg ?? 0) > 0)
+                ? `Springs supply ${((a.kPhiTotal ?? 0) / (a.kPhiRequired ?? 1) * 100).toFixed(0)}% of needed roll stiffness. ARBs must add the rest: Front ${a.arbFRequired_deg?.toFixed(0)} lb-ft/deg + Rear ${a.arbRRequired_deg?.toFixed(0)} lb-ft/deg. Front bar increases front LLTD (push); rear bar increases rear LLTD (loose). Use ARB front-rear ratio to bias balance.`
+              : `Springs alone exceed the roll gradient target — no ARB needed for roll control. ARBs may still be used for fine LLTD balance.`}
             tip={<Tip
               changeable={true}
-              text="Milliken §16.2: After computing spring-only roll rate, the difference between the required total roll rate (for target roll gradient) and the spring-provided roll rate must be supplied by ARBs. Target roll gradient: 1.5 deg/g (Milliken Table 16.1 racing cars) with 55% front LLTD for oval. Required total K_φ = W×H_CG / (target_RG×π/180). ARB contribution: K_φB = K_φBB × (L² / (I_B² × T²)) — where L is ARB lever arm length, I_B is linear installation ratio, T is track width. Milliken notes that ARB sizing from these values gives the physical bar dimensions via Chapter 21."
-              fixMethod="If ARB requirement is positive, add/stiffen ARBs at that axle. Front ARB increases front LLTD → more push. Rear ARB increases rear LLTD → more loose. For oval: start with less rear ARB and more front ARB. For figure-8: balance front and rear equally. P71 stock ARB diameter ≈ 1.0–1.125 in solid front bar — stiffer aftermarket bars available."
+              text="Milliken §16.2: ARBs supply the additional roll stiffness springs alone don't provide. Front ARB → more push. Rear ARB → more loose."
+              fixMethod={`Stock P71 ARB ≈ 1.0–1.125" solid front bar (~50 lb-ft/deg). Stiffer aftermarket bars available.`}
             />}
-          >
-            {a.arbFRequired_deg != null
-              ? `Required total K_φ for ${a.targetRollGrad} deg/g: ${(a.kPhiRequired ?? 0).toFixed(0)} lb-ft/rad. Springs provide ${a.kPhiTotal?.toFixed(0) ?? 0} lb-ft/rad (${((a.kPhiTotal ?? 0) / (a.kPhiRequired ?? 1) * 100).toFixed(0)}% of target). ${(a.arbFRequired_deg ?? 0) > 0 || (a.arbRRequired_deg ?? 0) > 0 ? `ARBs must supply: Front ${a.arbFRequired_deg?.toFixed(0)} lb-ft/deg + Rear ${a.arbRRequired_deg?.toFixed(0)} lb-ft/deg additional roll stiffness.` : 'Springs alone exceed roll gradient target — no ARB required for roll control. ARBs can still be used to adjust front/rear LLTD balance.'}`
-              : 'Enter spring rates to compute ARB requirement.'}
-          </Finding>
+          />
 
-          <Finding
+          <Metric
             title="Target Spring Rate (if not yet selected)"
-            value={`F ${a.ksF_target.toFixed(0)} / R ${a.ksR_target.toFixed(0)}`} unit="lb/in at spring"
+            measured={`F ${a.ksF_target.toFixed(0)} / R ${a.ksR_target.toFixed(0)} lb/in`}
+            stock={`F ${STOCK_P71.springF} / R ${STOCK_P71.springR} lb/in (Police/Taxi front, stock rear coil)`}
+            optimal={`Match calc target — gives 108/97 cpm front/rear ride frequency`}
             sev="info"
+            handling={`Calculated targets to hit 108 cpm front / 97 cpm rear at IR ${a.irF.toFixed(2)}/${a.irR.toFixed(2)}. F${a.ksF_target.toFixed(0)} lb/in spring → ${(a.ksF_target * a.irF * a.irF).toFixed(0)} lb/in wheel rate. R${a.ksR_target.toFixed(0)} → ${(a.ksR_target * a.irR * a.irR).toFixed(0)} lb/in wheel. Static spring load: F${a.springLoadF.toFixed(0)} lb / R${a.springLoadR.toFixed(0)} lb. Adjust ±50 lb/in for track roughness preferences.`}
             tip={<Tip
               changeable={true}
-              text="Milliken §21.4 / §16.2: Back-solving from target ride frequency (front 108 cpm / rear 97 cpm) and installation ratio. Formula: K_s = (2πω)² × W_corner / (IR² × 386.4). These are starting point spring rates — actual selection depends on bumpstop gap, available wheel travel, and roll stiffness requirements. Ref 6 recommends measuring spring rate over ±25mm (±1 in) of the design load length for accurate rate on nonlinear springs."
-              fixMethod="Select the nearest standard spring rate from a spring catalog (e.g., Hypercoil, Eibach, Afco). Rates are typically available in 25 or 50 lb/in increments. After selecting springs, enter the actual rate above to verify wheel rate, ride frequency, and roll gradient."
+              text="Milliken §21.4: Back-solved from target ride frequency. Formula: K_s = (2πω)² × W_corner / (IR² × 386.4)."
+              fixMethod="Select nearest standard rate from spring catalog (Hypercoil, Eibach, Afco) — typically 25 or 50 lb/in increments."
             />}
-          >
-            Target spring rates for front 108 cpm / rear 97 cpm at IR {a.irF.toFixed(2)} / {a.irR.toFixed(2)}: Front {a.ksF_target.toFixed(0)} lb/in → wheel rate {(a.ksF_target * a.irF * a.irF).toFixed(0)} lb/in. Rear {a.ksR_target.toFixed(0)} lb/in → wheel rate {(a.ksR_target * a.irR * a.irR).toFixed(0)} lb/in. Spring load at static corner weight: Front {a.springLoadF.toFixed(0)} lbs / Rear {a.springLoadR.toFixed(0)} lbs (= corner weight / IR).
-          </Finding>
+          />
 
           {(a.stressF_max || a.stressR_max) && (
             <Finding
@@ -1382,65 +1587,94 @@ export default function GeometryAnalysis({ geo }) {
       {Object.keys(a.shockData).length > 0 && (
         <Section title="9 — SHOCK & SPRING TRAVEL ANALYSIS" color="#a78bfa">
           {Object.entries(a.shockData).map(([pos, sd]) => {
-            const comprPct = sd.free > 0 ? ((sd.compression / (sd.free * 0.4)) * 100).toFixed(0) : '—';
             const sev = sd.jounceAvail != null && sd.jounceAvail < 0.5 ? 'critical'
               : sd.compression < 0.5 ? 'critical'
               : sd.jounceAvail != null && sd.jounceAvail < 1.0 ? 'warning'
               : 'good';
+            const stockGap = pos.endsWith('F') ? STOCK_P71.shockGapF : STOCK_P71.shockGapR;
             return (
-              <Finding
+              <Metric
                 key={pos}
                 title={`${pos} Shock Travel`}
+                measured={`${sd.compression.toFixed(2)}" compressed, ${sd.jounceAvail != null ? sd.jounceAvail.toFixed(2) + '" to bumpstop' : 'gap not measured'}`}
+                stock={`~${stockGap}" bumpstop gap (stock ride height with OEM springs)`}
+                optimal={`1.0–1.5" bumpstop gap, 1.0–2.0" droop available — race-tuned`}
                 sev={sev}
-              >
-                Free length: {sd.free.toFixed(2)}" | Installed: {sd.inst.toFixed(2)}" | Shaft compressed: {sd.compression.toFixed(2)}"{'\n'}
-                Jounce available to bumpstop: {sd.jounceAvail != null ? sd.jounceAvail.toFixed(2) + '"' : 'not measured'}{'\n'}
-                {sd.jounceAvail != null && sd.jounceAvail < 0.5 && '⚠ CRITICAL: Less than 0.5" to bumpstop — will hit stop in normal cornering. Stiffer spring or shorter bump rubber needed.\n'}
-                {sd.compression < 0.5 && '⚠ CRITICAL: Shock nearly topped out — no droop travel. Wheel cannot follow road surface downward. Longer shock or lower ride height needed.\n'}
-                {sd.bump && sd.jounceAvail != null && `Wheel bump travel measured: ${sd.bump}" — shock bumpstop gap ${sd.jounceAvail}". ${parseFloat(sd.bump) > parseFloat(sd.jounceAvail) ? 'Wheel travel exceeds bumpstop gap — bumpstop will be contacted during recorded bump measurement.' : 'Bumpstop gap exceeds wheel travel — shock is not the limiting factor.'}`}
-              </Finding>
+                handling={
+                  sd.jounceAvail != null && sd.jounceAvail < 0.5
+                    ? `⚠ Less than 0.5" to bumpstop — will hit stop in normal cornering. Bumpstop contact spikes wheel rate to effectively infinite, the tire momentarily unloads and loses grip. Driver feels a sharp "snap" mid-corner. Need stiffer spring or shorter/progressive bump rubber.`
+                  : sd.compression < 0.5
+                    ? `⚠ Shock nearly topped out — no droop travel. Wheel cannot follow road downward when load lifts. Causes wheel hop, loss of contact on bumps. Need longer shock body or lower ride height.`
+                  : sd.jounceAvail != null && sd.jounceAvail < 1.0
+                    ? `Marginal jounce gap — likely hitting bumpstop in hard cornering. Consider progressive-taper bump rubber to soften the contact.`
+                  : `Good shock geometry. Free ${sd.free.toFixed(2)}" / installed ${sd.inst.toFixed(2)}" with adequate jounce + droop room for race conditions.`
+                }
+                tip={<Tip
+                  changeable={true}
+                  text={`Shock travel = total stroke between full droop and full bump. Bumpstop gap is the distance the shaft can compress before contacting the rubber stop. Stock P71: ~${stockGap}" gap.`}
+                  fixMethod="Increase bumpstop gap with stiffer/taller springs, longer shock body, or shorter bump rubber. Decrease with shorter springs or longer bump rubber."
+                />}
+              />
             );
           })}
 
           {(a.rhFrontAvg || a.rhRearAvg) && (
-            <Finding title="Ride Height Summary" sev="info">
-              {a.rhFrontAvg && `Front avg: ${a.rhFrontAvg.toFixed(2)}"`}
-              {a.rhRearAvg  && `  Rear avg: ${a.rhRearAvg.toFixed(2)}"`}
-              {a.rhRake     && `  Rake (F−R): ${sign(a.rhRake)}"`}
-              {a.rhSideSplit && `  L−R split: ${sign(a.rhSideSplit)}"`}
-              {a.rhRake != null && a.rhRake < -0.5 && '\n⚠ Rear is significantly higher than front — rear-heavy rake can cause front plow (push). Consider stiffer front springs or taller front ride height.'}
-              {a.rhRake != null && a.rhRake > 1.5 && '\n⚠ Front is significantly higher than rear — strong nose-up rake. Improves straight-line aero but may increase understeer at corner entry.'}
-              {a.rhSideSplit != null && Math.abs(a.rhSideSplit) > 1.0 && !isOval && '\n⚠ Large L/R ride height split for figure-8 — will produce handling difference between left and right turns.'}
-            </Finding>
+            <Metric
+              title="Ride Height Summary"
+              measured={[
+                a.rhFrontAvg && `F ${a.rhFrontAvg.toFixed(2)}"`,
+                a.rhRearAvg && `R ${a.rhRearAvg.toFixed(2)}"`,
+                a.rhRake != null && `Rake ${sign(a.rhRake)}"`,
+                a.rhSideSplit != null && `L−R ${sign(a.rhSideSplit)}"`,
+              ].filter(Boolean).join(' · ')}
+              stock={`Stock rake +0.5" (front higher than rear)`}
+              optimal={isOval ? `Race rake 0 to +1.0" front-up; minimal L−R split` : `Symmetric — minimal F−R rake and zero L−R split`}
+              sev={a.rhRake != null && (a.rhRake < -0.5 || a.rhRake > 1.5) ? 'warning' : (!isOval && a.rhSideSplit != null && Math.abs(a.rhSideSplit) > 1.0) ? 'warning' : 'good'}
+              handling={
+                a.rhRake != null && a.rhRake < -0.5
+                  ? `Rear higher than front (${Math.abs(a.rhRake).toFixed(2)}" reverse rake) — biases load forward in cornering, front pushes mid-corner. Stiffen/raise front or lower rear.`
+                : a.rhRake != null && a.rhRake > 1.5
+                  ? `Strong nose-up rake (${a.rhRake.toFixed(2)}") — front weight transfers rearward during braking, may cause loose entry. Helps straight-line aero stability.`
+                : !isOval && a.rhSideSplit != null && Math.abs(a.rhSideSplit) > 1.0
+                  ? `L/R ride height split of ${Math.abs(a.rhSideSplit).toFixed(2)}" on figure-8 — left and right turns will feel different. Equalize spring perches.`
+                : `Ride height profile is suitable for current track type.`
+              }
+              tip={<Tip
+                changeable={true}
+                text={`Ride height affects roll center, CG height, and rake-driven aerodynamic balance. Each 1" of lowering drops CG ~0.65" but also lowers RC ~1–2".`}
+                fixMethod="Adjust by spring perch position, spring spacers, or different spring free length. Always measure on level surface with full fluid load."
+              />}
+            />
           )}
 
           {/* ── Milliken Ch.22 Damper Analysis ───────────────────────────── */}
           {a.cCritF != null && (
-            <Finding
+            <Metric
               title="Critical Damping & Target Forces (Milliken §22.3)"
-              value={`F ${a.cCritF.toFixed(2)} / R ${a.cCritR?.toFixed(2) ?? '—'}`} unit="lb·s/in C_crit"
+              measured={`C_crit F ${a.cCritF.toFixed(2)} / R ${a.cCritR?.toFixed(2) ?? '—'} lb·s/in`}
+              stock={`Stock damping ζ ≈ 0.25 (passenger comfort target)`}
+              optimal={`Target bump force at 5 in/sec — F ${a.fDampBumpF_min?.toFixed(0)}–${a.fDampBumpF_max?.toFixed(0)} lbs / R ${a.fDampBumpR_min?.toFixed(0) ?? '—'}–${a.fDampBumpR_max?.toFixed(0) ?? '—'} lbs`}
               sev="info"
+              handling={`These are the MAXIMUM body-control forces your shocks should hit at 5 in/sec shaft speed. Bump (compression) at ζ=0.40–0.71. Rebound (extension) ~2× bump. Sprung mass: F ${(a.wSF/2).toFixed(0)} lb/corner, R ${(a.wSR/2).toFixed(0)} lb/corner. Use these as targets when dyno-testing your shocks.`}
               tip={<Tip
                 changeable={true}
-                text="Milliken §22.3: Critical damping coefficient C_crit = 2√(km) where k = wheel rate (lb/in) and m = sprung corner mass (slugs = lbs/386.4). Damping ratio ζ = C / C_crit. Target ratios (Milliken Table 22.2, non-aero oval): ride ζ = 0.40–0.50, roll ζ = 0.71. Passenger cars typically ζ = 0.25. Racing sedans need higher ratios to control body motion without aero downforce. At 5 in/sec shaft speed (the body-control range — most important per §22.3), the target damping force = C_crit × ζ × 5. Rebound is manufactured at ~2× bump force to keep body forces symmetric — the car lifts at the same rate it pushes down, so the driver feels symmetric transient response."
-                fixMethod="Dyno-test the shock at 5 in/sec shaft speed to measure actual bump and rebound forces. Compare to target range. If too soft: increase damper adjustment (KONI: turn clockwise, number increases). If too stiff: decrease adjustment. Set bump first to match ζ=0.40–0.50 target, then verify rebound is ~2× bump."
+                text="Milliken §22.3: C_crit = 2√(km) where k=wheel rate, m=sprung corner mass. Target ζ for non-aero oval: bump 0.40–0.50, rebound 0.71."
+                fixMethod="Dyno-test shock at 5 in/sec, compare to target range. KONI clockwise increases damping. Set bump first, then verify rebound is ~2× bump."
               />}
-            >
-              {`C_crit computed from wheel rates: Front ${a.cCritF.toFixed(3)} lb·s/in, Rear ${a.cCritR?.toFixed(3) ?? '—'} lb·s/in.\n`}
-              {`Sprung mass: F ${(a.wSF/2).toFixed(0)} lbs/corner, R ${(a.wSR/2).toFixed(0)} lbs/corner.\n\n`}
-              {`Target BUMP force at ${a.refSpeed} in/sec (ζ = ${a.zetaLow}–${a.zetaHigh}):\n`}
-              {`  Front: ${a.fDampBumpF_min?.toFixed(0)}–${a.fDampBumpF_max?.toFixed(0)} lbs\n`}
-              {`  Rear:  ${a.fDampBumpR_min?.toFixed(0) ?? '—'}–${a.fDampBumpR_max?.toFixed(0) ?? '—'} lbs\n\n`}
-              {`Target REBOUND force at ${a.refSpeed} in/sec (~2× bump, ζ = ${a.zetaLow}–${a.zetaHigh}):\n`}
-              {`  Front: ${a.fDampRebF_min?.toFixed(0)}–${a.fDampRebF_max?.toFixed(0)} lbs\n`}
-              {`  Rear:  ${a.fDampRebR_min?.toFixed(0) ?? '—'}–${a.fDampRebR_max?.toFixed(0) ?? '—'} lbs`}
-            </Finding>
+            />
           )}
 
           {(a.fBumpF_meas || a.fBumpR_meas || a.fRebF_meas || a.fRebR_meas) && (
-            <Finding
+            <Metric
               title="Measured Damping Ratio (Milliken §22.3)"
-              value={a.zetaF_bump != null ? `F bump ζ=${a.zetaF_bump.toFixed(2)}` : '—'} unit=""
+              measured={[
+                a.zetaF_bump != null && `F bump ζ=${a.zetaF_bump.toFixed(2)}`,
+                a.zetaF_reb != null && `F reb ζ=${a.zetaF_reb.toFixed(2)}`,
+                a.zetaR_bump != null && `R bump ζ=${a.zetaR_bump.toFixed(2)}`,
+                a.zetaR_reb != null && `R reb ζ=${a.zetaR_reb.toFixed(2)}`,
+              ].filter(Boolean).join(' · ')}
+              stock={`Stock ζ ~0.25 bump / ~0.50 rebound (passenger comfort)`}
+              optimal={`Bump ζ 0.40–0.71 / Rebound ζ 0.71–1.0 / B:R ratio 1:2`}
               sev={(() => {
                 const zb = a.zetaF_bump; const zr = a.zetaF_reb;
                 if (!zb) return 'info';
@@ -1449,75 +1683,75 @@ export default function GeometryAnalysis({ geo }) {
                 if (!bOk || !rOk) return 'warning';
                 return 'good';
               })()}
+              handling={[
+                a.zetaF_bump != null && `Front bump ζ=${a.zetaF_bump.toFixed(2)}: ${a.zetaF_bump >= 0.40 && a.zetaF_bump <= 0.71 ? '✓ in target' : a.zetaF_bump < 0.40 ? 'SOFT — body bobs, slow to settle. Increase clicks.' : 'STIFF — too harsh, tires skip on bumps. Reduce clicks.'}`,
+                a.zetaF_reb != null && `Front rebound ζ=${a.zetaF_reb.toFixed(2)}: ${a.zetaF_reb >= 0.60 && a.zetaF_reb <= 1.4 ? '✓ in range' : a.zetaF_reb > 1.4 ? 'EXCESSIVE — jacking down risk (car settles lower over multiple bumps)' : 'LOW — poor body control returning from bump'}`,
+                a.brRatioF != null && `Front B:R = 1:${a.brRatioF.toFixed(2)}: ${a.brRatioF >= 1.5 && a.brRatioF <= 2.5 ? '✓ symmetric transient response' : a.brRatioF > 2.5 ? 'rebound dominates → jacking down on rough surfaces' : 'too symmetric → rough body control'}`,
+                a.zetaR_bump != null && `Rear bump ζ=${a.zetaR_bump.toFixed(2)}: ${a.zetaR_bump >= 0.40 && a.zetaR_bump <= 0.71 ? '✓' : a.zetaR_bump < 0.40 ? 'SOFT' : 'STIFF'}`,
+                a.zetaR_reb != null && `Rear rebound ζ=${a.zetaR_reb.toFixed(2)}: ${a.zetaR_reb >= 0.60 && a.zetaR_reb <= 1.4 ? '✓' : a.zetaR_reb > 1.4 ? 'EXCESSIVE — jacking down risk' : 'LOW'}`,
+              ].filter(Boolean).join(' • ')}
               tip={<Tip
                 changeable={true}
-                text="Damping ratio ζ = F_measured / (C_crit × V_shaft). Calculated from entered dyno force at 5 in/sec. Target: bump ζ = 0.40–0.50, rebound ζ = 0.71–1.0 (rebound always higher than bump). A ζ below 0.25 (comfort damping) produces excessive body motion and tire bounce. A ζ above 1.0 is overdamped — the wheel cannot return fast enough after a bump, causing the car to progressively settle lower on rough surfaces ('jack down'). The 1:2 bump:rebound ratio is manufactured into the shock internally and cannot be changed without reshimming the valving."
-                fixMethod="KONI shock adjustment: turn adjustment knob clockwise to increase damping (both bump and rebound increase together on a single-adjustable shock). Each click changes ζ by approximately 0.05–0.10 depending on shock model. Measure corner weights before and after shock adjustment — jacking down from excessive rebound will show as lowered ride height at that corner."
+                text="ζ = F_measured / (C_crit × V). Below 0.25 = comfort, body bounces. Above 1.0 = overdamped, jacks down."
+                fixMethod="KONI clockwise increases damping. Each click changes ζ ~0.05–0.10. Measure corner weights before/after — jacking down shows as lowered ride height."
               />}
-            >
-              {[
-                a.zetaF_bump != null && `Front bump: ${a.fBumpF_meas} lbs at 5 in/sec → ζ_bump = ${a.zetaF_bump.toFixed(2)} ${a.zetaF_bump >= 0.40 && a.zetaF_bump <= 0.71 ? '✓ in target range' : a.zetaF_bump < 0.40 ? '⚠ SOFT — increase damper adjustment' : '⚠ STIFF — reduce damper adjustment or reshim valving'}`,
-                a.zetaF_reb != null && `Front rebound: ${a.fRebF_meas} lbs at 5 in/sec → ζ_reb = ${a.zetaF_reb.toFixed(2)} ${a.zetaF_reb >= 0.60 && a.zetaF_reb <= 1.4 ? '✓ in range' : a.zetaF_reb > 1.4 ? '⚠ EXCESSIVE REBOUND — jacking down risk (see below)' : '⚠ LOW REBOUND — poor body control on return stroke'}`,
-                a.brRatioF != null && `Front bump:rebound ratio = 1:${a.brRatioF.toFixed(2)} ${a.brRatioF >= 1.5 && a.brRatioF <= 2.5 ? '✓ (target 1:2)' : a.brRatioF > 2.5 ? '⚠ REBOUND TOO HIGH relative to bump — dominant jacking down risk' : '⚠ REBOUND TOO LOW — symmetric damping, poor body control'}`,
-                a.zetaR_bump != null && `Rear bump: ${a.fBumpR_meas} lbs at 5 in/sec → ζ_bump = ${a.zetaR_bump.toFixed(2)} ${a.zetaR_bump >= 0.40 && a.zetaR_bump <= 0.71 ? '✓ in target range' : a.zetaR_bump < 0.40 ? '⚠ SOFT' : '⚠ STIFF'}`,
-                a.zetaR_reb != null && `Rear rebound: ${a.fRebR_meas} lbs at 5 in/sec → ζ_reb = ${a.zetaR_reb.toFixed(2)} ${a.zetaR_reb >= 0.60 && a.zetaR_reb <= 1.4 ? '✓ in range' : a.zetaR_reb > 1.4 ? '⚠ EXCESSIVE REBOUND — jacking down risk' : '⚠ LOW REBOUND'}`,
-                a.brRatioR != null && `Rear bump:rebound ratio = 1:${a.brRatioR.toFixed(2)} ${a.brRatioR >= 1.5 && a.brRatioR <= 2.5 ? '✓ (target 1:2)' : a.brRatioR > 2.5 ? '⚠ REBOUND TOO HIGH' : '⚠ REBOUND TOO LOW'}`,
-              ].filter(Boolean).join('\n')}
-            </Finding>
+            />
           )}
 
           {(a.zetaF_reb != null && a.zetaF_reb > 1.2) || (a.zetaR_reb != null && a.zetaR_reb > 1.2) ? (
-            <Finding
+            <Metric
               title="Jacking Down Diagnostic (Milliken §22.4)"
-              value="RISK — EXCESSIVE REBOUND" unit=""
+              measured={`RISK — EXCESSIVE REBOUND DAMPING`}
+              stock={`Stock ζ_reb ~0.50 — no jacking down risk`}
+              optimal={`Rebound ζ ≤ 1.0 — fast enough recovery between bumps`}
               sev="critical"
+              handling={[
+                a.zetaF_reb != null && a.zetaF_reb > 1.2 && `Front rebound ζ=${a.zetaF_reb.toFixed(2)} overdamped — spring can't push body up between bumps. Car settles progressively LOWER through long corners, eventually riding the bumpstops. On exit it pops up suddenly = unpredictable.`,
+                a.zetaR_reb != null && a.zetaR_reb > 1.2 && `Rear rebound ζ=${a.zetaR_reb.toFixed(2)} overdamped — rear jacks down on rough exit, then snaps loose when it pops back up. Critical on oval.`,
+                'Verify by measuring corner weights before and after a session — if ride height is lower after 10 laps, jacking down is confirmed.',
+              ].filter(Boolean).join(' ')}
               tip={<Tip
                 changeable={true}
-                text="Milliken §22.4 ('jacking down'): If rebound damping is excessive, the shock cannot extend fast enough after a jounce event. The spring can't push the body back up in time before the next bump arrives. The car progressively settles lower on the bumpstops — the driver feels the car getting stiffer and lower through a long corner or rough section. On exit, the car may suddenly become very loose as it comes off the bumpstop. Distinguished from a handling problem by measuring ride height before and after a session — if the car is measurably lower after 10 laps, jacking down is occurring."
-                fixMethod="(1) Reduce rebound damping — KONI adjustment reduces both bump and rebound together on a single-adjustable shock. (2) Target rebound ζ = 0.71–1.0, not higher. (3) Verify bumpstop gap — if bumpstop gap is zero or negative, the car IS on the bumpstop at ride height and no damper setting will help (fix spring first). (4) On two-adjustable shocks: reduce rebound click independently without changing bump."
+                text="Milliken §22.4: Excess rebound prevents the spring from extending the shock fast enough after a jounce event. Car settles lower bump-by-bump."
+                fixMethod="Reduce rebound damping (KONI counter-clockwise). Target ζ_reb 0.71–1.0. On 2-adj shocks: reduce rebound click without changing bump."
               />}
-            >
-              {[
-                a.zetaF_reb != null && a.zetaF_reb > 1.2 && `Front rebound ζ=${a.zetaF_reb.toFixed(2)} — significantly overdamped in rebound. Spring cannot recover from jounce events at race speed. Progressive settling toward front bumpstops through a long corner. Check front bumpstop gap after session — if it has decreased since start, jacking down is confirmed.`,
-                a.zetaR_reb != null && a.zetaR_reb > 1.2 && `Rear rebound ζ=${a.zetaR_reb.toFixed(2)} — overdamped rear rebound. Rear will jack down on rough exit from turn, suddenly releasing all rear roll stiffness — snaps loose at exit. Critical on oval.`,
-              ].filter(Boolean).join('\n')}
-            </Finding>
+            />
           ) : null}
 
           {a.cCritF != null && (
-            <Finding
+            <Metric
               title="Transient Balance: Bump vs Rebound (Milliken §22.5)"
-              value="Front bump → push | Rear bump → loose" unit=""
+              measured={`Front bump → push | Rear bump → loose (turn-in only)`}
+              stock={`Stock damping is balanced — no transient bias either way`}
+              optimal={`Tune to driver preference for entry balance`}
               sev="info"
+              handling={`SHOCK ADJUSTMENT EFFECTS ON CORNER ENTRY (transient only — steady-state mid-corner is controlled by RC and ARB):
+• Front SOFTER bump → less entry push, more neutral turn-in
+• Front STIFFER bump → more push on entry
+• Rear SOFTER bump → tighter entry (less initial oversteer)
+• Rear STIFFER bump → looser entry (more oversteer at turn-in)`}
               tip={<Tip
                 changeable={true}
-                text="Milliken §22.5: Increasing front bump damping increases the front tire's resistance to jounce — in a transient maneuver (trail braking, turn-in), the front resists deflection and transfers more force laterally, but delays weight transfer to the outside. The net effect is MORE UNDERSTEER (PUSH) on initial turn-in. Increasing rear bump damping has the opposite effect — the rear resists jounce under lateral loading, delaying rear weight transfer, which momentarily increases rear grip on entry → MORE OVERSTEER (LOOSE) tendency on turn-in. This is a transient effect only — does not affect steady-state cornering balance."
-                fixMethod="KONI single-adjustable: adjustment changes bump and rebound together. To tune transient balance without a two-adjustable shock: (1) If the car pushes on entry, soften front or stiffen rear damping. (2) If the car is loose on entry, stiffen front or soften rear damping. Always verify the change fixes the symptom without inducing jacking down on the affected end."
+                text="Milliken §22.5: Front bump damping resists outside-tire jounce, delays weight transfer = push on entry. Rear bump damping has opposite effect = loose on entry."
+                fixMethod="If car pushes on entry: soften front bump or stiffen rear bump. If loose on entry: stiffen front or soften rear. Verify no jacking down side-effect."
               />}
-            >
-              {`Transient handling effects of shock adjustment (Milliken §22.5):\n`}
-              {`  Front SOFTER bump → less entry push, more neutral turn-in\n`}
-              {`  Front STIFFER bump → more push on entry\n`}
-              {`  Rear SOFTER bump → tighter entry (less initial oversteer)\n`}
-              {`  Rear STIFFER bump → looser entry (more oversteer at turn-in)\n\n`}
-              {`Use these effects to fine-tune first-lap or corner-entry balance. Steady-state mid-corner balance is controlled by RC heights and ARB — shocks tune the transient response only.`}
-            </Finding>
+            />
           )}
 
           {a.fHop_hz != null && (
-            <Finding
+            <Metric
               title="Wheel Hop Frequency (Milliken §22.6)"
-              value={`~${a.fHop_cpm.toFixed(0)}`} unit="cpm unsprung resonance"
+              measured={`~${a.fHop_cpm.toFixed(0)} cpm (${a.fHop_hz.toFixed(1)} Hz unsprung resonance)`}
+              stock={`Same — unsprung mass and tire rate are platform-fixed`}
+              optimal={`660–720 cpm — well above body ride frequency (no resonance overlap)`}
               sev={a.fHop_cpm > 600 && a.fHop_cpm < 800 ? 'good' : 'info'}
+              handling={`Wheel hop = unsprung mass bouncing on tire spring (K_T ≈ 1200 lb/in, m_unsprung ≈ 85 lb/corner). Body ride freq ${a.rideFreqF_cpm?.toFixed(0) ?? '~100'} cpm vs wheel ${a.fHop_cpm.toFixed(0)} cpm — separated, no interaction. Wheel hop is controlled by HIGH-speed rebound damping (>10 in/sec). On a street-derived P71 high shaft speeds are rare; prioritize 0–5 in/sec body control instead.`}
               tip={<Tip
                 changeable={false}
-                text="Milliken §22.6: Wheel hop occurs at the unsprung mass resonant frequency — the wheel bouncing on the tire spring. f_hop = (1/2π)√(K_tire/m_unsprung). For the P71: estimated tire rate K_T ≈ 1,200 lb/in (235/55R17 at ~30 psi race pressure), unsprung mass ~85 lbs/corner → f_hop ≈ 11–12 Hz (660–720 cpm). Milliken §22.6: if the shock's transmissibility at the wheel hop frequency exceeds ~2.5, the wheel hops and grip is lost. High rebound damping at high shaft speeds (above ~15 in/sec) is the primary tool to control wheel hop — the shock limits wheel oscillation amplitude. However, for a street-derived sedan (P71), shaft speeds above 15 in/sec are rarely seen — the car is not a race-purpose vehicle with high-frequency road inputs."
-                fixMethod="If wheel hop is observed (visible wheel bouncing, chattering on straights): (1) increase rear damping — the rear solid axle is heaviest and most prone to wheel hop due to high unsprung mass. (2) Reduce tire pressure slightly — lowers K_T and drops hop frequency, reduces amplitude. (3) Check shock shaft bushings — worn bushings increase play and promote hop. (4) Verify wheel balance — imbalance excites hop at specific speeds (resonant speed = f_hop × tire circumference in ft/min)."
+                text="Milliken §22.6: f_hop = (1/2π)√(K_tire/m_unsprung). If shock transmissibility at f_hop exceeds 2.5, wheel hops and grip is lost."
+                fixMethod="If wheel hop visible: increase rear high-speed damping. Reduce tire pressure slightly. Check shock shaft bushings for play."
               />}
-            >
-              {`Unsprung resonance: K_tire ≈ 1200 lb/in, m_unsprung = 85 lbs/corner → f_hop ≈ ${a.fHop_hz.toFixed(1)} Hz (${a.fHop_cpm.toFixed(0)} cpm).\n`}
-              {`This is well above the body ride frequency (${a.rideFreqF_cpm?.toFixed(0) ?? '~100'} cpm body vs ${a.fHop_cpm.toFixed(0)} cpm wheel) — the two resonances do not interact. Wheel hop is controlled by high-speed rebound damping (above 10 in/sec shaft speed). At oval speeds the excitation of wheel hop resonance is minimal — prioritize low-speed (0–5 in/sec) body control over high-speed damping tuning.`}
-            </Finding>
+            />
           )}
         </Section>
       )}
@@ -1614,6 +1848,181 @@ export default function GeometryAnalysis({ geo }) {
         </div>
       </Section>
 
+      <TrackPositionSynopsis a={a} isOval={isOval} T={T} />
+
     </div>
+  );
+}
+
+// ─── Track Position Synopsis ─────────────────────────────────────────────────
+// Final tile: synthesize all current measurements into 4 buckets describing
+// what the car will do at each phase of a corner / on straights.
+function TrackPositionSynopsis({ a, isOval, T }) {
+  // Build the 4 narratives from current analysis values.
+
+  const lines = {
+    entry: [],
+    mid:   [],
+    exit:  [],
+    str:   [],
+  };
+
+  // ── CORNER ENTRY (turn-in, trail-braking, weight transfer) ──────────────
+  if (a.lltdFrontFrac != null) {
+    if (a.lltdFrontFrac > 0.72) {
+      lines.entry.push(`Geometry-dominant front load (${(a.lltdFrontFrac*100).toFixed(0)}% front geo LLTD) → RF loads instantly on turn-in. Sharp, abrupt entry but limited ARB tuning authority for trail-brake balance.`);
+    } else if (a.lltdFrontFrac < 0.55) {
+      lines.entry.push(`Rear loads up faster than front on entry (front geo LLTD ${(a.lltdFrontFrac*100).toFixed(0)}%). Entry tends LOOSE — tail will step out under trail-braking.`);
+    } else {
+      lines.entry.push(`Balanced entry — front LLTD ${(a.lltdFrontFrac*100).toFixed(0)}% gives predictable weight transfer to RF without abrupt loading.`);
+    }
+  }
+
+  if (a.zetaF_bump != null && a.zetaF_bump < 0.40) {
+    lines.entry.push(`Front bump damping is soft (ζ=${a.zetaF_bump.toFixed(2)}) → body bobs forward on turn-in, slow weight transfer to RF. Entry feels vague.`);
+  } else if (a.zetaF_bump != null && a.zetaF_bump > 0.71) {
+    lines.entry.push(`Front bump damping is stiff (ζ=${a.zetaF_bump.toFixed(2)}) → resists turn-in jounce, adds ENTRY PUSH per Milliken §22.5.`);
+  }
+
+  if (a.zetaR_bump != null && a.zetaR_bump > 0.71) {
+    lines.entry.push(`Rear bump damping is stiff (ζ=${a.zetaR_bump.toFixed(2)}) → delays rear weight transfer, adds ENTRY OVERSTEER (loose).`);
+  }
+
+  if (a.rhRake != null && a.rhRake > 1.5) {
+    lines.entry.push(`Strong nose-up rake (+${a.rhRake.toFixed(2)}") shifts weight rearward under braking → loose entry possible.`);
+  } else if (a.rhRake != null && a.rhRake < -0.5) {
+    lines.entry.push(`Reverse rake (rear higher) keeps front loaded under braking → push tendency on entry.`);
+  }
+
+  // ── MID-CORNER (steady-state lateral G) ─────────────────────────────────
+  if (a.rfCamberDev != null) {
+    if (Math.abs(a.rfCamberDev) < 0.3) {
+      lines.mid.push(`RF camber dialed in for ${T.label} apex — full contact patch loaded, max lateral grip.`);
+    } else if (a.rfCamberDev > 0) {
+      lines.mid.push(`RF ${a.rfCamberDev.toFixed(2)}° short of ideal at apex → outside tread overheats, mid-corner PUSH. Pyrometer outside zone hottest.`);
+    } else {
+      lines.mid.push(`RF over-cambered ${Math.abs(a.rfCamberDev).toFixed(2)}° → only inside edge contacts at apex, reduced lateral grip.`);
+    }
+  }
+
+  if (a.rollGradient != null) {
+    if (a.rollGradient > 4.0) {
+      lines.mid.push(`Heavy body roll (${a.rollGradient.toFixed(1)} deg/g springs only) — outside tire goes positive at apex, sidewalls roll over. Need stiffer springs and/or ARB.`);
+    } else if (a.rollGradient > 2.5) {
+      lines.mid.push(`Moderate roll (${a.rollGradient.toFixed(1)} deg/g) — ARB needed to bring total to 1.5 deg/g target.`);
+    } else {
+      lines.mid.push(`Roll well controlled (${a.rollGradient.toFixed(1)} deg/g) — body stays flat, camber chain stays in spec at apex.`);
+    }
+  }
+
+  if (a.momentArm != null && a.momentArm > 0 && a.momentArm < 3) {
+    lines.mid.push(`CG-to-RC moment arm only ${a.momentArm.toFixed(2)}" → ARB stiffness changes have little effect on mid-corner balance. Tune via RC heights instead.`);
+  }
+
+  if (a.rfCamberComp != null && a.rfCamberComp < 40) {
+    lines.mid.push(`Low geometric camber compensation (~${a.rfCamberComp}%) → outside tire loses most of static camber to body roll mid-corner. Static negative is doing all the work.`);
+  }
+
+  if (a.geoLLTDF != null) {
+    if (isOval && a.geoLLTDF > 0.72) {
+      lines.mid.push(`Geometric front LLTD too high (${(a.geoLLTDF*100).toFixed(0)}%) → chronic mid-corner push. ARB cannot tune this out — must lower front RC.`);
+    } else if (a.geoLLTDF < 0.55) {
+      lines.mid.push(`Front geometric LLTD low (${(a.geoLLTDF*100).toFixed(0)}%) → rear takes too much load mid-corner, tail walks out.`);
+    }
+  }
+
+  // ── CORNER EXIT (throttle application, weight shift rearward) ───────────
+  if (a.zetaR_reb != null && a.zetaR_reb > 1.2) {
+    lines.exit.push(`⚠ Rear rebound overdamped (ζ=${a.zetaR_reb.toFixed(2)}) → rear jacks down through corner, pops up at exit = sudden loss of rear roll stiffness, snaps loose.`);
+  }
+
+  if (a.zetaF_reb != null && a.zetaF_reb > 1.2) {
+    lines.exit.push(`Front rebound overdamped (ζ=${a.zetaF_reb.toFixed(2)}) → front settles low into bumpstops through corner, releases at exit = unpredictable balance.`);
+  }
+
+  const shockExitIssues = Object.entries(a.shockData)
+    .filter(([pos, sd]) => pos.endsWith('R') && sd.jounceAvail != null && sd.jounceAvail < 0.5);
+  if (shockExitIssues.length > 0) {
+    lines.exit.push(`Rear bumpstop contact under power (gap < 0.5") → rear wheel rate spikes infinite at exit, tire unloads briefly = loss of traction off the apex.`);
+  }
+
+  if (a.rcDiff != null) {
+    if (isOval && a.rcDiff < 0) {
+      lines.exit.push(`Rear RC higher than front → rear loads up first under throttle, exit OVERSTEER. Lower the Watts pivot.`);
+    } else if (isOval && a.rcDiff > 6) {
+      lines.exit.push(`Front RC much higher than rear → strong front geometric bias, exit tends PUSH as front holds load while rear rotates.`);
+    }
+  }
+
+  if (a.kwRavg != null && a.kwRavg < 130) {
+    lines.exit.push(`Soft rear wheel rate (${a.kwRavg.toFixed(0)} lb/in) → rear squats under throttle, may lift inside rear (especially with no LSD/limited slip). Power lost to spinning inside wheel.`);
+  }
+
+  // Compliance steer is constant — but matters most under throttle when slip angles change rapidly
+  lines.exit.push(`Stock rubber bushings produce ~0.25–0.75°/g compliance understeer — most felt as mid-corner push that holds through exit unless poly bushings installed.`);
+
+  // ── STRAIGHTS (stability, ride, tire heating) ───────────────────────────
+  if (a.rideFreqF_cpm != null && a.rideFreqR_cpm != null) {
+    if (a.rideFreqF_cpm < a.rideFreqR_cpm) {
+      lines.str.push(`⚠ Pitch coupling (rear freq ${a.rideFreqR_cpm.toFixed(0)} > front ${a.rideFreqF_cpm.toFixed(0)} cpm) → hobby-horse motion over bumps, intermittent tire contact, unsettled feel on straights.`);
+    } else if (a.rideFreqF_cpm < 95) {
+      lines.str.push(`Soft front (${a.rideFreqF_cpm.toFixed(0)} cpm) → bobby ride, slow to settle after bumps. Front grip varies bump-to-bump.`);
+    } else if (a.rideFreqF_cpm > 130) {
+      lines.str.push(`Very stiff front (${a.rideFreqF_cpm.toFixed(0)} cpm) → tires skip over bumps, lose contact. Rough surfaces cost grip.`);
+    } else {
+      lines.str.push(`Ride frequencies tuned for race (F ${a.rideFreqF_cpm.toFixed(0)} / R ${a.rideFreqR_cpm.toFixed(0)} cpm, front higher) → stable straight-line behavior, anti-pitch.`);
+    }
+  }
+
+  if (a.scrubRadius < 0) {
+    lines.str.push(`Negative scrub radius → steering feels disconnected on straights, kickback amplifies single-wheel impacts.`);
+  } else if (a.scrubRadius > 1.5) {
+    lines.str.push(`Moderate scrub (${a.scrubRadius.toFixed(2)}") → adequate road feel but heavier steering effort, more bump kickback.`);
+  }
+
+  if (isOval) {
+    const casterDiff = a.lfCaster - a.rfCaster;
+    if (casterDiff >= 1.5 && casterDiff <= 4) {
+      lines.str.push(`Asymmetric caster (LF +${casterDiff.toFixed(1)}° vs RF) pulls car gently LEFT down straights → reduced steering effort, helps left turn entry.`);
+    } else if (Math.abs(casterDiff) < 1) {
+      lines.str.push(`Symmetric caster on oval — leaving the easy left-pull benefit on the table. Set LF to 8–9° for built-in left bias.`);
+    }
+  }
+
+  if (a.fHop_hz != null && (a.zetaF_reb == null || a.zetaF_reb < 0.6)) {
+    lines.str.push(`Wheel hop frequency ${a.fHop_cpm.toFixed(0)} cpm — at this rebound damping, may see chatter on rough straights. Increase rebound if visible wheel bounce.`);
+  }
+
+  // Render
+  const Block = ({ title, items, color, icon }) => (
+    <div style={{ background: '#0f172a', border: `1px solid ${color}40`, borderLeft: `3px solid ${color}`, borderRadius: 4, padding: '10px 12px', marginBottom: 8 }}>
+      <div style={{ color, fontSize: 12, fontFamily: 'monospace', fontWeight: 700, marginBottom: 6 }}>
+        {icon} {title}
+      </div>
+      {items.length === 0
+        ? <div style={{ color: '#64748b', fontSize: 11, fontFamily: 'monospace', fontStyle: 'italic' }}>No notable issues — measurements within normal range for this phase.</div>
+        : items.map((line, i) => (
+            <div key={i} style={{ color: '#cbd5e1', fontSize: 11.5, fontFamily: 'monospace', lineHeight: 1.6, marginBottom: 4 }}>
+              • {line}
+            </div>
+          ))
+      }
+    </div>
+  );
+
+  return (
+    <Section title="11 — TRACK POSITION SYNOPSIS — what the car will do on track" color="#22d3ee">
+      <div style={{ background: '#0c1a2e', border: '1px solid #1e3a5f', borderRadius: 6, padding: 10, marginBottom: 10 }}>
+        <div style={{ color: '#94a3b8', fontSize: 11, fontFamily: 'monospace', lineHeight: 1.6 }}>
+          Synthesis of all current measurements above, mapped to corner phases. Each bullet identifies a specific
+          measurement that will affect that phase of the corner.
+        </div>
+      </div>
+
+      <Block title="CORNER ENTRY — turn-in, trail-braking" items={lines.entry} color="#f87171" icon="◗" />
+      <Block title="MID-CORNER — steady-state apex" items={lines.mid} color="#fb923c" icon="◉" />
+      <Block title="CORNER EXIT — throttle application" items={lines.exit} color="#22c55e" icon="◖" />
+      <Block title="STRAIGHTS — ride, stability, tire heating" items={lines.str} color="#60a5fa" icon="—" />
+    </Section>
   );
 }
