@@ -1,8 +1,51 @@
-import { useState } from 'react';
+﻿import { useState } from 'react';
 import GeometryVisualizer, { GeometryTable } from './GeometryVisualizer';
 import GeometryAnalysis from './GeometryAnalysis';
 import { REAR_SHOCKS, FRONT_STRUTS, shockLabel } from '../data/shockOptions';
 import { useSync } from '../utils/SyncContext';
+
+// ─── Stock 2009 Crown Victoria P71 reference values ────────────────────────
+// Sources: Ford Motor Company service specifications, community measurement data,
+// and values confirmed/estimated in raceSimulation.js comments.
+// Used both as EMPTY_GEO defaults and as tooltip reference text.
+const P71_STOCK = {
+  // Static alignment — factory spec (symmetrical, no race alignment)
+  camberLF:         0.0,    // ° — stock ~0° to −0.5° (symmetric)
+  camberRF:         0.0,    // ° — stock ~0° to −0.5°
+  casterLF:         3.5,    // ° — factory LF caster spec ~3.0–4.0°
+  casterRF:         5.0,    // ° — factory RF caster spec ~4.5–5.5° (built-in cross-caster)
+  toeTotal:         0.0,    // inches — factory spec 0 ± 0.125" (neutral to very slight toe-in)
+  rearToeTotal:     0.063,  // inches — factory spec slight toe-in (~1/16")
+  // Springs
+  springFront:      475,    // lbs/in — P71 Police/Taxi strut assembly (FCS/Monroe/PRT)
+  springRear:       160,    // lbs/in — P71 stock rear coil spring
+  installRatioFront: 0.87,  // dimensionless — SLA spring-on-lower-arm motion ratio (MR_FRONT)
+  installRatioRear:  1.0,   // dimensionless — solid axle, spring at axle center
+  // Track geometry
+  trackFront:       64.0,   // inches — measured front track width (contact patch centers)
+  trackRear:        65.125, // inches — rear slightly wider due to wheel offset
+  wheelbase:        114.7,  // inches — published Ford spec
+  wheelCenterHeight: 13.6,  // inches — 235/55R17 tire radius (13.59")
+  // Rear suspension
+  wattsLinkHeight:  14.5,   // inches — measured Watts link center pivot height
+  rearSpringBase:   44.0,   // inches — estimated center-to-center rear spring perches on axle
+  // Front SLA hardpoints — measured/estimated (see raceSimulation.js comments)
+  lowerBallJoint:   7.75,   // inches — floor to lower ball joint stud center
+  upperBallJoint:   18.5,   // inches — floor to upper ball joint stud center
+  lowerArmPivot:    10.0,   // inches — floor to lower arm inner pivot midpoint
+  upperArmPivot:    13.5,   // inches — estimated from published Ford geometry
+  springPickup:     11.0,   // inches — lower arm pivot to spring mount (≈MR 0.87 × 13" arm)
+  // ARB
+  arbDiameter:      1.161,  // inches — stock 29.5mm solid bar
+  // Suspension travel (estimated from P71 service data)
+  droopTravel:      1.25,   // inches — estimated front droop at ride height
+  bumpTravel:       2.0,    // inches — estimated front bump to bumpstop
+  // Tire pressures (cold, at 68°F)
+  coldPsiLF:        32,     // PSI — Ford factory cold spec (all corners equal stock)
+  coldPsiRF:        32,
+  coldPsiLR:        35,     // rear spec slightly higher (load bias)
+  coldPsiRR:        35,
+};
 
 // ─── Empty templates ────────────────────────────────────────────────────────
 
@@ -38,11 +81,11 @@ const EMPTY_GEO = {
   date: new Date().toISOString().slice(0, 10),
   trackType:         'oval',  // 'oval' | 'figure8'
   notes: '',
-  // ── Static alignment (current settings at time of measurement) ──
-  camber:            { LF: '', RF: '' },
-  caster:            { LF: '', RF: '' },
-  toe:               '',       // front total toe, inches (negative = toe-out)
-  rearToe:           '',
+  // ── Static alignment — pre-filled with stock P71 values ──
+  camber:            { LF: String(P71_STOCK.camberLF), RF: String(P71_STOCK.camberRF) },
+  caster:            { LF: String(P71_STOCK.casterLF), RF: String(P71_STOCK.casterRF) },
+  toe:               String(P71_STOCK.toeTotal),
+  rearToe:           String(P71_STOCK.rearToeTotal),
   // ── Ride heights (inches from floor to rocker panel or consistent reference) ──
   rideHeight:        { LF: '', RF: '', LR: '', RR: '' },
   // ── Shock selection (drives spec auto-fill in physical measurements) ──
@@ -51,30 +94,30 @@ const EMPTY_GEO = {
   shockFreeLength:   { LF: '', RF: '', LR: '', RR: '' },  // inches, fully extended
   shockInstalled:    { LF: '', RF: '', LR: '', RR: '' },  // inches, installed at ride height
   shockBumpGap:      { LF: '', RF: '', LR: '', RR: '' },  // inches, gap to bumpstop at ride height
-  // ── Suspension hardpoints ──
-  trackWidth:        { front: '', rear: '' },
-  rearRollCenter:    '',
-  rearSpringBase:    '',
-  lowerBallJoint:    { LF: '', RF: '' },
-  upperBallJoint:    { LF: '', RF: '' },
-  lowerArmPivot:     { LF: '', RF: '' },
-  upperArmPivot:     { LF: '', RF: '' },
-  springPickup:      { LF: '', RF: '' },
-  wheelCenterHeight: '',
+  // ── Suspension hardpoints — pre-filled with stock P71 estimates ──
+  trackWidth:        { front: String(P71_STOCK.trackFront), rear: String(P71_STOCK.trackRear) },
+  rearRollCenter:    String(P71_STOCK.wattsLinkHeight),
+  rearSpringBase:    String(P71_STOCK.rearSpringBase),
+  lowerBallJoint:    { LF: String(P71_STOCK.lowerBallJoint), RF: String(P71_STOCK.lowerBallJoint) },
+  upperBallJoint:    { LF: String(P71_STOCK.upperBallJoint), RF: String(P71_STOCK.upperBallJoint) },
+  lowerArmPivot:     { LF: String(P71_STOCK.lowerArmPivot),  RF: String(P71_STOCK.lowerArmPivot)  },
+  upperArmPivot:     { LF: String(P71_STOCK.upperArmPivot),  RF: String(P71_STOCK.upperArmPivot)  },
+  springPickup:      { LF: String(P71_STOCK.springPickup),   RF: String(P71_STOCK.springPickup)   },
+  wheelCenterHeight: String(P71_STOCK.wheelCenterHeight),
   // ── Suspension travel measurements ──
   droopCamber:       { LF: '', RF: '' },
-  droopTravel:       { LF: '', RF: '' },
+  droopTravel:       { LF: String(P71_STOCK.droopTravel), RF: String(P71_STOCK.droopTravel) },
   bumpCamber:        { LF: '', RF: '' },
-  bumpTravel:        { LF: '', RF: '' },
+  bumpTravel:        { LF: String(P71_STOCK.bumpTravel), RF: String(P71_STOCK.bumpTravel) },
   steerCamber20:     { LF: '', RF: '' },
   // ── Ride height / ARB ──
   rideLowering:      '',
-  arbDiameter:       '',
+  arbDiameter:       String(P71_STOCK.arbDiameter),
   cgNotes:           '',
-  // ── Spring rates (lb/in at spring) ──
-  springRate:        { LF: '', RF: '', LR: '', RR: '' },
-  installRatio:      { front: '', rear: '' },  // spring compression per inch wheel travel
-  rearSpringTrack:   '',  // distance between rear spring centerlines (in)
+  // ── Spring rates — pre-filled with stock P71 values ──
+  springRate:        { LF: String(P71_STOCK.springFront), RF: String(P71_STOCK.springFront), LR: String(P71_STOCK.springRear), RR: String(P71_STOCK.springRear) },
+  installRatio:      { front: String(P71_STOCK.installRatioFront), rear: String(P71_STOCK.installRatioRear) },
+  rearSpringTrack:   String(P71_STOCK.rearSpringBase),
   // ── Coil spring physical dimensions (optional — for stress check §21.2) ──
   springWireDia:     { front: '', rear: '' },  // d, wire diameter, in
   springCoilDia:     { front: '', rear: '' },  // D, mean coil diameter, in
@@ -83,6 +126,8 @@ const EMPTY_GEO = {
   bumpstopRate:      { front: '', rear: '' },  // lb/in, bumpstop progressive rate
   // ── Damping forces (optional — for Ch.22 damping ratio analysis) ──
   dampingForce:      { bumpFront: '', rebFront: '', bumpRear: '', rebRear: '' }, // lbs at 5 in/sec
+  // ── Cold tire pressures — stock Ford spec ──
+  coldPsi:           { LF: String(P71_STOCK.coldPsiLF), RF: String(P71_STOCK.coldPsiRF), LR: String(P71_STOCK.coldPsiLR), RR: String(P71_STOCK.coldPsiRR) },
 };
 
 // ─── Persistence ─────────────────────────────────────────────────────────────
@@ -631,31 +676,31 @@ function GeoEditor({ editing, setEditing }) {
         </p>
         <div className="ml-row">
           <Field label="LF camber (°)"
-            hint="Tilt of the LF tire top relative to vertical. Negative = top tilts inward. Measured at the alignment rack or with a phone inclinometer on a flat plate held flush against the wheel face, car at ride height with driver weight in seat. Oval typical: +2° to +3° static (body roll droop subtracts ~1.4° dynamically). Figure-8: −1° to −2°.">
+            hint="Tilt of the LF tire top relative to vertical. Negative = top tilts inward. Measured at the alignment rack or with a phone inclinometer on a flat plate held flush against the wheel face, car at ride height with driver weight in seat. Stock P71: 0° to −0.5°. Oval race typical: +2° to +3° static (body roll droop subtracts ~1.4° dynamically). Figure-8: −1° to −2°.">
             <NumIn value={editing.camber?.LF ?? ''} onChange={v => setN('camber', 'LF', v)} placeholder="e.g. 2.75" />
           </Field>
           <Field label="RF camber (°)"
-            hint="Tilt of the RF tire top. For oval: RF needs negative static camber, typically −2° to −3.5° with camber bolt installed. For figure-8: −1.5° to −2.5°. Negative = top leans inward. The model back-calculates the ideal value from your geometry — enter what the car is currently set to.">
+            hint="Tilt of the RF tire top. Stock P71: 0° to −0.5°. For oval: RF needs negative static camber, typically −2° to −3.5° with camber bolt installed. For figure-8: −1.5° to −2.5°. Negative = top leans inward. The model back-calculates the ideal value from your geometry — enter what the car is currently set to.">
             <NumIn value={editing.camber?.RF ?? ''} onChange={v => setN('camber', 'RF', v)} placeholder="e.g. -2.25" />
           </Field>
         </div>
         <div className="ml-row">
           <Field label="LF caster (°)"
-            hint="Kingpin tilt from side view. Measured at alignment rack: turn wheel 20° in, zero gauge, turn 20° out, read caster. On a P71, LF caster is typically set lower than RF for oval (3–5°). Higher caster increases camber gain per degree of steer, but on a tight oval the steer angle is small so the effect is limited.">
+            hint="Kingpin tilt from side view. Measured at alignment rack: turn wheel 20° in, zero gauge, turn 20° out, read caster. Stock P71: LF ~3.5° (factory spec 3.0–4.0°). On a P71, LF caster is typically set lower than RF for oval (3–5°). Higher caster increases camber gain per degree of steer, but on a tight oval the steer angle is small so the effect is limited.">
             <NumIn value={editing.caster?.LF ?? ''} onChange={v => setN('caster', 'LF', v)} placeholder="e.g. 3.5" />
           </Field>
           <Field label="RF caster (°)"
-            hint="RF caster controls mechanical trail (steering feel/return) and small amount of camber gain. Typical oval: 5–7° RF. Higher RF caster (7–9°) on road courses where steer angles are larger. For this oval's ~3.77° apex steer, each degree of RF caster contributes only 0.136° of camber gain — enter current setting so the model can calculate actual contribution.">
+            hint="RF caster controls mechanical trail (steering feel/return) and small amount of camber gain. Stock P71: RF ~5.0° (factory spec 4.5–5.5°) — Ford builds in ~1.5° more caster on the RF than LF from the factory. Typical oval race: 5–7° RF. Higher RF caster (7–9°) on road courses where steer angles are larger. For this oval's ~3.77° apex steer, each degree of RF caster contributes only 0.136° of camber gain — enter current setting so the model can calculate actual contribution.">
             <NumIn value={editing.caster?.RF ?? ''} onChange={v => setN('caster', 'RF', v)} placeholder="e.g. 5.0" />
           </Field>
         </div>
         <div className="ml-row">
           <Field label="Front toe (inches, total)"
-            hint="Total front toe across both tires measured at hub height. Use toe plates or a tape: measure from leading edge of each rim to a straight reference, then trailing edge — difference per side × 2 = total. Negative = toe-out (fronts spread apart at front of car). Oval typical: −0.125 to −0.25 inch toe-out. Zero at center.">
+            hint="Total front toe across both tires measured at hub height. Use toe plates or a tape: measure from leading edge of each rim to a straight reference, then trailing edge — difference per side × 2 = total. Negative = toe-out (fronts spread apart at front of car). Stock P71: 0 ± 0.125&quot; (neutral). Oval race typical: −0.125 to −0.25&quot; toe-out. Zero at center.">
             <NumIn value={editing.toe ?? ''} onChange={v => set('toe', v)} placeholder="e.g. -0.25" step="0.0625" />
           </Field>
           <Field label="Rear toe (inches, total)"
-            hint="Total rear toe. Same measurement method. Rear toe-in is stable (stock P71 ≈ 0 to +0.125 inch). Rear toe-out causes oversteer — avoid unless intentional. Measured the same way as front.">
+            hint="Total rear toe. Same measurement method. Stock P71: +0.063&quot; (slight toe-in, factory spec). Rear toe-in is stable. Rear toe-out causes oversteer — avoid unless intentional. Measured the same way as front.">
             <NumIn value={editing.rearToe ?? ''} onChange={v => set('rearToe', v)} placeholder="e.g. 0.0" step="0.0625" />
           </Field>
         </div>
@@ -828,7 +873,7 @@ function GeoEditor({ editing, setEditing }) {
         <div className="ml-tire-grid">
           {['LF', 'RF', 'LR', 'RR'].map(pos => (
             <Field key={pos} label={pos}
-              hint={`Spring rate in lb/in, measured at the spring coil centerline. For a coil spring, this is stamped on the spring or listed in the manufacturer spec. Do NOT confuse with wheel rate — wheel rate = spring rate × installation ratio². P71 police-package front ≈ 475 lb/in. P71 rear (leaf spring equivalent) varies widely — estimate from load/deflection if unknown.`}>
+              hint={`Spring rate in lb/in, measured at the spring coil centerline. For a coil spring, this is stamped on the spring or listed in the manufacturer spec. Do NOT confuse with wheel rate — wheel rate = spring rate × installation ratio². Stock P71 front: 475 lb/in (Police/Taxi strut, confirmed). Stock P71 rear: 160 lb/in (stock coil spring, confirmed). Civilian/base front: 440 lb/in. Heavy duty front: 700 lb/in.`}>
               <NumIn value={editing.springRate?.[pos] ?? ''} onChange={v => setN('springRate', pos, v)} placeholder={pos.endsWith('F') ? 'e.g. 475' : 'e.g. 220'} step="5" />
             </Field>
           ))}
@@ -838,7 +883,7 @@ function GeoEditor({ editing, setEditing }) {
         <p className="ml-section-note">Inches of spring compression per inch of wheel travel. Measure by jacking wheel up 1 inch and measuring spring length change, or use direct measurement method (Milliken §16.3). P71 SLA front ≈ 0.52. P71 rear solid axle spring-to-axle ≈ 1.0 (spring at axle center).</p>
         <div className="ml-row">
           <Field label="Front IR (per side)"
-            hint="Jack the front wheel up exactly 1 inch from ride height. Measure how much the spring compresses. IR = spring compression / wheel travel. For the P71 SLA: spring is mounted inboard partway along the lower arm, so IR is typically 0.48–0.55. Default 0.52.">
+            hint="Jack the front wheel up exactly 1 inch from ride height. Measure how much the spring compresses. IR = spring compression / wheel travel. Stock P71 SLA: IR ≈ 0.87 (spring pickup ~11&quot; from pivot, arm ~13&quot; total — confirmed by the measured 3.1°/G baseline body roll). Typical range 0.80–0.90.">
             <NumIn value={editing.installRatio?.front ?? ''} onChange={v => setN('installRatio', 'front', v)} placeholder="e.g. 0.52" step="0.01" />
           </Field>
           <Field label="Rear IR (per side)"
@@ -850,7 +895,7 @@ function GeoEditor({ editing, setEditing }) {
         <h4 style={{ color: '#94a3b8', fontFamily: 'monospace', fontSize: 12, margin: '12px 0 6px' }}>Rear Spring Track (inches)</h4>
         <p className="ml-section-note">Distance between the centers of the left and right rear spring perches on the axle tube. Used to compute rear roll stiffness from spring rates. Milliken §16.2: rear spring roll rate = K_φ = 12 × K_WR × T_S²/2 for a solid axle.</p>
         <Field label="Rear spring center-to-center (inches)"
-          hint="With the car at ride height, measure from the center of the LR spring perch cup to the center of the RR spring perch cup, along the axle tube. Narrower than track width. Wider = more rear roll stiffness (more rear LLTD, looser). Stock P71 ≈ 42–46 inches.">
+          hint="With the car at ride height, measure from the center of the LR spring perch cup to the center of the RR spring perch cup, along the axle tube. Narrower than track width. Stock P71: ~44&quot; (estimated — the spring perches are inboard of the wheel flanges). Wider = more rear roll stiffness (more rear LLTD, looser).">
           <NumIn value={editing.rearSpringTrack ?? ''} onChange={v => set('rearSpringTrack', v)} placeholder="e.g. 44" step="0.5" />
         </Field>
 
@@ -955,11 +1000,11 @@ function GeoEditor({ editing, setEditing }) {
         <h3 className="ml-section-heading">Track Width</h3>
         <div className="ml-row">
           <Field label="Front track width (inches)"
-            hint="Park on flat ground, wheels straight ahead. Lay a straightedge or tape on the ground beside each front tire. Mark the center of the contact patch (midpoint of tread width) with chalk or tape on both sides. Measure between the two centerline marks. P71 stock ≈ 64″.">
+            hint="Park on flat ground, wheels straight ahead. Lay a straightedge or tape on the ground beside each front tire. Mark the center of the contact patch (midpoint of tread width) with chalk or tape on both sides. Measure between the two centerline marks. Stock P71: 64.0&quot; (published Ford spec).">
             <NumIn value={editing.trackWidth.front} onChange={v => setN('trackWidth', 'front', v)} placeholder="e.g. 64" step="0.125" />
           </Field>
           <Field label="Rear track width (inches)"
-            hint="Same method as front — mark the center of each rear contact patch and measure between the marks. P71 rear is slightly wider than front due to wheel offset. Stock ≈ 65.125″.">
+            hint="Same method as front — mark the center of each rear contact patch and measure between the marks. P71 rear is slightly wider than front due to wheel offset. Stock P71: 65.125&quot; (published Ford spec — 1.125&quot; wider than front).">
             <NumIn value={editing.trackWidth.rear} onChange={v => setN('trackWidth', 'rear', v)} placeholder="e.g. 65.125" step="0.125" />
           </Field>
         </div>
@@ -969,11 +1014,11 @@ function GeoEditor({ editing, setEditing }) {
       <div className="ml-section">
         <h3 className="ml-section-heading">Rear Roll Center &amp; Spring Base</h3>
         <Field label="Watts link center pivot height from floor (inches)"
-          hint="Car at ride height with driver weight (~200 lbs on seat). Crawl under the rear of the car and locate the Watts link center pivot bolt — it's on a bracket mounted on the axle housing, centered left-to-right, connecting the two horizontal balance arms. Measure from the center of that bolt straight down to the floor. P71 stock ≈ 14.5″. This directly sets the rear roll center height in the model — wrong value = wrong rear LLTD.">
+          hint="Car at ride height with driver weight (~200 lbs on seat). Crawl under the rear of the car and locate the Watts link center pivot bolt — it's on a bracket mounted on the axle housing, centered left-to-right, connecting the two horizontal balance arms. Measure from the center of that bolt straight down to the floor. Stock P71: 14.5&quot; (physically measured — the Watts link bracket sets this at a fixed height). This directly sets the rear roll center height in the model — wrong value = wrong rear LLTD.">
           <NumIn value={editing.rearRollCenter} onChange={v => set('rearRollCenter', v)} placeholder="e.g. 14.5" step="0.125" />
         </Field>
         <Field label="Rear spring base width (inches)"
-          hint="Distance between the centers of the two rear coil spring perches on the axle tube. Measure along the axle from the center of the left spring perch cup to the center of the right spring perch cup. This is narrower than the track width. Wider base = more rear roll stiffness, which shifts LLTD toward the rear (more oversteer tendency). Used directly in the roll stiffness model.">
+          hint="Distance between the centers of the two rear coil spring perches on the axle tube. Measure along the axle from the center of the left spring perch cup to the center of the right spring perch cup. This is narrower than the track width. Stock P71: ~44&quot; (estimated — narrower than 65.125&quot; rear track). Wider base = more rear roll stiffness, which shifts LLTD toward the rear (more oversteer tendency). Used directly in the roll stiffness model.">
           <NumIn value={editing.rearSpringBase} onChange={v => set('rearSpringBase', v)} placeholder="e.g. 42" step="0.25" />
         </Field>
       </div>
@@ -986,56 +1031,56 @@ function GeoEditor({ editing, setEditing }) {
         </p>
         <div className="ml-row">
           <Field label="LF lower ball joint (inches)"
-            hint="The lower ball joint is at the outer end of the lower control arm where it connects to the steering knuckle/spindle. On the P71, look at the bottom-outside corner of the front hub assembly. The ball joint stud points downward through the knuckle. Measure from the center of that stud (top of the stud nut, minus half the stud exposed length) down to the floor. Typical P71 ≈ 7–8″.">
+            hint="The lower ball joint is at the outer end of the lower control arm where it connects to the steering knuckle/spindle. On the P71, look at the bottom-outside corner of the front hub assembly. The ball joint stud points downward through the knuckle. Measure from the center of that stud (top of the stud nut, minus half the stud exposed length) down to the floor. Stock P71: ~7.75&quot; (estimated from SLA geometry at stock ride height).">
             <NumIn value={editing.lowerBallJoint.LF} onChange={v => setN('lowerBallJoint', 'LF', v)} placeholder="e.g. 7.75" step="0.125" />
           </Field>
           <Field label="RF lower ball joint (inches)"
-            hint="Same as LF lower ball joint — right side. The RF may sit slightly lower than LF due to asymmetric caster settings. Measure stud center to floor.">
+            hint="Same as LF lower ball joint — right side. Stock P71: ~7.75&quot;. The RF may sit slightly lower than LF due to asymmetric caster settings. Measure stud center to floor.">
             <NumIn value={editing.lowerBallJoint.RF} onChange={v => setN('lowerBallJoint', 'RF', v)} placeholder="e.g. 6.75" step="0.125" />
           </Field>
         </div>
         <div className="ml-row">
           <Field label="LF upper ball joint (inches)"
-            hint="The upper ball joint is at the outer end of the upper control arm, connecting to the top of the steering knuckle. On the P71 SLA, look directly above the lower ball joint at the top of the hub assembly. The stud points upward. Measure from stud center to floor. Typical P71 ≈ 17–19″.">
+            hint="The upper ball joint is at the outer end of the upper control arm, connecting to the top of the steering knuckle. On the P71 SLA, look directly above the lower ball joint at the top of the hub assembly. The stud points upward. Measure from stud center to floor. Stock P71: ~18.5&quot; (estimated from SLA geometry — upper-to-lower ball joint spread ≈ 10.75&quot;).">
             <NumIn value={editing.upperBallJoint.LF} onChange={v => setN('upperBallJoint', 'LF', v)} placeholder="e.g. 18.5" step="0.125" />
           </Field>
           <Field label="RF upper ball joint (inches)"
-            hint="Same as LF upper ball joint — right side. Stud center to floor.">
+            hint="Same as LF upper ball joint — right side. Stock P71: ~18.5&quot;. Stud center to floor.">
             <NumIn value={editing.upperBallJoint.RF} onChange={v => setN('upperBallJoint', 'RF', v)} placeholder="e.g. 17.625" step="0.125" />
           </Field>
         </div>
         <div className="ml-row">
           <Field label="LF lower arm inner pivot (inches)"
-            hint="The inner end of the lower control arm where it bolts to the K-member/subframe. The P71 lower arm uses two bolt pivot — measure the height of the midpoint between the two bolts. Use a straightedge or plumb bob from the bolt center to the floor. Typical P71 ≈ 9–11″.">
+            hint="The inner end of the lower control arm where it bolts to the K-member/subframe. The P71 lower arm uses two bolt pivot — measure the height of the midpoint between the two bolts. Use a straightedge or plumb bob from the bolt center to the floor. Stock P71: ~10.0&quot; (estimated from K-member geometry at stock ride height).">
             <NumIn value={editing.lowerArmPivot.LF} onChange={v => setN('lowerArmPivot', 'LF', v)} placeholder="e.g. 10.0" step="0.125" />
           </Field>
           <Field label="RF lower arm inner pivot (inches)"
-            hint="Same as LF lower arm inner pivot — right side. Measure midpoint of the two pivot bolt centers to floor.">
+            hint="Same as LF lower arm inner pivot — right side. Stock P71: ~10.0&quot;. Measure midpoint of the two pivot bolt centers to floor.">
             <NumIn value={editing.lowerArmPivot.RF} onChange={v => setN('lowerArmPivot', 'RF', v)} placeholder="e.g. 9.375" step="0.125" />
           </Field>
         </div>
         <div className="ml-row">
           <Field label="LF upper arm inner pivot (inches)"
-            hint="The inner end of the upper control arm where it bolts to the tower/subframe above the lower arm. On the P71, this is a single bolt (or bushing) high up on the inner fender structure. This is the hardest point to measure accurately and the one most likely to be estimated — it directly determines the instant center position and roll center height. Plumb bob from the bolt centerline to the floor. Estimated ≈ 13.5″ from published Ford geometry — measure if at all possible.">
+            hint="The inner end of the upper control arm where it bolts to the tower/subframe above the lower arm. On the P71, this is a single bolt (or bushing) high up on the inner fender structure. This is the hardest point to measure accurately — it directly determines the instant center position and roll center height. Stock P71: ~13.5&quot; (estimated from published Ford geometry). Plumb bob from the bolt centerline to the floor. Measure if at all possible — this estimate produces a front RCH of ~20.4&quot;.">
             <NumIn value={editing.upperArmPivot?.LF ?? ''} onChange={v => setN('upperArmPivot', 'LF', v)} placeholder="e.g. 13.5 (est)" step="0.125" />
           </Field>
           <Field label="RF upper arm inner pivot (inches)"
-            hint="Same as LF upper arm inner pivot — right side. Measure or estimate the bolt center height from the floor.">
+            hint="Same as LF upper arm inner pivot — right side. Stock P71: ~13.5&quot; (estimated). Measure or estimate the bolt center height from the floor.">
             <NumIn value={editing.upperArmPivot?.RF ?? ''} onChange={v => setN('upperArmPivot', 'RF', v)} placeholder="e.g. 13.5 (est)" step="0.125" />
           </Field>
         </div>
         <div className="ml-row">
           <Field label="LF spring pickup distance from inner pivot (inches)"
-            hint="On the P71 SLA, the strut/spring assembly mounts to the lower control arm at a point between the inner pivot and the ball joint. Measure from the center of the lower arm inner pivot bolt to the center of the spring mount hole on the arm (along the arm). This distance divided by the total arm length (pivot to ball joint) is the motion ratio — it directly scales front roll stiffness. Typical P71 lower arm: total length ≈ 13″, spring mount ≈ 9–11″ from pivot (MR ≈ 0.7–0.87).">
+            hint="On the P71 SLA, the strut/spring assembly mounts to the lower control arm at a point between the inner pivot and the ball joint. Measure from the center of the lower arm inner pivot bolt to the center of the spring mount hole on the arm (along the arm). Stock P71: ~11.0&quot; from pivot (total arm ~13&quot;, giving MR ≈ 0.87 — this matches the confirmed baseline 3.1°/G body roll measurement). MR = spring pickup distance ÷ arm length.">
             <NumIn value={editing.springPickup?.LF ?? ''} onChange={v => setN('springPickup', 'LF', v)} placeholder="e.g. 11.0" step="0.125" />
           </Field>
           <Field label="RF spring pickup distance from inner pivot (inches)"
-            hint="Same as LF — measure from the RF lower arm inner pivot center to the spring mount hole along the arm. Both sides should be the same unless the arms are different parts.">
+            hint="Same as LF — measure from the RF lower arm inner pivot center to the spring mount hole along the arm. Stock P71: ~11.0&quot;. Both sides should be identical unless different arms are installed.">
             <NumIn value={editing.springPickup?.RF ?? ''} onChange={v => setN('springPickup', 'RF', v)} placeholder="e.g. 11.0" step="0.125" />
           </Field>
         </div>
         <Field label="Front wheel center height (inches)"
-          hint="Measure from the center of the front hub/axle to the floor. Plumb a string or straight-edge from the hub center to the ground. For 235/55R17 tires, this should be close to 13.5–13.6″. Used to establish the suspension geometry reference plane.">
+          hint="Measure from the center of the front hub/axle to the floor. Plumb a string or straight-edge from the hub center to the ground. Stock P71 with 235/55R17 tires: 13.6&quot; (tire radius = 129.25mm sidewall + 215.9mm half-rim = 345.15mm = 13.59&quot;). Used to establish the suspension geometry reference plane.">
           <NumIn value={editing.wheelCenterHeight} onChange={v => set('wheelCenterHeight', v)} placeholder="e.g. 13.0" step="0.125" />
         </Field>
       </div>
@@ -1058,7 +1103,7 @@ function GeoEditor({ editing, setEditing }) {
         </div>
         <div className="ml-row">
           <Field label="LF droop travel (inches)"
-            hint="Total wheel travel from ride height to full droop. Method: (1) At ride height, mark a point on the wheel center with a scribe or tape, and measure its height from the floor. (2) With car on jack stands and wheel hanging free, measure the same wheel center height from the floor. (3) The difference (ride height measurement minus droop measurement) is droop travel. Typical P71 front droop ≈ 0.5–1.5″.">
+            hint="Total wheel travel from ride height to full droop. Method: (1) At ride height, mark a point on the wheel center with a scribe or tape, and measure its height from the floor. (2) With car on jack stands and wheel hanging free, measure the same wheel center height from the floor. (3) The difference (ride height measurement minus droop measurement) is droop travel. Stock P71: ~1.25&quot; droop from stock ride height (estimated — varies with spring perch position).">
             <NumIn value={editing.droopTravel.LF} onChange={v => setN('droopTravel', 'LF', v)} placeholder="e.g. 0.75" step="0.125" />
           </Field>
           <Field label="RF droop travel (inches)"
@@ -1086,7 +1131,7 @@ function GeoEditor({ editing, setEditing }) {
         </div>
         <div className="ml-row">
           <Field label="LF bump travel (inches)"
-            hint="Total wheel travel from ride height to full bump. Method: (1) At ride height, mark the wheel center and measure its height from the floor. (2) Jack to full bump and re-measure wheel center height. (3) Bump travel = full-bump measurement minus ride-height measurement. Typical P71 front bump ≈ 1.5–2.5″.">
+            hint="Total wheel travel from ride height to full bump. Method: (1) At ride height, mark the wheel center and measure its height from the floor. (2) Jack to full bump and re-measure wheel center height. (3) Bump travel = full-bump measurement minus ride-height measurement. Stock P71: ~2.0&quot; bump travel to bumpstop (estimated from strut stroke and stock ride height).">
             <NumIn value={editing.bumpTravel.LF} onChange={v => setN('bumpTravel', 'LF', v)} placeholder="e.g. 2.0" step="0.125" />
           </Field>
           <Field label="RF bump travel (inches)"
@@ -1143,7 +1188,7 @@ function GeoEditor({ editing, setEditing }) {
           The P71 front ARB wheel rate is hardcoded to 475 lbs/in (29.5mm solid bar). If you have a different bar, measure its diameter so the model can use the correct roll stiffness.
         </p>
         <Field label="Front ARB bar diameter (inches)"
-          hint="Measure the solid steel bar diameter at the straight section (not at the bends or end links). Use calipers. P71 stock: 29.5mm = 1.161 in. ARB roll stiffness scales as diameter^4, so even small changes matter — a 1 in bar has about 55% of the stiffness of the stock 1.161 in bar. Leave blank to use the stock P71 value (29.5mm).">
+          hint="Measure the solid steel bar diameter at the straight section (not at the bends or end links). Use calipers. Stock P71: 29.5mm = 1.161&quot; (largest factory Panther bar option). ARB roll stiffness scales as diameter^4 — a 1.0&quot; bar has only 55% of the stock bar's stiffness. No rear ARB on P71 from the factory. Leave blank to use the stock 29.5mm value.">
           <NumIn value={editing.arbDiameter ?? ''} onChange={v => set('arbDiameter', v)} placeholder="e.g. 1.161 (stock 29.5mm)" step="0.001" min="0.5" max="2.0" />
         </Field>
       </div>
@@ -1214,3 +1259,4 @@ export function SuspensionGeometry() {
     />
   );
 }
+
