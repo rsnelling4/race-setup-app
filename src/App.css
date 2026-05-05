@@ -2759,6 +2759,44 @@
   gap: 24px;
 }
 
+/* Mode toggle — Oval / Figure 8 */
+.opt-mode-selector {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+.opt-mode-label {
+  font-size: 0.85rem;
+  color: var(--text-muted);
+  font-weight: 500;
+}
+.opt-mode-toggle {
+  display: flex;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  overflow: hidden;
+}
+.opt-mode-btn {
+  padding: 6px 18px;
+  border: none;
+  background: var(--surface);
+  color: var(--text-secondary);
+  font-size: 0.88rem;
+  font-weight: 500;
+  cursor: pointer;
+  transition: background 0.15s, color 0.15s;
+}
+.opt-mode-btn:not(:last-child) {
+  border-right: 1px solid var(--border);
+}
+.opt-mode-btn.active {
+  background: var(--accent);
+  color: #fff;
+}
+.opt-mode-btn:not(.active):hover {
+  background: var(--surface-hover, var(--border));
+}
+
 /* Geometry profile selector */
 .opt-geo-selector {
   display: flex;

@@ -6,10 +6,9 @@ import CrownVicShocks from './components/CrownVicShocks';
 import RaceSimulation from './components/RaceSimulation';
 import SetupOptimizer from './components/SetupOptimizer';
 import Figure8Simulation from './components/Figure8Simulation';
-import Figure8Optimizer from './components/Figure8Optimizer';
 import SimulationMath from './components/SimulationMath';
 import SuggestedSetup from './components/SuggestedSetup';
-import { MeasurementLog, SuspensionGeometry } from './components/MeasurementLogger';
+import { SuspensionGeometry } from './components/MeasurementLogger';
 import TrackDay from './components/TrackDay';
 import TheoreticalResults from './components/TheoreticalResults';
 import Settings from './components/Settings';
@@ -23,21 +22,20 @@ function deepClone(o) { return JSON.parse(JSON.stringify(o)); }
 const TABS = [
   { id: 'shocks',     label: 'Shocks & Struts' },
   { id: 'optimize',   label: 'Optimizer' },
-  { id: 'f8optimize', label: 'F8 Optimizer' },
   { id: 'mathref',   label: 'Simulation Math' },
   { id: 'suggested', label: 'Suggested Setup' },
   { id: 'trackday',     label: 'Track Day' },
   { id: 'theoretical',  label: 'Theoretical Results' },
-  { id: 'measurements', label: 'Measurement Log' },
   { id: 'geometry',     label: 'Suspension Geometry' },
   { id: 'settings',     label: 'Settings' },
 ];
 
 // Archived tabs — hidden from nav but code preserved:
-// { id: 'tires',      label: 'Tire Temperatures' }
-// { id: 'handling',   label: 'Handling Diagnosis' }
-// { id: 'simulation', label: 'Race Simulation' }
-// { id: 'figure8',    label: 'Figure 8' }
+// { id: 'tires',        label: 'Tire Temperatures' }
+// { id: 'handling',     label: 'Handling Diagnosis' }
+// { id: 'simulation',   label: 'Race Simulation' }
+// { id: 'figure8',      label: 'Figure 8' }
+// { id: 'measurements', label: 'Measurement Log' }  (spring rates + lap times moved to Track Day)
 
 function App() {
   const [activeTab, setActiveTab] = useState('trackday');
@@ -133,10 +131,7 @@ function App() {
         {activeTab === 'optimize' && (
           <SetupOptimizer setup={setup} setSetup={setSetup} ambient={ambient} setAmbient={setAmbient} inflationTemp={inflationTemp} setInflationTemp={setInflationTemp} />
         )}
-        {activeTab === 'f8optimize' && (
-          <Figure8Optimizer setup={setup} setSetup={setSetup} ambient={ambient} setAmbient={setAmbient} inflationTemp={inflationTemp} setInflationTemp={setInflationTemp} />
-        )}
-        {activeTab === 'mathref' && <SimulationMath />}
+{activeTab === 'mathref' && <SimulationMath />}
         {activeTab === 'suggested' && <SuggestedSetup />}
         {activeTab === 'trackday'     && (
           <TrackDay
@@ -149,7 +144,6 @@ function App() {
           />
         )}
         {activeTab === 'theoretical'   && <TheoreticalResults />}
-        {activeTab === 'measurements' && <MeasurementLog />}
         {activeTab === 'geometry'     && <SuspensionGeometry />}
         {activeTab === 'settings'     && <Settings />}
       </main>

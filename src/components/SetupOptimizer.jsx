@@ -1,5 +1,8 @@
 import { useMemo, useState, useRef, useEffect } from 'react';
-import { analyzeSetup, DEFAULT_SETUP, RECOMMENDED_SETUP, PETE_SETUP, DYLAN_SETUP, JOSH_SETUP, JOEY_SETUP } from '../utils/raceSimulation';
+import {
+  analyzeSetup, DEFAULT_SETUP, RECOMMENDED_SETUP, PETE_SETUP, DYLAN_SETUP, JOSH_SETUP, JOEY_SETUP,
+  analyzeSetupF8, DEFAULT_SETUP_F8, F8_BASELINE_SETUP,
+} from '../utils/raceSimulation';
 import { REAR_SHOCKS, FRONT_STRUTS, shockLabel } from '../data/shockOptions';
 import { computeGeometry } from './GeometryVisualizer';
 import { useSync } from '../utils/SyncContext';
@@ -11,13 +14,22 @@ const FRONT_SPRING_OPTIONS = [
   { value: 475, label: '475 lbs/in — Police / Taxi (P71 stock)' },
   { value: 440, label: '440 lbs/in — Civilian / Base' },
 ];
+const REAR_SPRING_OPTIONS = [
+  { value: 200, label: '200 lbs/in — Heavy Duty / Police' },
+  { value: 160, label: '160 lbs/in — Stock P71' },
+  { value: 140, label: '140 lbs/in — Soft / Base' },
+];
 const CORNER_LABELS = { LF: 'Left Front', RF: 'Right Front', LR: 'Left Rear', RR: 'Right Rear' };
-const TARGET = 17.1;
-const RANGE_MIN = 16.8;
-const RANGE_MAX = 17.8;
+
+const OVAL_TARGET = 17.1;
+const OVAL_RANGE_MIN = 16.8;
+const OVAL_RANGE_MAX = 17.8;
+
+const F8_TARGET = 23.1;
+const F8_RANGE_MIN = 22.8;
+const F8_RANGE_MAX = 23.8;
 
 function deepClone(o) { return JSON.parse(JSON.stringify(o)); }
-
 function pct(v) { return (v * 100).toFixed(1) + '%'; }
 
 function buildGeoOverrides(geo) {
@@ -35,7 +47,6 @@ function buildGeoOverrides(geo) {
   } else if (lf?.rcHeight != null) {
     overrides.rcHeightFront = lf.rcHeight;
   }
-  // IC lateral position — average of RF and LF (signed: positive = outboard of CL)
   if (rf?.ic?.x != null && lf?.ic?.x != null) {
     overrides.icLateralFront = (Math.abs(rf.ic.x) + Math.abs(lf.ic.x)) / 2;
   } else if (rf?.ic?.x != null) {
@@ -46,17 +57,12 @@ function buildGeoOverrides(geo) {
   const wheelDispPerDegRoll = 0.383;
   if (rf?.fvsa != null && rf.fvsa > 0) overrides.slaJounceCoeffRF = (57.3 / rf.fvsa) * wheelDispPerDegRoll;
   if (lf?.fvsa != null && lf.fvsa > 0) overrides.slaDroopCoeffLF  = (57.3 / lf.fvsa) * wheelDispPerDegRoll;
-
-  // Spring motion ratio from measured spring pickup position on lower arm.
-  // MR = springPickup / armLength (pivot-to-ball-joint distance).
-  // Average LF and RF — both arms are the same part on a symmetric car.
   const spLF = Number(geo.springPickup?.LF);
   const spRF = Number(geo.springPickup?.RF);
   if (spLF > 0 || spRF > 0) {
     const spAvg = (spLF > 0 && spRF > 0) ? (spLF + spRF) / 2 : (spLF || spRF);
-    overrides.mrFront = spAvg / 13.0; // P71_LOWER_ARM_LENGTH = 13.0"
+    overrides.mrFront = spAvg / 13.0;
   }
-
   return Object.keys(overrides).length > 0 ? overrides : null;
 }
 
@@ -99,7 +105,6 @@ function Tooltip({ text, children }) {
   );
 }
 
-// ── ScoreBar with optional tooltip ───────────────────────────────────────────
 function ScoreBar({ value, label, tip }) {
   const p = Math.round(Math.min(100, value * 100));
   const color = scoreColor(value);
@@ -118,8 +123,8 @@ function ScoreBar({ value, label, tip }) {
   );
 }
 
-// Tooltip text definitions for all corner card items
-const TIPS = {
+// ── Oval TIPS ─────────────────────────────────────────────────────────────────
+const OVAL_TIPS = {
   gripScore: 'Overall grip score for this corner — product of camber, pressure, and temperature factors. 100% = fully optimal. Green ≥99%, Yellow ≥96%, Orange ≥92%, Red below.',
   load: 'Estimated tire load at 1G of lateral force (one full corner). Heavier = more grip potential but also more heat. RF and RR carry more weight in left turns.',
   estTemp: 'Steady-state equilibrium temperature predicted by the thermal model at race pace. Actual race temps will vary with lap count and ambient conditions.',
@@ -138,7 +143,7 @@ const TIPS = {
   solidAxle: 'The rear axle is solid (live axle) — both rear wheels tilt together with body roll. You cannot set rear camber directly. Reducing body roll (stiffer rear shocks) brings ground camber closer to 0° on both rears.',
   camberScore: 'Grip multiplier from camber alignment. 100% = ground camber matches the target. Penalty is asymmetric and load-weighted: RF loses ~1.6–1.8%/° when not negative enough (insufficient camber is more damaging than over-camber). LF loses ~1.2%/° below the +0.75° target (both thrust and contact patch lost), ~0.7%/° above it (mainly contact patch). Rears ~1.0%/° symmetric.',
   alignmentRange: 'P71 front camber range assumes camber bolts are installed (replaces one or both strut pinch bolts). With a camber bolt: RF adjustable from 0° to −4°; LF adjustable from −4° to +4°. Positive LF static camber is normal for oval racing — chassis roll subtracts ~1–2° in the ground frame, so +1° to +2° static produces near-flat contact patch in the corner. Values beyond ±4° require additional hardware (alignment shims or plates).',
-  sidewallCamber: 'Positive camber added at the contact patch by sidewall compliance. The 235/55R17 55-series sidewall deflects outward under load, shifting the contact patch and effectively leaning the tire away from center. This is load-dependent (heavier corner = more deflection) and must be offset by additional static negative camber. Data: Ironman iMove Gen3 AS 235/55R17, section height 5.09\", load-deflection curve measured at 500/1000/1500/1929 lbs.',
+  sidewallCamber: 'Positive camber added at the contact patch by sidewall compliance. The 235/55R17 55-series sidewall deflects outward under load, shifting the contact patch and effectively leaning the tire away from center. This is load-dependent (heavier corner = more deflection) and must be offset by additional static negative camber. Data: Ironman iMove Gen3 AS 235/55R17, section height 5.09", load-deflection curve measured at 500/1000/1500/1929 lbs.',
   pressureSection: 'Tire pressure affects contact patch shape. Under-inflated tires flex excessively and overheat the edges; over-inflated tires crown and only use the center of the tread.',
   coldHot: 'Cold PSI is what you set when inflating the tires. Hot PSI is calculated via ideal gas law using the "Tires Set At" temperature as the cold reference. At 200°F tires set at 85°F: 34 cold → ~40.9 PSI hot. Setting tires on a hot day means less pressure rise — and shifts target cold PSI higher.',
   optimalHot: 'The hot pressure that gives maximum grip for this corner\'s load. Heavily loaded tires (RF, RR) need higher pressure to support the load; lightly loaded tires (LF, LR) need less.',
@@ -157,9 +162,39 @@ const TIPS = {
   toeDragPenalty: 'Straight-line speed penalty from toe angle. Even small amounts of toe-out create tire scrub on the straights. ~0.5% drag at ¼" toe, ~2% at ½". Displayed as % increase in rolling resistance.',
 };
 
-// ── Phase tendency helper ─────────────────────────────────────────────────────
+// ── Figure 8 TIPS ─────────────────────────────────────────────────────────────
+const F8_TIPS = {
+  gripScore: 'Overall grip score for this corner — product of camber, pressure, and temperature factors. 100% = fully optimal. Green ≥99%, Yellow ≥96%, Orange ≥92%, Red below.',
+  load: 'Estimated average tire load across both left and right turns at 1G. Figure 8 loading is nearly symmetric — all four corners see similar average loads.',
+  estTemp: 'Steady-state equilibrium temperature predicted by the thermal model at race pace. Based on averaged left/right work factors — figure 8 temps are more balanced than oval.',
+  tempFactor: 'Grip multiplier from tire temperature. Optimal window 100–185°F for these Ironman XL all-season tires.',
+  camberSection: 'Figure 8 camber is unique: each front tire alternates as outside (needs negative) and inside (needs near-zero) every lap. The ideal is the average of both demands: approximately −2.25° (avg of outside −4.5° and inside 0°).',
+  staticCamber: 'Your static alignment setting in degrees. Negative = top of tire tilted inward. For figure 8, both fronts should be set near the same value.',
+  casterGain: 'Average dynamic camber contribution from caster across both turn directions. Caster adds negative camber when outside (one turn) but slightly reduces it when inside (other turn) — the net average is small: caster × −0.04°/degree.',
+  effectiveCamber: 'Average effective camber across both turn directions. Static setting plus average caster contribution. This is the average camber the tire sees across a full lap.',
+  idealCamber: 'Average effective camber target: −2.25° (avg of outside ideal −4.5° and inside ideal 0°). In each turn the outside role needs −4.5° for maximum grip under cornering load; the inside role needs 0° (flat contact patch — body roll droop lays it flat). Optimal static = avg(−4.5+caster×0.034, 0−caster×0.019). F8 apex steer angle is ~3.67° (atan(114.7"/1788") — Ackermann at F8 loop radius 149 ft). Coefficients scaled from 20° steer calibration by sin(3.67°)/sin(20°). The camber score is the true average of both per-turn grip factors.',
+  rearCamber: 'Rear solid axle tilts with body roll. In a figure 8 the car rolls left and right equally, so average dynamic rear camber is approximately zero — near-ideal for the rear axle.',
+  solidAxle: 'The rear axle is solid — both wheels tilt together with body roll. In figure 8, body roll averages to near-zero across both turn directions, so rear dynamic camber stays close to optimal.',
+  camberScore: 'Grip multiplier from camber alignment. 100% = effective camber matches the model ideal of −2.25° for this tire. Each degree of deviation costs roughly 1.2% grip.',
+  pressureSection: 'Tire pressure affects contact patch shape. Figure 8 loading is symmetric — LF/RF see equal average loads, as do LR/RR. Equal pressures side-to-side are appropriate.',
+  coldHot: 'Cold PSI is what you set when inflating the tires. Hot PSI is calculated via ideal gas law using the "Tires Set At" temperature as the cold reference. At 200°F tires set at 85°F: 34 cold → ~40.9 PSI hot. Setting tires on a hot day means less pressure rise during racing.',
+  optimalHot: 'Load-optimal hot pressure for this corner. Since figure 8 loads are symmetric, LF≈RF and LR≈RR should have equal optimal pressures.',
+  presScore: 'Grip multiplier from tire pressure. 100% = hot pressure matches the load-optimal target. Each PSI of deviation costs ~0.25% grip.',
+  loadMismatch: 'Corner load is far from average — the mathematically optimal pressure is outside a practical range.',
+  frontShock: 'Average stiffness rating of front struts. For figure 8, symmetric front shock settings are preferred since the car rolls equally in both directions.',
+  rearShock: 'Average stiffness rating of rear shocks. Controls body roll, which averages to near-zero in figure 8 but stiffer rears still help stability through the crossing.',
+  frontLLTD: 'Lateral Load Transfer Distribution — front axle share of total cornering weight transfer. Target ~46% (green zone 41–51%). In figure 8, this applies equally to both turn directions. Outside this range costs ~1–3% grip.',
+  frontGripShare: 'Front axle share of total grip. Target is 55% — matching the car\'s front weight bias (3700 lbs × 55% front). Even though figure 8 loads symmetrically left/right, the car is still nose-heavy and the performance model penalizes deviation from 55%.',
+  bodyRoll: 'Estimated chassis lean at 1G. In figure 8 the car rolls left and right alternately — average is ~0°, but peak roll each way still affects tire geometry through corners.',
+  balanceScore: 'Front/rear grip balance. 100% = equal front and rear grip contribution (50/50 target for figure 8). Imbalance causes push or loose handling.',
+  toeCurrent: 'Current toe setting. For figure 8, toe-out sharpens turn-in for both left and right corners — same principle as oval but benefits both directions.',
+  toeOptimal: 'Model optimum: ¼" toe-out. Balances turn-in sharpness vs straight-line drag for the 350 ft straights on this figure 8 track.',
+  turnInGrip: 'Grip multiplier from toe angle. Peaks near ¼"–⅜" toe-out. Applies equally to left and right turn entries.',
+  toeDragPenalty: 'Straight-line speed loss from toe scrub. Figure 8 has 350 ft straights — more drag penalty than a short oval, so avoid excessive toe-out.',
+};
+
+// ── Oval phase tendency ───────────────────────────────────────────────────────
 function phaseLabel(bias) {
-  // bias > 0.5 = front-heavy load transfer = push; < 0.5 = rear-heavy = loose
   const dev = bias - 0.50;
   if      (dev < -0.20) return { label: 'Very Loose',   color: 'var(--red)' };
   if      (dev < -0.10) return { label: 'Loose',        color: 'orange' };
@@ -170,63 +205,26 @@ function phaseLabel(bias) {
   return                        { label: 'Very Tight',  color: 'var(--red)' };
 }
 
-// ── Handling Balance Gauge ────────────────────────────────────────────────────
+// ── Oval Handling Balance Gauge ───────────────────────────────────────────────
 function BalanceGauge({ frontGripPct, frontLLTD, springLLTD, corners, setup }) {
-  // Pressure balance correction — directional, not absolute.
-  // RF under-optimal (psiDev < 0) → less front grip → front is less limiting → loose tendency.
-  // RF over-optimal (psiDev > 0) → less front grip (crowning) → same loose tendency.
-  // Magnitude captures the grip loss regardless of direction.
-  // RR off-optimal → less rear grip → rear is less limiting → push tendency.
-  // Net: front pressure deviation = loose signal; rear pressure deviation = push signal.
-  // Scaled so 3-5 PSI of RF or RR spans one full balance zone boundary.
   const presAdj =
-    +Math.abs(corners.RF.psiDev) * 0.010 +  // RF off optimal → less front grip → looser
-    -Math.abs(corners.RR.psiDev) * 0.008 +  // RR off optimal → less rear grip → tighter
-    +Math.abs(corners.LF.psiDev) * 0.004 +  // LF off optimal → less front grip → looser
-    -Math.abs(corners.LR.psiDev) * 0.003;   // LR off optimal → less rear grip → tighter
+    +Math.abs(corners.RF.psiDev) * 0.010 +
+    -Math.abs(corners.RR.psiDev) * 0.008 +
+    +Math.abs(corners.LF.psiDev) * 0.004 +
+    -Math.abs(corners.LR.psiDev) * 0.003;
   const balFrontGripPct = Math.max(0.3, Math.min(0.7, frontGripPct + presAdj));
 
-  // Sign convention: positive tendency = LOOSE (rear is limiting axle).
-  // Front grip share < 55% = front is NOT the limit = rear is overworked = loose.
-  // Front grip share > 55% = front is the limit = front is overworked = push/tight.
-  // gripDev: + means front has LESS than its proportional share → rear is limiting → loose.
-  const gripDev  = 0.55 - balFrontGripPct;   // + = front under-contributing = loose
-
-  // LLTD contribution — U-shaped, centered on 46% optimal.
-  //
-  // LLTD deviation from 46% in EITHER direction is a push signal:
-  //   HIGH LLTD (> 50%): front axle overloaded by weight transfer → front reaches grip limit
-  //     first → push/understeer.
-  //   LOW LLTD (< 38%): RF is starved of load — can't generate lateral force without vertical
-  //     load. Front washes. This is push, not loose, even though the rear isn't overloaded.
-  //     Both extremes push; only 42–50% allows natural rotation.
-  //
-  // lltdPush: always negative (push direction), magnitude grows with distance from 46%.
-  // Calibrated: at LLTD=33% (13 pts off): lltdPush ≈ -0.059 → "Tight" zone.
-  //             at LLTD=38% (8 pts off):  lltdPush ≈ -0.022 → "Slight Push".
-  //             at LLTD=46% (0 pts off):  lltdPush = 0.
-  //             at LLTD=54% (8 pts off):  lltdPush ≈ -0.022 → "Slight Push".
-  //             at LLTD=59% (13 pts off): lltdPush ≈ -0.059 → "Tight".
-  // Formula: -3.5 × deviation² (gaugeMax = 0.12, thresholds at ±0.015/0.04/0.08)
+  const gripDev  = 0.55 - balFrontGripPct;
   const OPTIMAL_LLTD = 0.46;
-  const lltdPush = -3.5 * Math.pow(frontLLTD - OPTIMAL_LLTD, 2); // always ≤ 0
+  const lltdPush = -3.5 * Math.pow(frontLLTD - OPTIMAL_LLTD, 2);
 
-  // Camber balance term — RF insufficient camber means less front grip → push.
-  // LF over-camber (too negative) means less LF grip → also push.
-  // camberDev is |groundCamber - ideal|; positive deviation = wrong direction.
-  // RF: negative camberDev direction = too little negative = push (tighter).
-  // Scale: 1° RF camber off = ~0.012 push contribution (visibly moves the needle).
-  const rfCamberPush = -(corners.RF.camberDev * 0.012);  // more deviation = more push
-  const lfCamberLoose = (corners.LF.camberDev * 0.006);  // LF off-ideal = slight loose (less LF bite)
-
-  // Caster balance term — higher RF caster increases RF grip (more dynamic camber gain) → looser.
-  // Modeled as deviation from baseline RF caster (5°). Each degree above baseline adds front grip.
+  const rfCamberPush = -(corners.RF.camberDev * 0.012);
+  const lfCamberLoose = (corners.LF.camberDev * 0.006);
   const rfCasterLoose = ((setup.caster?.RF ?? 5) - 5) * 0.006;
 
-  const tendency = gripDev + lltdPush + rfCamberPush + lfCamberLoose + rfCasterLoose;  // + = loose, - = push
+  const tendency = gripDev + lltdPush + rfCamberPush + lfCamberLoose + rfCasterLoose;
 
   const gaugeMax = 0.12;
-  // gaugePos: 0 = full loose (left), 1 = full push (right)
   const gaugePos = Math.max(0, Math.min(1, 0.5 - tendency / (2 * gaugeMax)));
 
   let label, color;
@@ -238,68 +236,37 @@ function BalanceGauge({ frontGripPct, frontLLTD, springLLTD, corners, setup }) {
   else if (tendency <=  0.08) { label = 'Loose';          color = 'orange'; }
   else                        { label = 'Very Loose';     color = 'var(--red)'; }
 
-  // ── Phase breakdown — shocks, camber, pressure, toe, and grip scores ──
-  // bias: 0.5 = neutral, >0.5 = push/tight tendency, <0.5 = loose tendency
   const rfS = 10 - setup.shocks.RF;
   const lfS = 10 - setup.shocks.LF;
   const rrS = 10 - setup.shocks.RR;
   const lrS = 10 - setup.shocks.LR;
   const total = Math.max(rfS + lfS + rrS + lrS, 1);
 
-  // ENTRY — which axle loads first on turn-in?
-  // RF stiffer compression → front loads faster → push on entry.
-  // RR stiffer compression → resists rear squat → rear doesn't rotate → also pushier entry.
-  // So BOTH RF and RR stiffness push toward understeer at entry.
-  // The relevant signal is RF dominance relative to total outside stiffness:
-  //   high RF relative to RR = front-biased load rate = push
-  //   high RR relative to RF = rear-biased load rate = ALSO push (rear can't squat/rotate)
-  // Net: entry is pushiest when either outside corner dominates. Freest entry = RF ≈ RR balanced
-  // and both relatively soft. We model this as: bias toward push when RF or RR is dominant.
-  // Use (rfS - rrS) deviation from balanced: RF > RR = push, RR > RF = also push but less so
-  // because at least the rear is loading (even if resisting squat). Simplification: treat
-  // balanced RF=RR as most neutral (0.5), RF heavier = push (>0.5), RR heavier = slight push (>0.5).
-  const outsideBalance = (rfS - rrS) / Math.max(rfS + rrS, 1); // +1 = all RF, -1 = all RR
-  // Center at 0.5; RF dominant → push (>0.5); RR dominant → slight push (above 0.5 but less)
-  // Use asymmetric mapping: RF dominance is a stronger push signal than RR dominance
+  const outsideBalance = (rfS - rrS) / Math.max(rfS + rrS, 1);
   const entryOutsideBias = outsideBalance >= 0
-    ? Math.max(0.2, Math.min(0.8, 0.5 + outsideBalance * 0.35))   // RF stiffer → push
-    : Math.max(0.2, Math.min(0.8, 0.5 + outsideBalance * 0.15));  // RR stiffer → mild push
+    ? Math.max(0.2, Math.min(0.8, 0.5 + outsideBalance * 0.35))
+    : Math.max(0.2, Math.min(0.8, 0.5 + outsideBalance * 0.15));
   const toeEntryBias    = Math.max(0.2, Math.min(0.8, 0.5 + (setup.toe + 0.25) * 0.5));
   const rfCamEntryBias  = Math.max(0.2, Math.min(0.8, 0.5 + corners.RF.camberDev * 0.04));
   const rfPresEntryBias = Math.max(0.2, Math.min(0.8, 0.5 + corners.RF.psiDev * 0.022));
-  // LLTD entry contribution: U-curve — both too-low and too-high LLTD push toward understeer on entry.
-  // Map to 0–1 bias scale: 0.46 LLTD → 0.5 (neutral), deviating either way → toward push (>0.5).
   const lltdEntryBias = Math.min(0.8, 0.5 + 3.5 * Math.pow(frontLLTD - OPTIMAL_LLTD, 2));
   const entryBias = 0.32 * entryOutsideBias + 0.17 * lltdEntryBias + 0.18 * toeEntryBias + 0.14 * rfCamEntryBias + 0.19 * rfPresEntryBias;
   const entry = phaseLabel(entryBias);
 
-  // MID — steady-state corner. Shocks have stopped moving; only springs determine LLTD.
-  // Primary: pressure-adjusted front/rear grip balance. balFrontGripPct > 0.55 = front is the limiting axle = push;
-  // < 0.55 = rear is the limiting axle = loose. Includes amplified pressure correction.
-  // LLTD contribution uses springLLTD only — dampers are irrelevant at steady-state mid-corner.
   const midGripBias = Math.max(0.1, Math.min(0.9, 0.5 + (balFrontGripPct - 0.55) * 3));
-  // LLTD mid contribution: U-curve — both too-low and too-high push at mid-corner.
-  // At steady-state (shocks stopped), spring ratio dominates, but we use frontLLTD
-  // for consistency with the overall tendency signal.
   const lltdMidBias = Math.min(0.8, 0.5 + 3.5 * Math.pow(frontLLTD - OPTIMAL_LLTD, 2));
   const midBias = 0.55 * midGripBias + 0.45 * lltdMidBias;
   const mid = phaseLabel(midBias);
 
-  // EXIT — off corner under throttle.
-  // Cross-weight (diagonal stiffness) determines how load redistributes as car unwinds.
-  // Rear grip quality: if rear grip scores lower than front, rear may step out on throttle.
-  // RR pressure: over-inflated = less rear contact patch = loose on exit.
   const diagBias = (rfS + lrS) / Math.max(total, 1);
   const rearGripAvg  = (corners.RR.adjustableScore + corners.LR.adjustableScore) / 2;
   const frontGripAvg = (corners.RF.adjustableScore + corners.LF.adjustableScore) / 2;
   const gripDiffBias   = Math.max(0.1, Math.min(0.9, 0.5 + (rearGripAvg - frontGripAvg) * 5));
   const rrPresExitBias = Math.max(0.2, Math.min(0.8, 0.5 - corners.RR.psiDev * 0.020));
-  // LLTD exit contribution: U-curve — low LLTD starves RF on exit just as much as high.
   const lltdExitBias = Math.min(0.8, 0.5 + 3.5 * Math.pow(frontLLTD - OPTIMAL_LLTD, 2));
   const exitBias = 0.27 * diagBias + 0.22 * lltdExitBias + 0.24 * gripDiffBias + 0.27 * rrPresExitBias;
   const exit = phaseLabel(exitBias);
 
-  // Phase notes — surface the dominant driver for each phase
   let entryNote = '';
   const toeContrib    = Math.abs(toeEntryBias - 0.5);
   const rfCamContrib  = Math.abs(rfCamEntryBias - 0.5);
@@ -354,7 +321,6 @@ function BalanceGauge({ frontGripPct, frontLLTD, springLLTD, corners, setup }) {
     description = drivers.length
       ? `Car tends to push. Contributing factors: ${drivers.join('; ')}.`
       : 'Front axle is not generating enough lateral force relative to the rear.';
-    // Action depends on which end of the LLTD range we're in
     action = frontLLTD < 0.42
       ? 'To fix push from low LLTD: stiffen front struts (increase front roll resistance so RF gets more load in corners). Also check RF camber and pressure — the RF needs load AND good contact patch to generate cornering force.'
       : 'To loosen: raise RF pressure (quickest fix — more RF grip turns the car), raise RR pressure (plants rear), raise LF pressure, lower LR pressure. If still pushing: soften front struts, stiffen rear shocks, or add RF negative camber.';
@@ -378,9 +344,7 @@ function BalanceGauge({ frontGripPct, frontLLTD, springLLTD, corners, setup }) {
       <div className="opt-factor-title">Handling Balance</div>
       <div className="opt-hb-gauge-wrap">
         <div className="opt-hb-gauge-ends">
-          <span>LOOSE</span>
-          <span>NEUTRAL</span>
-          <span>PUSH</span>
+          <span>LOOSE</span><span>NEUTRAL</span><span>PUSH</span>
         </div>
         <div className="opt-hb-gauge-track">
           <div className="opt-hb-gauge-zone loose" />
@@ -392,7 +356,6 @@ function BalanceGauge({ frontGripPct, frontLLTD, springLLTD, corners, setup }) {
         <div className="opt-hb-label" style={{ color }}>{label}</div>
       </div>
 
-      {/* Phase breakdown */}
       <div className="opt-phase-breakdown">
         <div className="opt-phase-title">Corner Phase Breakdown</div>
         <div className="opt-phase-grid">
@@ -432,34 +395,196 @@ function BalanceGauge({ frontGripPct, frontLLTD, springLLTD, corners, setup }) {
   );
 }
 
-// ── Static Camber Calculator ──────────────────────────────────────────────────
-// Coefficients mirror raceSimulation.js exactly.
-// All ideals in GROUND FRAME (tire-to-road angle) — consistent with camberGripFactor.
-//   RF (outside): idealGround = -2.0° → needs negative camber to maximize contact patch under load
-//   LF (inside):  idealGround = +0.75° → small positive ground angle: camber thrust > contact patch loss
-// rollCoeff 0.355 = 1.1° camber gain / 3.1° body roll (measured: 1.7" wheel disp × 0.65°/in)
-// Droop coeff measured 2026-04-22: avg 0.547°/° roll (was estimated 0.15)
-//
-// Caster coefficients — calibrated at 20° steer then scaled to actual oval apex steer angle.
-//   Ackermann steer at apex: atan(wheelbase 114.7" / racing line radius 1740") = 3.77°
-//   Scaling factor: sin(3.77°) / sin(20°) = 0.0658 / 0.342 = 0.204
-//   RF: 2.0° gain at 20° steer / 3.0° caster = 0.667°/° × 0.204 = 0.136°/°caster
-//   LF: 1.5° gain at 20° steer / 9.0° caster = 0.167°/° × 0.204 = 0.034°/°caster
-// Pyrometer validation (April 2026, two sessions): outside-edge-hotter RF in both sessions
-// confirmed insufficient camber at −1.3° to −1.4° ground — consistent with 0.136 coefficient,
-// not the old 0.667 which would have predicted over-camber.
-const IDEAL_GROUND = { RF: -2.0, LF: 0.75 }; // ° ground camber targets (must match raceSimulation.js)
+// ── Figure 8 Handling Balance Gauge ───────────────────────────────────────────
+function BalanceGaugeF8({ frontGripPct, frontLLTD, springLLTD, corners, setup }) {
+  const gripDev  = 0.55 - frontGripPct;
+  const lltdDev  = (frontLLTD - 0.55) * 0.3;
+  const tendency = gripDev - lltdDev;
+
+  const gaugeMax = 0.12;
+  const gaugePos = Math.max(0, Math.min(1, 0.5 - tendency / (2 * gaugeMax)));
+
+  let label, color;
+  if      (tendency < -0.08)  { label = 'Very Tight';    color = 'var(--red)'; }
+  else if (tendency < -0.04)  { label = 'Tight';          color = 'orange'; }
+  else if (tendency < -0.015) { label = 'Slight Push';    color = 'var(--yellow)'; }
+  else if (tendency <=  0.015){ label = 'Neutral';        color = 'var(--green)'; }
+  else if (tendency <=  0.04) { label = 'Slight Loose';   color = 'var(--yellow)'; }
+  else if (tendency <=  0.08) { label = 'Loose';          color = 'orange'; }
+  else                        { label = 'Very Loose';     color = 'var(--red)'; }
+
+  const rfS = 10 - setup.shocks.RF;
+  const lfS = 10 - setup.shocks.LF;
+  const rrS = 10 - setup.shocks.RR;
+  const lrS = 10 - setup.shocks.LR;
+  const total = Math.max(rfS + lfS + rrS + lrS, 1);
+
+  const leftBalance  = (rfS - rrS) / Math.max(rfS + rrS, 1);
+  const rightBalance = (lfS - lrS) / Math.max(lfS + lrS, 1);
+  const entryLeftBias  = leftBalance  >= 0
+    ? Math.max(0.2, Math.min(0.8, 0.5 + leftBalance  * 0.35))
+    : Math.max(0.2, Math.min(0.8, 0.5 + leftBalance  * 0.15));
+  const entryRightBias = rightBalance >= 0
+    ? Math.max(0.2, Math.min(0.8, 0.5 + rightBalance * 0.35))
+    : Math.max(0.2, Math.min(0.8, 0.5 + rightBalance * 0.15));
+  const entryShockBias = (entryLeftBias + entryRightBias) / 2;
+  const toeEntryBias    = Math.max(0.2, Math.min(0.8, 0.5 + (setup.toe + 0.25) * 0.5));
+  const avgFrontCamberDev = (corners.LF.camberDev + corners.RF.camberDev) / 2;
+  const camberEntryBias   = Math.max(0.2, Math.min(0.8, 0.5 + avgFrontCamberDev * 0.04));
+  const avgFrontPsiDev  = (corners.LF.psiDev + corners.RF.psiDev) / 2;
+  const presEntryBias   = Math.max(0.2, Math.min(0.8, 0.5 + avgFrontPsiDev * 0.012));
+  const entryBias = 0.35 * entryShockBias + 0.20 * frontLLTD + 0.20 * toeEntryBias + 0.15 * camberEntryBias + 0.10 * presEntryBias;
+  const entry = phaseLabel(entryBias);
+
+  const midGripDev  = (frontGripPct - 0.55) * 3;
+  const midLLTDDev  = (springLLTD   - 0.50) * 0.5;
+  const midBias = Math.max(0.1, Math.min(0.9, 0.5 + 0.70 * midGripDev + 0.30 * midLLTDDev));
+  const mid = phaseLabel(midBias);
+
+  const diagBias = (rfS + lrS) / Math.max(total, 1);
+  const rearGripAvgF8  = (corners.RR.adjustableScore + corners.LR.adjustableScore) / 2;
+  const frontGripAvgF8 = (corners.RF.adjustableScore + corners.LF.adjustableScore) / 2;
+  const gripDiffBias   = Math.max(0.1, Math.min(0.9, 0.5 + (rearGripAvgF8 - frontGripAvgF8) * 5));
+  const avgRearPsiDev  = (corners.RR.psiDev + corners.LR.psiDev) / 2;
+  const rearPresExitBias = Math.max(0.2, Math.min(0.8, 0.5 - avgRearPsiDev * 0.012));
+  const exitBias = 0.30 * diagBias + 0.25 * frontLLTD + 0.25 * gripDiffBias + 0.20 * rearPresExitBias;
+  const exit = phaseLabel(exitBias);
+
+  let entryNote = '';
+  const toeContrib    = Math.abs(toeEntryBias - 0.5);
+  const camberContrib = Math.abs(camberEntryBias - 0.5);
+  const presContrib   = Math.abs(presEntryBias - 0.5);
+  const shockContrib  = Math.abs(entryShockBias - 0.5);
+  if (toeContrib > 0.04 && toeContrib >= shockContrib) {
+    entryNote = setup.toe > -0.25
+      ? `Toe-in (${Math.abs(setup.toe)}" ${setup.toe > 0 ? 'in' : 'out'}) reduces front turn-in — push on entry`
+      : `Aggressive toe-out (${Math.abs(setup.toe)}") — sharp turn-in both directions`;
+  } else if (camberContrib > 0.04 && camberContrib >= shockContrib) {
+    entryNote = `Avg front camber ${avgFrontCamberDev.toFixed(1)}° off ideal — less front bite on entry`;
+  } else if (presContrib > 0.04 && presContrib >= shockContrib) {
+    entryNote = avgFrontPsiDev > 0
+      ? `Front tires over-inflated avg ${avgFrontPsiDev.toFixed(1)} PSI — harder contact patch`
+      : `Front tires under-inflated avg ${Math.abs(avgFrontPsiDev).toFixed(1)} PSI`;
+  } else {
+    entryNote = 'Avg of L+R turn-in shock loading';
+  }
+
+  let exitNote = '';
+  const rearGripDiffF8 = rearGripAvgF8 - frontGripAvgF8;
+  if (Math.abs(rearGripDiffF8) > 0.02) {
+    exitNote = rearGripDiffF8 < 0
+      ? `Rear grip (${(rearGripAvgF8 * 100).toFixed(0)}%) < front (${(frontGripAvgF8 * 100).toFixed(0)}%) — rear may step out on throttle`
+      : `Rear grip (${(rearGripAvgF8 * 100).toFixed(0)}%) > front — rear planted on exit`;
+  } else {
+    exitNote = 'Diagonal + LLTD under throttle';
+  }
+
+  const frontAvgScore = (corners.LF.adjustableScore + corners.RF.adjustableScore) / 2;
+  const rearAvgScore  = (corners.LR.adjustableScore + corners.RR.adjustableScore) / 2;
+  const camberOk      = corners.LF.camberDev < 0.5 && corners.RF.camberDev < 0.5;
+  const frontPresOk   = Math.abs(corners.LF.psiDev) < 3 && Math.abs(corners.RF.psiDev) < 3;
+  const rearPresOk    = Math.abs(corners.LR.psiDev) < 3 && Math.abs(corners.RR.psiDev) < 3;
+
+  let description, action;
+  if (tendency < -0.015) {
+    const drivers = [];
+    if (frontLLTD > 0.51) drivers.push('high front LLTD — front struts handling too much cornering load, overworking front axle');
+    if (!camberOk) drivers.push('front camber could be improved toward optimal');
+    if (!frontPresOk) drivers.push('front tire pressures off optimal');
+    if (frontAvgScore < rearAvgScore - 0.03) drivers.push('front grip scores lower than rear');
+    description = drivers.length
+      ? `Car tends to push in both directions. Contributing factors: ${drivers.join('; ')}.`
+      : 'Front axle working harder than rear in both turn directions.';
+    action = 'To loosen: adjust camber toward optimal, soften front struts, check front pressures.';
+  } else if (tendency > 0.015) {
+    const drivers = [];
+    if (frontLLTD < 0.41) drivers.push('low front LLTD — rear shocks handling too much cornering load, overloading rear axle');
+    if (!rearPresOk) drivers.push('rear tire pressures off optimal');
+    if (rearAvgScore < frontAvgScore - 0.03) drivers.push('rear grip scores lower than front');
+    description = drivers.length
+      ? `Car tends to be loose in both directions. Contributing factors: ${drivers.join('; ')}.`
+      : 'Rear axle working harder than front in both turn directions.';
+    action = 'To tighten: stiffen front struts relative to rear shocks, check rear pressures.';
+  } else {
+    const phaseIssues = [];
+    if (mid.label !== 'Neutral')   phaseIssues.push(`${mid.label} mid-corner (spring LLTD ${(springLLTD * 100).toFixed(0)}%)`);
+    if (exit.label !== 'Neutral')  phaseIssues.push(`${exit.label} on exit`);
+    if (entry.label !== 'Neutral') phaseIssues.push(`${entry.label} on entry`);
+    description = phaseIssues.length
+      ? `Overall balance is neutral, but phase tendencies detected: ${phaseIssues.join('; ')}.`
+      : 'Front and rear axles are well-balanced across all corner phases.';
+    action = phaseIssues.length
+      ? 'Overall grip is balanced — fine-tune spring LLTD or shock balance to address phase-specific tendencies.'
+      : null;
+  }
+
+  return (
+    <div className="opt-handling-balance">
+      <div className="opt-factor-title">Handling Balance</div>
+      <div className="opt-hb-gauge-wrap">
+        <div className="opt-hb-gauge-ends">
+          <span>LOOSE</span><span>NEUTRAL</span><span>PUSH</span>
+        </div>
+        <div className="opt-hb-gauge-track">
+          <div className="opt-hb-gauge-zone loose" />
+          <div className="opt-hb-gauge-zone neutral" />
+          <div className="opt-hb-gauge-zone push" />
+          <div className="opt-hb-gauge-center" />
+          <div className="opt-hb-gauge-dot" style={{ left: `${gaugePos * 100}%`, background: color }} />
+        </div>
+        <div className="opt-hb-label" style={{ color }}>{label}</div>
+      </div>
+
+      <div className="opt-phase-breakdown">
+        <div className="opt-phase-title">Corner Phase Breakdown</div>
+        <div className="opt-phase-grid">
+          <div className="opt-phase-row">
+            <span className="opt-phase-name">Entry</span>
+            <span className="opt-phase-label" style={{ color: entry.color }}>{entry.label}</span>
+            {entryNote && <span className="opt-phase-note">{entryNote}</span>}
+          </div>
+          <div className="opt-phase-row">
+            <span className="opt-phase-name">Mid</span>
+            <span className="opt-phase-label" style={{ color: mid.color }}>{mid.label}</span>
+            <span className="opt-phase-note">Front grip {(frontGripPct * 100).toFixed(0)}% (ideal 55%) · Spring LLTD {(springLLTD * 100).toFixed(0)}%</span>
+          </div>
+          <div className="opt-phase-row">
+            <span className="opt-phase-name">Exit</span>
+            <span className="opt-phase-label" style={{ color: exit.color }}>{exit.label}</span>
+            {exitNote && <span className="opt-phase-note">{exitNote}</span>}
+          </div>
+        </div>
+      </div>
+
+      <div className="opt-stat-pair" style={{ marginTop: 4 }}>
+        <span>Front grip share</span>
+        <span style={{ color: Math.abs(gripDev) < 0.02 ? 'var(--green)' : 'var(--yellow)' }}>
+          {(frontGripPct * 100).toFixed(1)}% <span className="opt-stat-ideal">(ideal 55%)</span>
+        </span>
+      </div>
+      <div className="opt-stat-pair">
+        <span>Front LLTD</span>
+        <span style={{ color: frontLLTD >= 0.41 && frontLLTD <= 0.51 ? 'var(--green)' : 'var(--yellow)' }}>
+          {(frontLLTD * 100).toFixed(1)}% <span className="opt-stat-ideal">(F8 target ~46%)</span>
+        </span>
+      </div>
+      <div className="opt-hb-desc">{description}</div>
+      {action && <div className="opt-hb-action">{action}</div>}
+    </div>
+  );
+}
+
+// ── Static Camber Calculator (oval only) ──────────────────────────────────────
+const IDEAL_GROUND = { RF: -2.0, LF: 0.75 };
 const CALC = {
   RF: { outside: true,  casterCoeff: 0.136, rollCoeff: 0.355  },
   LF: { outside: false, casterCoeff: 0.034, rollCoeff: 0.547  },
 };
-const OVAL_RACING_G_CALC = 0.813; // instantaneous apex G — must match raceSimulation.js OVAL_RACING_G
+const OVAL_RACING_G_CALC = 0.813;
 
 function CamberCalc({ roll, setupCaster, geoOverrides }) {
   const cornerRoll = roll * OVAL_RACING_G_CALC;
 
-  // Local caster state — initialized from setup but user can override in the calculator.
-  // Sync when the parent setup caster changes (e.g. user edits in the main form).
   const [caster, setCaster] = useState({
     LF: setupCaster?.LF ?? 3.5,
     RF: setupCaster?.RF ?? 5.0,
@@ -475,16 +600,12 @@ function CamberCalc({ roll, setupCaster, geoOverrides }) {
     }
   }, [setupCaster]);
 
-  // Use measured FVSA-derived coefficients when geometry is loaded
   const jounceRF = geoOverrides?.slaJounceCoeffRF ?? CALC.RF.rollCoeff;
   const droopLF  = geoOverrides?.slaDroopCoeffLF  ?? CALC.LF.rollCoeff;
 
   const compute = (c) => {
     const { outside, casterCoeff } = CALC[c];
     const rollCoeff = c === 'RF' ? jounceRF : droopLF;
-    // Convert ground-frame ideal → chassis-relative ideal effective camber
-    // RF: ground = effective + cornerRoll → effective = idealGround - cornerRoll
-    // LF: ground = effective - cornerRoll → effective = idealGround + cornerRoll
     const idealGround = IDEAL_GROUND[c];
     const idealEffective = outside ? idealGround - cornerRoll : idealGround + cornerRoll;
     const casterGain = outside ? -(caster[c] * casterCoeff) :  (caster[c] * casterCoeff);
@@ -492,7 +613,6 @@ function CamberCalc({ roll, setupCaster, geoOverrides }) {
     const totalGain  = casterGain + rollGain;
     const optStatic  = Math.round((idealEffective - casterGain - rollGain) * 4) / 4;
     const effectiveCamber = optStatic + totalGain;
-    // Ground camber: rotate chassis-relative → ground frame
     const groundCamber = outside
       ? effectiveCamber + cornerRoll
       : effectiveCamber - cornerRoll;
@@ -586,7 +706,8 @@ function StatusRow({ ok, label, value, action, tip, warn }) {
   return tip ? <Tooltip text={tip}>{content}</Tooltip> : content;
 }
 
-function CornerCard({ c, data, setup, frontGripPct }) {
+// ── Oval Corner Card ──────────────────────────────────────────────────────────
+function OvalCornerCard({ c, data, setup, frontGripPct }) {
   const [expanded, setExpanded] = useState(false);
   const {
     load, estimatedTemp, hp, recColdPsi, recHotPsi,
@@ -601,7 +722,6 @@ function CornerCard({ c, data, setup, frontGripPct }) {
   const recCold    = Math.round(recColdPsi * 2) / 2;
   const psiDir     = psiDev < 0 ? 'Raise' : 'Lower';
 
-  // Balance note — derived from frontGripPct vs target 0.57 front bias
   const balanceNote = frontGripPct != null ? (() => {
     const dev = frontGripPct - 0.57;
     if (Math.abs(dev) < 0.02) return null;
@@ -614,10 +734,9 @@ function CornerCard({ c, data, setup, frontGripPct }) {
   const toeOk = toeFactor == null || toeFactor > 0.97;
 
   const idealTip = front
-    ? (outside ? TIPS.idealCamber.outside : TIPS.idealCamber.inside)
-    : (outside ? TIPS.idealCamber.rearOutside : TIPS.idealCamber.rearInside);
+    ? (outside ? OVAL_TIPS.idealCamber.outside : OVAL_TIPS.idealCamber.inside)
+    : (outside ? OVAL_TIPS.idealCamber.rearOutside : OVAL_TIPS.idealCamber.rearInside);
 
-  // Single highest-priority action for the card badge
   let topAction = null;
   if (!camberOk && front && optStaticCamber !== null) {
     topAction = { label: 'Set camber', value: `${optStaticCamber}° static` };
@@ -627,28 +746,26 @@ function CornerCard({ c, data, setup, frontGripPct }) {
 
   return (
     <div className="opt-corner-card">
-      {/* ── Header ── */}
       <div className="opt-corner-header">
         <div>
           <span className="opt-corner-pos">{c}</span>
           <span className="opt-corner-name">{CORNER_LABELS[c]}</span>
         </div>
-        <Tooltip text={TIPS.gripScore}>
+        <Tooltip text={OVAL_TIPS.gripScore}>
           <div className="opt-corner-score" style={{ color: scoreColor(adjustableScore) }}>
             {pct(adjustableScore)}
           </div>
         </Tooltip>
       </div>
 
-      {/* ── Meta ── */}
       <div className="opt-corner-meta">
-        <Tooltip text={TIPS.load}><span>{Math.round(load)} lbs</span></Tooltip>
-        <Tooltip text={TIPS.estTemp}><span>{Math.round(estimatedTemp)}°F est.</span></Tooltip>
-        <Tooltip text={TIPS.tempFactor}>
+        <Tooltip text={OVAL_TIPS.load}><span>{Math.round(load)} lbs</span></Tooltip>
+        <Tooltip text={OVAL_TIPS.estTemp}><span>{Math.round(estimatedTemp)}°F est.</span></Tooltip>
+        <Tooltip text={OVAL_TIPS.tempFactor}>
           <span style={{ color: scoreColor(tempFactor) }}>Temp {pct(tempFactor)}</span>
         </Tooltip>
       </div>
-      {/* ── Balance / Toe indicators ── */}
+
       {(balanceNote || (front && !toeOk)) && (
         <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6, margin: '4px 0 2px', fontSize: '0.78em' }}>
           {balanceNote && (
@@ -664,7 +781,6 @@ function CornerCard({ c, data, setup, frontGripPct }) {
         </div>
       )}
 
-      {/* ── Top action badge ── */}
       {topAction && (
         <div className="opt-top-action">
           <span className="opt-top-action-label">{topAction.label}:</span>
@@ -672,9 +788,8 @@ function CornerCard({ c, data, setup, frontGripPct }) {
         </div>
       )}
 
-      {/* ── Camber status row ── */}
       <div className="opt-factor-block opt-factor-block--compact">
-        <Tooltip text={TIPS.camberSection}>
+        <Tooltip text={OVAL_TIPS.camberSection}>
           <div className="opt-factor-title">Camber</div>
         </Tooltip>
 
@@ -691,16 +806,16 @@ function CornerCard({ c, data, setup, frontGripPct }) {
             {expanded && (
               <div className="opt-expanded-detail">
                 <div className="opt-camber-math">
-                  <Tooltip text={TIPS.staticCamber}><span>{setup.camber[c]}° static</span></Tooltip>
-                  <Tooltip text={TIPS.casterGain}>
+                  <Tooltip text={OVAL_TIPS.staticCamber}><span>{setup.camber[c]}° static</span></Tooltip>
+                  <Tooltip text={OVAL_TIPS.casterGain}>
                     <span className="opt-math-op"> {dynamicGain >= 0 ? '+' : ''}{dynamicGain.toFixed(2)}° dynamic</span>
                   </Tooltip>
-                  <Tooltip text={TIPS.effectiveCamber}>
+                  <Tooltip text={OVAL_TIPS.effectiveCamber}>
                     <span className="opt-math-eq"> = {effectiveCamber !== null ? effectiveCamber.toFixed(2) : '—'}° eff.</span>
                   </Tooltip>
                 </div>
                 <div className="opt-stat-pair" style={{ color: 'var(--text-muted)', fontSize: '0.85em' }}>
-                  <Tooltip text={TIPS.sidewallCamber}><span>↳ sidewall compliance</span></Tooltip>
+                  <Tooltip text={OVAL_TIPS.sidewallCamber}><span>↳ sidewall compliance</span></Tooltip>
                   <span>+{sidewallCamber !== undefined ? sidewallCamber.toFixed(2) : '—'}°</span>
                 </div>
               </div>
@@ -712,18 +827,18 @@ function CornerCard({ c, data, setup, frontGripPct }) {
               ok={camberOk}
               label="Ground camber"
               value={`${groundCamber !== null ? (groundCamber >= 0 ? '+' : '') + groundCamber.toFixed(2) : '—'}° (target ${idealGroundCamber !== undefined ? (idealGroundCamber >= 0 ? '+' : '') + idealGroundCamber.toFixed(1) : '—'}°)`}
-              tip="Rear solid axle — ground camber equals body roll angle at the corner apex. The axle cannot be individually adjusted; the only lever is total body roll stiffness (spring rates). Outside rear tilts outward (positive); inside rear tilts inward (negative). Target is 0° — the axle is flat relative to the road."
+              tip="Rear solid axle — ground camber equals body roll angle at the corner apex."
             />
             {expanded && cornerRoll != null && (
               <div className="opt-expanded-detail">
                 <div className="opt-camber-math" style={{ fontSize: '0.85em', color: 'var(--text-muted)' }}>
-                  <Tooltip text="Body roll angle at the corner apex. Formula: (body roll per G at 1G) × 0.813G apex. Body roll per G = 3.1°/G baseline × (baseline spring stiffness / current spring stiffness). Stiffer springs reduce roll; softer springs increase it. ARB is included in stiffness for both baseline and current.">
+                  <Tooltip text="Body roll angle at the corner apex.">
                     <span>Body roll at apex</span>
                   </Tooltip>
                   <span style={{ color: 'var(--text-primary)', marginLeft: 'auto' }}>{cornerRoll.toFixed(2)}°</span>
                 </div>
                 <div className="opt-camber-math" style={{ fontSize: '0.85em', color: 'var(--text-muted)' }}>
-                  <Tooltip text="Sidewall compliance camber: the tire sidewall deflects slightly outward under load, adding a small positive (outward) camber at the contact patch. Larger on the heavily loaded outside rear.">
+                  <Tooltip text="Sidewall compliance camber: the tire sidewall deflects slightly outward under load.">
                     <span>↳ sidewall compliance</span>
                   </Tooltip>
                   <span style={{ marginLeft: 'auto' }}>+{sidewallCamber !== undefined ? sidewallCamber.toFixed(2) : '—'}°</span>
@@ -735,12 +850,11 @@ function CornerCard({ c, data, setup, frontGripPct }) {
             )}
           </>
         )}
-        <ScoreBar value={camberFactor} tip={TIPS.camberScore} />
+        <ScoreBar value={camberFactor} tip={OVAL_TIPS.camberScore} />
       </div>
 
-      {/* ── Pressure status row ── */}
       <div className="opt-factor-block opt-factor-block--compact">
-        <Tooltip text={TIPS.pressureSection}>
+        <Tooltip text={OVAL_TIPS.pressureSection}>
           <div className="opt-factor-title">Pressure</div>
         </Tooltip>
         <StatusRow
@@ -748,13 +862,12 @@ function CornerCard({ c, data, setup, frontGripPct }) {
           label={`${setup.coldPsi[c]} cold → ${hp.toFixed(1)} hot`}
           value={isPresLimited ? 'load mismatch' : `opt ${recHotPsi.toFixed(1)} PSI hot`}
           action={!isPresLimited && !presOk ? `${psiDir} cold to ${recCold} PSI` : null}
-          tip={isPresLimited ? TIPS.loadMismatch : TIPS.optimalHot}
+          tip={isPresLimited ? OVAL_TIPS.loadMismatch : OVAL_TIPS.optimalHot}
           warn={isPresLimited}
         />
-        <ScoreBar value={psiGripFactor} tip={TIPS.presScore} />
+        <ScoreBar value={psiGripFactor} tip={OVAL_TIPS.presScore} />
       </div>
 
-      {/* ── Expand toggle ── */}
       <button className="opt-expand-toggle" onClick={() => setExpanded(e => !e)}>
         {expanded ? 'Less detail ▲' : 'More detail ▼'}
       </button>
@@ -762,7 +875,114 @@ function CornerCard({ c, data, setup, frontGripPct }) {
   );
 }
 
-function CompactSetupForm({ setup, onChange }) {
+// ── Figure 8 Corner Card ──────────────────────────────────────────────────────
+function F8CornerCard({ c, data, setup }) {
+  const {
+    load, estimatedTemp, hp, optHotPsi, recColdPsi, recHotPsi,
+    psiGripFactor, isPresLimited, psiDev,
+    effectiveCamber, idealCamber, camberDev, camberFactor, casterGain,
+    optStaticCamber, front, tempFactor, casterFactor, adjustableScore,
+  } = data;
+
+  const camberOk = camberDev < 0.5;
+  const presOk = Math.abs(psiDev) < 2;
+  const recCold = Math.round(recColdPsi * 2) / 2;
+
+  return (
+    <div className="opt-corner-card">
+      <div className="opt-corner-header">
+        <div>
+          <span className="opt-corner-pos">{c}</span>
+          <span className="opt-corner-name">{CORNER_LABELS[c]}</span>
+        </div>
+        <Tooltip text={F8_TIPS.gripScore}>
+          <div className="opt-corner-score" style={{ color: scoreColor(adjustableScore) }}>
+            {pct(adjustableScore)}
+          </div>
+        </Tooltip>
+      </div>
+
+      <div className="opt-corner-meta">
+        <Tooltip text={F8_TIPS.load}><span>{Math.round(load)} lbs avg</span></Tooltip>
+        <Tooltip text={F8_TIPS.estTemp}><span>{Math.round(estimatedTemp)}°F est.</span></Tooltip>
+        <Tooltip text={F8_TIPS.tempFactor}>
+          <span style={{ color: scoreColor(tempFactor) }}>Temp {pct(tempFactor)}</span>
+        </Tooltip>
+      </div>
+
+      <div className="opt-factor-block">
+        <Tooltip text={F8_TIPS.camberSection}>
+          <div className="opt-factor-title">Camber</div>
+        </Tooltip>
+        {front ? (
+          <>
+            <div className="opt-camber-math">
+              <Tooltip text={F8_TIPS.staticCamber}><span>{setup.camber[c]}° static</span></Tooltip>
+              <Tooltip text={F8_TIPS.casterGain}>
+                <span className="opt-math-op"> {casterGain >= 0 ? '+' : ''}{casterGain.toFixed(2)}° avg caster</span>
+              </Tooltip>
+              <Tooltip text={F8_TIPS.effectiveCamber}>
+                <span className="opt-math-eq"> = {effectiveCamber.toFixed(2)}° avg eff.</span>
+              </Tooltip>
+            </div>
+            <div className="opt-stat-pair">
+              <Tooltip text={F8_TIPS.idealCamber}><span>Ideal avg effective</span></Tooltip>
+              <span style={{ color: camberOk ? 'var(--green)' : 'var(--yellow)' }}>
+                {idealCamber.toFixed(2)}°
+                {!camberOk && optStaticCamber !== null && (
+                  <span className="opt-rec-arrow"> → set {optStaticCamber}° static</span>
+                )}
+              </span>
+            </div>
+          </>
+        ) : (
+          <>
+            <div className="opt-stat-pair">
+              <Tooltip text={F8_TIPS.effectiveCamber}><span>Avg dynamic (both turns)</span></Tooltip>
+              <span>{effectiveCamber.toFixed(2)}°</span>
+            </div>
+            <div className="opt-stat-pair">
+              <Tooltip text={F8_TIPS.rearCamber}><span>Ideal</span></Tooltip>
+              <span>0.00°</span>
+            </div>
+            <Tooltip text={F8_TIPS.solidAxle}>
+              <div className="opt-limited-note">Solid axle — roll averages to ~0° in figure 8</div>
+            </Tooltip>
+          </>
+        )}
+        <ScoreBar value={camberFactor} label="Camber score" tip={F8_TIPS.camberScore} />
+      </div>
+
+      <div className="opt-factor-block">
+        <Tooltip text={F8_TIPS.pressureSection}>
+          <div className="opt-factor-title">Pressure</div>
+        </Tooltip>
+        <div className="opt-stat-pair">
+          <Tooltip text={F8_TIPS.coldHot}><span>Cold → Hot</span></Tooltip>
+          <span>{setup.coldPsi[c]} → {hp.toFixed(1)} PSI</span>
+        </div>
+        <div className="opt-stat-pair">
+          <Tooltip text={isPresLimited ? F8_TIPS.loadMismatch : F8_TIPS.optimalHot}>
+            <span>Optimal hot{isPresLimited ? ' *' : ''}</span>
+          </Tooltip>
+          <span style={{ color: isPresLimited ? 'var(--text-muted)' : presOk ? 'var(--green)' : 'var(--yellow)' }}>
+            {recHotPsi.toFixed(1)} PSI
+            {!presOk && !isPresLimited && (
+              <span className="opt-rec-arrow"> → cold: {recCold} PSI</span>
+            )}
+          </span>
+        </div>
+        {isPresLimited && (
+          <div className="opt-limited-note">* Load mismatch — optimal {optHotPsi.toFixed(0)} PSI unreachable</div>
+        )}
+        <ScoreBar value={psiGripFactor} label="Pressure score" tip={F8_TIPS.presScore} />
+      </div>
+    </div>
+  );
+}
+
+// ── Shared Setup Form ─────────────────────────────────────────────────────────
+function CompactSetupForm({ setup, onChange, isF8 }) {
   const update = (path, val) => {
     const s = deepClone(setup);
     const keys = path.split('.');
@@ -779,12 +999,7 @@ function CompactSetupForm({ setup, onChange }) {
     if (!found) return;
     const s = deepClone(setup);
     s.shocks[corner] = found.rating;
-    // Complete strut assemblies (Quick-Strut, Strut-Plus) include their own coil spring.
-    // Auto-fill that corner's spring rate as a convenience — user can override via selector.
-    // Damper-only parts leave the existing spring rate unchanged.
-    if (isFront && found.springRate) {
-      s.springs[corner] = found.springRate;
-    }
+    if (isFront && found.springRate) s.springs[corner] = found.springRate;
     onChange(s);
   };
 
@@ -817,7 +1032,10 @@ function CompactSetupForm({ setup, onChange }) {
             );
           })}
 
-          <div className="opt-form-label" style={{ marginTop: 12 }}>Front Spring Rates</div>
+          <div className="opt-form-label" style={{ marginTop: 12 }}>
+            Front Spring Rates
+            {isF8 && <span className="opt-form-hint"> Symmetric recommended</span>}
+          </div>
           {['LF', 'RF'].map(c => (
             <div key={c} className="opt-form-field">
               <label>{c}</label>
@@ -832,10 +1050,36 @@ function CompactSetupForm({ setup, onChange }) {
               </select>
             </div>
           ))}
+
+          {isF8 && (
+            <>
+              <div className="opt-form-label" style={{ marginTop: 12 }}>Rear Spring Rate</div>
+              <div className="opt-form-field">
+                <label>LR/RR</label>
+                <select
+                  className="opt-select"
+                  value={setup.springs.LR ?? 160}
+                  onChange={e => {
+                    const val = parseInt(e.target.value);
+                    const s = deepClone(setup);
+                    s.springs.LR = val; s.springs.RR = val;
+                    onChange(s);
+                  }}
+                >
+                  {REAR_SPRING_OPTIONS.map(o => (
+                    <option key={o.value} value={o.value}>{o.label}</option>
+                  ))}
+                </select>
+              </div>
+            </>
+          )}
         </div>
 
         <div className="opt-form-col">
-          <div className="opt-form-label">Camber (°)</div>
+          <div className="opt-form-label">
+            Camber (°)
+            {isF8 && <span className="opt-form-hint"> Symmetric recommended</span>}
+          </div>
           {['LF', 'RF'].map(c => (
             <div key={c} className="opt-form-field">
               <label>{c}</label>
@@ -846,7 +1090,10 @@ function CompactSetupForm({ setup, onChange }) {
             </div>
           ))}
 
-          <div className="opt-form-label" style={{ marginTop: 12 }}>Caster (°)</div>
+          <div className="opt-form-label" style={{ marginTop: 12 }}>
+            Caster (°)
+            {isF8 && <span className="opt-form-hint"> Symmetric recommended</span>}
+          </div>
           {['LF', 'RF'].map(c => (
             <div key={c} className="opt-form-field">
               <label>{c}</label>
@@ -870,7 +1117,10 @@ function CompactSetupForm({ setup, onChange }) {
         </div>
 
         <div className="opt-form-col">
-          <div className="opt-form-label">Cold Pressures (PSI)</div>
+          <div className="opt-form-label">
+            Cold Pressures (PSI)
+            {isF8 && <span className="opt-form-hint"> Symmetric recommended</span>}
+          </div>
           {CORNERS.map(c => (
             <div key={c} className="opt-form-field">
               <label>{c}</label>
@@ -886,29 +1136,32 @@ function CompactSetupForm({ setup, onChange }) {
   );
 }
 
+// ── Main Optimizer ────────────────────────────────────────────────────────────
 export default function SetupOptimizer({ setup, setSetup, ambient, setAmbient, inflationTemp, setInflationTemp }) {
+  const [mode, setMode] = useState('oval'); // 'oval' | 'f8'
+  const isF8 = mode === 'f8';
+
   const { geometry: geoProfiles = [] } = useSync();
   const [selectedGeoId, setSelectedGeoId] = useState(null);
   const selectedGeo = selectedGeoId != null ? geoProfiles.find(g => g.id === selectedGeoId) : null;
   const geoOverrides = useMemo(() => buildGeoOverrides(selectedGeo), [selectedGeo]);
 
+  const TARGET    = isF8 ? F8_TARGET    : OVAL_TARGET;
+  const RANGE_MIN = isF8 ? F8_RANGE_MIN : OVAL_RANGE_MIN;
+  const RANGE_MAX = isF8 ? F8_RANGE_MAX : OVAL_RANGE_MAX;
+
   const loadSetupFromGeo = () => {
     if (!selectedGeo) return;
     const s = deepClone(setup);
-    // Camber
     if (selectedGeo.camber?.LF !== '' && selectedGeo.camber?.LF != null) s.camber.LF = parseFloat(selectedGeo.camber.LF);
     if (selectedGeo.camber?.RF !== '' && selectedGeo.camber?.RF != null) s.camber.RF = parseFloat(selectedGeo.camber.RF);
-    // Caster
     if (selectedGeo.caster?.LF !== '' && selectedGeo.caster?.LF != null) s.caster.LF = parseFloat(selectedGeo.caster.LF);
     if (selectedGeo.caster?.RF !== '' && selectedGeo.caster?.RF != null) s.caster.RF = parseFloat(selectedGeo.caster.RF);
-    // Toe
     if (selectedGeo.toe !== '' && selectedGeo.toe != null) s.toe = parseFloat(selectedGeo.toe);
-    // Spring rates — geometry stores LF/RF/LR/RR
     if (selectedGeo.springRate?.LF !== '' && selectedGeo.springRate?.LF != null) s.springs.LF = parseFloat(selectedGeo.springRate.LF);
     if (selectedGeo.springRate?.RF !== '' && selectedGeo.springRate?.RF != null) s.springs.RF = parseFloat(selectedGeo.springRate.RF);
     const rearRate = selectedGeo.springRate?.LR ?? selectedGeo.springRate?.RR;
     if (rearRate !== '' && rearRate != null) { s.springs.LR = parseFloat(rearRate); s.springs.RR = parseFloat(rearRate); }
-    // Shocks — geometry stores part label strings; look up rating from shockOptions
     ['LF', 'RF', 'LR', 'RR'].forEach(corner => {
       const label = selectedGeo.shocks?.[corner];
       if (!label) return;
@@ -919,18 +1172,32 @@ export default function SetupOptimizer({ setup, setSetup, ambient, setAmbient, i
     });
     setSetup(s);
   };
-  const analysis = useMemo(() => analyzeSetup(setup, ambient, inflationTemp, geoOverrides), [setup, ambient, inflationTemp, geoOverrides]);
+
+  const ovalAnalysis = useMemo(
+    () => !isF8 ? analyzeSetup(setup, ambient, inflationTemp, geoOverrides) : null,
+    [isF8, setup, ambient, inflationTemp, geoOverrides]
+  );
+  const f8Analysis = useMemo(
+    () => isF8 ? analyzeSetupF8(setup, ambient, inflationTemp, geoOverrides) : null,
+    [isF8, setup, ambient, inflationTemp, geoOverrides]
+  );
+
+  const analysis = isF8 ? f8Analysis : ovalAnalysis;
   const {
     corners, ss, roll, frontGripPct, balancePenalty,
     toeGrip, toeDrag, toe,
     lapTime, optLapTime, totalGain, recs,
-    desiredRollFront, desiredRollRear, rollAngleImbalance,
   } = analysis;
 
-  const gap = lapTime - TARGET;
+  // Oval-only fields
+  const desiredRollFront    = !isF8 ? ovalAnalysis?.desiredRollFront    : null;
+  const desiredRollRear     = !isF8 ? ovalAnalysis?.desiredRollRear     : null;
+  const rollAngleImbalance  = !isF8 ? ovalAnalysis?.rollAngleImbalance  : null;
+  const imbalance           = isF8  ? f8Analysis?.imbalance             : null;
+
+  const gap    = lapTime - TARGET;
   const optGap = optLapTime - TARGET;
 
-  // Progress bar position helper (RANGE_MAX=slow, RANGE_MIN=fast, left=slow, right=fast)
   const barPos = (t) =>
     `${Math.max(0, Math.min(100, (RANGE_MAX - t) / (RANGE_MAX - RANGE_MIN) * 100))}%`;
 
@@ -949,8 +1216,33 @@ export default function SetupOptimizer({ setup, setSetup, ambient, setAmbient, i
     setSetup(s);
   };
 
+  const progressTicks = isF8
+    ? [{ label: '23.8', t: 23.8 }, { label: '23.5', t: 23.5 }, { label: '23.1★', t: 23.1, star: true }]
+    : [{ label: '17.8', t: 17.8 }, { label: '17.4', t: 17.4 }, { label: '17.1★', t: 17.1, star: true }];
+
+  const TIPS = isF8 ? F8_TIPS : OVAL_TIPS;
+
   return (
     <div className="opt-page">
+
+      {/* ── Mode selector ── */}
+      <div className="opt-mode-selector">
+        <span className="opt-mode-label">Track Type:</span>
+        <div className="opt-mode-toggle">
+          <button
+            className={`opt-mode-btn${!isF8 ? ' active' : ''}`}
+            onClick={() => setMode('oval')}
+          >
+            Oval
+          </button>
+          <button
+            className={`opt-mode-btn${isF8 ? ' active' : ''}`}
+            onClick={() => setMode('f8')}
+          >
+            Figure 8
+          </button>
+        </div>
+      </div>
 
       {/* ── Geometry profile selector ── */}
       {geoProfiles.length > 0 && (
@@ -989,7 +1281,11 @@ export default function SetupOptimizer({ setup, setSetup, ambient, setAmbient, i
       <div className="opt-header">
         <div>
           <h2>Setup Optimizer</h2>
-          <p className="opt-subtitle">Real-time analysis — every parameter recalculates instantly as you adjust.</p>
+          <p className="opt-subtitle">
+            {isF8
+              ? 'Real-time analysis calibrated for bidirectional loading. Goal: break 23.1s.'
+              : 'Real-time analysis — every parameter recalculates instantly as you adjust.'}
+          </p>
         </div>
         <div className="opt-lap-banner">
           <div className="opt-lap-item">
@@ -1000,7 +1296,7 @@ export default function SetupOptimizer({ setup, setSetup, ambient, setAmbient, i
           <div className="opt-lap-item">
             <span className="opt-lap-label">Gap to {TARGET}s</span>
             <span className="opt-lap-time" style={{
-              color: gap <= 0 ? 'var(--green)' : gap < 0.2 ? 'var(--yellow)' : 'var(--red)',
+              color: gap <= 0 ? 'var(--green)' : gap < (isF8 ? 0.3 : 0.2) ? 'var(--yellow)' : 'var(--red)',
             }}>
               {gap <= 0 ? `✓ −${Math.abs(gap).toFixed(3)}s` : `+${gap.toFixed(3)}s`}
             </span>
@@ -1019,21 +1315,14 @@ export default function SetupOptimizer({ setup, setSetup, ambient, setAmbient, i
       <div className="opt-progress-wrap">
         <div className="opt-progress-track">
           <div className="opt-progress-fill" />
-          {/* Markers */}
-          {[
-            { label: '17.8', t: 17.8 },
-            { label: '17.4', t: 17.4 },
-            { label: '17.1★', t: 17.1, star: true },
-          ].map(({ label, t, star }) => (
+          {progressTicks.map(({ label, t, star }) => (
             <div key={t} className={`opt-progress-tick ${star ? 'target' : ''}`} style={{ left: barPos(t) }}>
               <div className="opt-tick-line" />
               <div className="opt-tick-label">{label}</div>
             </div>
           ))}
-          {/* Current */}
           <div className="opt-progress-dot current" style={{ left: barPos(lapTime) }}
             title={`Current: ${lapTime.toFixed(3)}s`} />
-          {/* Optimal */}
           {totalGain > 0.01 && (
             <div className="opt-progress-dot optimal" style={{ left: barPos(optLapTime) }}
               title={`Optimal: ${optLapTime.toFixed(3)}s`} />
@@ -1062,58 +1351,68 @@ export default function SetupOptimizer({ setup, setSetup, ambient, setAmbient, i
           />
         </div>
         <div className="opt-presets">
-          <button className="sim-preset-btn" onClick={() => setSetup(deepClone(DEFAULT_SETUP))}>
-            Load Current Setup
-          </button>
-          <button className="sim-preset-btn" onClick={() => setSetup(deepClone(PETE_SETUP))}>
-            Load Pete
-          </button>
-          <button className="sim-preset-btn" onClick={() => setSetup(deepClone(DYLAN_SETUP))}>
-            Load Dylan
-          </button>
-          <button className="sim-preset-btn" onClick={() => setSetup(deepClone(JOSH_SETUP))}>
-            Load Josh
-          </button>
-          <button className="sim-preset-btn" onClick={() => setSetup(deepClone(JOEY_SETUP))}>
-            Load Joey
-          </button>
-          <button className="sim-preset-btn accent" onClick={() => setSetup(deepClone(RECOMMENDED_SETUP))}>
-            Load Recommended Setup
-          </button>
+          {isF8 ? (
+            <>
+              <button className="sim-preset-btn" onClick={() => setSetup(deepClone(DEFAULT_SETUP_F8))}>F8 Default</button>
+              <button className="sim-preset-btn" onClick={() => setSetup(deepClone(F8_BASELINE_SETUP))}>F8 Baseline</button>
+              <button className="sim-preset-btn" onClick={() => setSetup(deepClone(PETE_SETUP))}>Pete</button>
+              <button className="sim-preset-btn" onClick={() => setSetup(deepClone(DYLAN_SETUP))}>Dylan</button>
+              <button className="sim-preset-btn" onClick={() => setSetup(deepClone(JOSH_SETUP))}>Josh</button>
+              <button className="sim-preset-btn" onClick={() => setSetup(deepClone(JOEY_SETUP))}>Joey</button>
+            </>
+          ) : (
+            <>
+              <button className="sim-preset-btn" onClick={() => setSetup(deepClone(DEFAULT_SETUP))}>Load Current Setup</button>
+              <button className="sim-preset-btn" onClick={() => setSetup(deepClone(PETE_SETUP))}>Load Pete</button>
+              <button className="sim-preset-btn" onClick={() => setSetup(deepClone(DYLAN_SETUP))}>Load Dylan</button>
+              <button className="sim-preset-btn" onClick={() => setSetup(deepClone(JOSH_SETUP))}>Load Josh</button>
+              <button className="sim-preset-btn" onClick={() => setSetup(deepClone(JOEY_SETUP))}>Load Joey</button>
+              <button className="sim-preset-btn accent" onClick={() => setSetup(deepClone(RECOMMENDED_SETUP))}>Load Recommended Setup</button>
+            </>
+          )}
         </div>
       </div>
 
       {/* ── Setup form ── */}
       <div className="opt-section">
         <h3 className="opt-section-title">Setup Parameters</h3>
-        <CompactSetupForm setup={setup} onChange={setSetup} />
+        <CompactSetupForm setup={setup} onChange={setSetup} isF8={isF8} />
       </div>
 
-      {/* ── Camber Calculator ── */}
-      <div className="opt-section">
-        <h3 className="opt-section-title">Camber Calculator</h3>
-        <CamberCalc roll={roll} setupCaster={setup.caster} geoOverrides={geoOverrides} />
-      </div>
+      {/* ── Camber Calculator (oval only) ── */}
+      {!isF8 && (
+        <div className="opt-section">
+          <h3 className="opt-section-title">Camber Calculator</h3>
+          <CamberCalc roll={roll} setupCaster={setup.caster} geoOverrides={geoOverrides} />
+        </div>
+      )}
 
       {/* ── Per-corner analysis ── */}
       <div className="opt-section">
-        <h3 className="opt-section-title">Per-Corner Analysis
-          <span className="opt-section-sub">Temperatures estimated at steady-state equilibrium</span>
+        <h3 className="opt-section-title">
+          Per-Corner Analysis
+          <span className="opt-section-sub">
+            {isF8 ? 'Loads and temps averaged across left and right turns' : 'Temperatures estimated at steady-state equilibrium'}
+          </span>
         </h3>
         <div className="opt-corners-grid">
-          {CORNERS.map(c => (
-            <CornerCard key={c} c={c} data={corners[c]} setup={setup} frontGripPct={frontGripPct} />
-          ))}
+          {isF8
+            ? CORNERS.map(c => <F8CornerCard key={c} c={c} data={corners[c]} setup={setup} />)
+            : CORNERS.map(c => <OvalCornerCard key={c} c={c} data={corners[c]} setup={setup} frontGripPct={frontGripPct} />)
+          }
         </div>
       </div>
 
       {/* ── Balance & Toe ── */}
       <div className="opt-section">
         <h3 className="opt-section-title">Balance & Toe</h3>
-        <BalanceGauge frontGripPct={frontGripPct} frontLLTD={ss.frontLLTD} springLLTD={ss.springLLTD} corners={corners} setup={setup} />
+        {isF8
+          ? <BalanceGaugeF8 frontGripPct={frontGripPct} frontLLTD={ss.frontLLTD} springLLTD={ss.springLLTD} corners={corners} setup={setup} />
+          : <BalanceGauge   frontGripPct={frontGripPct} frontLLTD={ss.frontLLTD} springLLTD={ss.springLLTD} corners={corners} setup={setup} />
+        }
         <div className="opt-balance-row" style={{ marginTop: 14 }}>
           <div className="opt-balance-card">
-            <div className="opt-factor-title">Lateral Balance (at 1G)</div>
+            <div className="opt-factor-title">Lateral Balance{!isF8 ? ' (at 1G)' : ''}</div>
             <div className="opt-stat-pair">
               <Tooltip text={TIPS.frontShock}><span>Front shock stiffness</span></Tooltip><span>{ss.front}</span>
             </div>
@@ -1126,26 +1425,29 @@ export default function SetupOptimizer({ setup, setSetup, ambient, setAmbient, i
             </div>
             <div className="opt-stat-pair">
               <Tooltip text={TIPS.frontGripShare}><span>Front grip share</span></Tooltip>
-              <span style={{ color: Math.abs(frontGripPct - 0.55) < 0.04 ? 'var(--green)' : 'var(--yellow)' }}>
+              <span style={{ color: Math.abs(frontGripPct - 0.55) < (isF8 ? 0.01 : 0.04) ? 'var(--green)' : 'var(--yellow)' }}>
                 {(frontGripPct * 100).toFixed(1)}% <span className="opt-stat-ideal">(ideal 55%)</span>
               </span>
             </div>
             <div className="opt-stat-pair">
-              <Tooltip text={TIPS.bodyRoll}><span>Body roll @ 1G</span></Tooltip><span>{roll.toFixed(1)}°</span>
+              <Tooltip text={TIPS.bodyRoll}><span>{isF8 ? 'Peak body roll @ 1G' : 'Body roll @ 1G'}</span></Tooltip>
+              <span>{roll.toFixed(1)}°</span>
             </div>
-            {(
+
+            {/* Roll angle balance — oval only */}
+            {!isF8 && desiredRollFront != null && (
               <div className="opt-roll-balance">
-                <Tooltip text={TIPS.rollAngleBalance}>
+                <Tooltip text={OVAL_TIPS.rollAngleBalance}>
                   <span className="opt-factor-title" style={{ fontSize: '0.78rem', marginBottom: 4, display: 'block' }}>Roll Angle Balance</span>
                 </Tooltip>
                 <div className="opt-stat-pair">
-                  <Tooltip text="How much roll the front suspension wants to reach at steady-state cornering. Driven by: front axle weight × lateral G × (CG height − front roll center height), divided by front roll stiffness (springs + ARB). Lower front roll center OR softer front springs/ARB = larger number. To reduce: raise front roll center, stiffen front springs, or add front ARB.">
+                  <Tooltip text="How much roll the front suspension wants to reach at steady-state cornering.">
                     <span>Front desired roll</span>
                   </Tooltip>
                   <span>{desiredRollFront.toFixed(2)}°</span>
                 </div>
                 <div className="opt-stat-pair">
-                  <Tooltip text="How much roll the rear suspension wants to reach at steady-state cornering. Driven by: rear axle weight × lateral G × (CG height − rear roll center height), divided by rear spring roll stiffness. Lower rear roll center OR softer rear springs = larger number. To reduce: raise rear roll center, or stiffen rear springs. P71 has no rear ARB — rear springs are the only elastic resistance.">
+                  <Tooltip text="How much roll the rear suspension wants to reach at steady-state cornering.">
                     <span>Rear desired roll</span>
                   </Tooltip>
                   <span>{desiredRollRear.toFixed(2)}°</span>
@@ -1153,23 +1455,19 @@ export default function SetupOptimizer({ setup, setSetup, ambient, setAmbient, i
                 <div className="opt-stat-pair">
                   <Tooltip text={
                     rollAngleImbalance < 1.0
-                      ? 'Front and rear are well-matched — both ends want to roll to nearly the same angle. Weight transfer is proportionate and tires work evenly front-to-rear.'
+                      ? 'Front and rear are well-matched — both ends want to roll to nearly the same angle.'
                       : rollAngleImbalance < 2.0
                         ? (desiredRollFront > desiredRollRear
-                            ? 'Front wants to roll more than rear — the front is the softer end relative to its load. In a corner the front rolls further, increasing outside front tire load and contact patch angle. Effect: front-end push (understeer) as the outside front is overloaded while the rear stays planted. To fix: stiffen front springs or ARB, or soften rear springs.'
-                            : 'Rear wants to roll more than front — the rear is the softer end relative to its load. In a corner the rear rolls further, lifting the inside rear and overloading the outside rear. Effect: loose (oversteer) condition as the rear rotates more than the front. To fix: stiffen rear springs, or soften front springs/ARB.')
+                            ? 'Front wants to roll more than rear — front-end push tendency.'
+                            : 'Rear wants to roll more than front — loose tendency.')
                         : (desiredRollFront > desiredRollRear
-                            ? 'Significant imbalance — front rolls much more than rear. The front outside tire is heavily overloaded in corners while the rear stays rigid. Causes: severe push, inside front unloading, outside front overheating, early tire wear on RF. Suspension is fighting itself — one end is rolling, the other is not, creating a yaw moment. Fix: substantially stiffen front springs or ARB, raise front roll center, or soften rear springs to let it roll more.'
-                            : 'Significant imbalance — rear rolls much more than front. Rear outside tire overloaded, inside rear lifted, rear stepping out under load. Causes: chronic loose condition, difficult throttle application, rear tire overheating. Fix: substantially stiffen rear springs, raise rear roll center, or reduce front spring/ARB stiffness.')
+                            ? 'Significant imbalance — front rolls much more than rear. Severe push.'
+                            : 'Significant imbalance — rear rolls much more than front. Chronic loose condition.')
                   }>
                     <span>Imbalance</span>
                   </Tooltip>
                   <span style={{
-                    color: rollAngleImbalance < 1.0
-                      ? 'var(--green)'
-                      : rollAngleImbalance < 2.0
-                        ? 'var(--yellow)'
-                        : 'var(--red)',
+                    color: rollAngleImbalance < 1.0 ? 'var(--green)' : rollAngleImbalance < 2.0 ? 'var(--yellow)' : 'var(--red)',
                     fontWeight: 600,
                   }}>
                     {rollAngleImbalance.toFixed(2)}°
@@ -1178,6 +1476,7 @@ export default function SetupOptimizer({ setup, setSetup, ambient, setAmbient, i
                 </div>
               </div>
             )}
+
             <ScoreBar value={balancePenalty} label="Balance score" tip={TIPS.balanceScore} />
           </div>
 
@@ -1195,7 +1494,7 @@ export default function SetupOptimizer({ setup, setSetup, ambient, setAmbient, i
             <div className="opt-stat-pair" style={{ marginTop: 6 }}>
               <Tooltip text={TIPS.toeDragPenalty}><span>Drag penalty</span></Tooltip>
               <span style={{ color: toeDrag > 1.001 ? 'var(--yellow)' : 'var(--green)' }}>
-                +{((toeDrag - 1) * 100).toFixed(2)}%
+                +{((toeDrag - 1) * 100).toFixed(isF8 ? 3 : 2)}%
               </span>
             </div>
           </div>
@@ -1266,13 +1565,16 @@ export default function SetupOptimizer({ setup, setSetup, ambient, setAmbient, i
       </div>
 
       <div className="sim-disclaimer">
-        <strong>Model note:</strong> Analysis uses steady-state equilibrium temperatures.
-        Camber recommendations use caster-induced dynamic camber gain of 0.136°/° (RF) and 0.034°/° (LF) — calibrated
-        at 20° steer and scaled to the actual oval apex steer angle of 3.77° (Ackermann: atan(114.7"/1740") = 3.77°).
-        Pyrometer-validated April 2026: two sessions both showed RF outside-edge-hotter, confirming insufficient camber
-        at −1.3° to −1.4° ground — matching the 0.136 coefficient. Caster grip score is based on mechanical trail
-        (R × sin(caster) − scrub × cos(caster)) — RF sweet spot ~0.9" trail (~5–6°), LF optimal low (~0.3–0.5").
-        All display scores match the lap time model exactly. Always verify camber with real pyrometer data.
+        {isF8 ? (
+          <><strong>Model note:</strong> Figure 8 analysis averages left and right turn loads — symmetric setup
+          (equal camber, equal pressures side-to-side) is expected to be optimal. Camber ideal is −2.25°
+          for both fronts (average of outside −4.5° and inside 0° demands). Always verify with real pyrometer data.</>
+        ) : (
+          <><strong>Model note:</strong> Analysis uses steady-state equilibrium temperatures.
+          Camber recommendations use caster-induced dynamic camber gain of 0.136°/° (RF) and 0.034°/° (LF) — calibrated
+          at 20° steer and scaled to the actual oval apex steer angle of 3.77°. Pyrometer-validated April 2026.
+          All display scores match the lap time model exactly. Always verify camber with real pyrometer data.</>
+        )}
       </div>
     </div>
   );

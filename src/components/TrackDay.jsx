@@ -19,6 +19,7 @@ const EMPTY_SESSION = {
   ambient: '',
   inflationTemp: '',
   setup: null,
+  springRate: { LF: '', RF: '', LR: '' },
   hotPsi:    { LF: '', RF: '', LR: '', RR: '' },
   tireTemps: {
     LF: { inside: '', middle: '', outside: '' },
@@ -28,6 +29,8 @@ const EMPTY_SESSION = {
   },
   condition: '',
   phase: '',
+  bestLap: '',
+  lapTimes: '',
   lapNotes: '',
 };
 
@@ -109,7 +112,12 @@ function sessionToSimSetup(session) {
   }
   return {
     shocks,
-    springs: { LF: Number(s.springs?.LF) || 475, RF: Number(s.springs?.RF) || 475, LR: 160, RR: 160 },
+    springs: {
+      LF: Number(session.springRate?.LF) || Number(s.springs?.LF) || 475,
+      RF: Number(session.springRate?.RF) || Number(s.springs?.RF) || 475,
+      LR: Number(session.springRate?.LR) || 160,
+      RR: Number(session.springRate?.LR) || 160,
+    },
     camber:  { LF: Number(s.camber?.LF) || 0, RF: Number(s.camber?.RF) || 0 },
     caster:  { LF: Number(s.caster?.LF) || 5, RF: Number(s.caster?.RF) || 5 },
     toe:     Number(s.toe) || -0.25,
@@ -409,7 +417,10 @@ function buildPrompt(event, selectedSessions, geoProfiles, confirmations) {
     lines.push(`    Camber LF ${simSetup.camber.LF}°  RF ${simSetup.camber.RF}°`);
     lines.push(`    Caster LF ${simSetup.caster.LF}°  RF ${simSetup.caster.RF}°`);
     lines.push(`    Toe ${simSetup.toe}" front`);
-    lines.push(`    Springs LF ${simSetup.springs.LF} lbs/in  RF ${simSetup.springs.RF} lbs/in`);
+    const srLF = session.springRate?.LF || simSetup.springs.LF;
+    const srRF = session.springRate?.RF || simSetup.springs.RF;
+    const srRear = session.springRate?.LR || simSetup.springs.LR;
+    lines.push(`    Springs LF ${srLF} lbs/in  RF ${srRF} lbs/in  Rear ${srRear} lbs/in`);
     lines.push(`    Shocks LF ${simSetup.shocks.LF}  RF ${simSetup.shocks.RF}  LR ${simSetup.shocks.LR}  RR ${simSetup.shocks.RR}  (0=stiffest 10=softest)`);
     lines.push(`    Cold PSI: LF ${simSetup.coldPsi.LF}  RF ${simSetup.coldPsi.RF}  LR ${simSetup.coldPsi.LR}  RR ${simSetup.coldPsi.RR}`);
     lines.push(``);
@@ -433,6 +444,12 @@ function buildPrompt(event, selectedSessions, geoProfiles, confirmations) {
       const condLabel = handlingConditions.find(c => c.value === session.condition)?.label || session.condition;
       const phaseLabel = cornerPhases.find(p => p.value === session.phase)?.label || session.phase;
       lines.push(`  DRIVER FEEL: ${condLabel || '—'}  |  When: ${phaseLabel || '—'}`);
+      lines.push(``);
+    }
+
+    if (session.bestLap || session.lapTimes) {
+      const lapStr = session.lapTimes ? `  All laps: ${session.lapTimes}` : '';
+      lines.push(`  LAP TIMES: Best ${session.bestLap || '—'}s${lapStr}`);
       lines.push(``);
     }
 
@@ -1171,6 +1188,43 @@ function SessionEditor({ session, index, onChange, geoProfiles }) {
         <SetupEditor setup={setup} onChange={s => set('setup', s)} />
       </div>
 
+      {/* Spring Rates */}
+      <div className="td-session-section">
+        <div className="td-ss-label">Spring Rates (lbs/in)</div>
+        <div className="ml-row">
+          <Field label="LF" hint="Front left spring rate. P71 strut assemblies: 475 = Police/Taxi, 440 = Base, 700 = Heavy Duty.">
+            <select className="ml-input ml-select"
+              value={session.springRate?.LF ?? ''}
+              onChange={e => setN('springRate', 'LF', e.target.value)}>
+              <option value="">— Select —</option>
+              <option value="700">700 — Heavy Duty</option>
+              <option value="475">475 — Police/Taxi</option>
+              <option value="440">440 — Base/LX</option>
+            </select>
+          </Field>
+          <Field label="RF" hint="Front right spring rate. Match the installed strut assembly.">
+            <select className="ml-input ml-select"
+              value={session.springRate?.RF ?? ''}
+              onChange={e => setN('springRate', 'RF', e.target.value)}>
+              <option value="">— Select —</option>
+              <option value="700">700 — Heavy Duty</option>
+              <option value="475">475 — Police/Taxi</option>
+              <option value="440">440 — Base/LX</option>
+            </select>
+          </Field>
+          <Field label="Rear" hint="Rear coil spring rate. P71 stock = 160 lbs/in. Feeds directly into rear roll stiffness and LLTD.">
+            <select className="ml-input ml-select"
+              value={session.springRate?.LR ?? ''}
+              onChange={e => setN('springRate', 'LR', e.target.value)}>
+              <option value="">— Select —</option>
+              <option value="200">200 — Heavy Duty / Police</option>
+              <option value="160">160 — Stock P71</option>
+              <option value="140">140 — Soft / Base</option>
+            </select>
+          </Field>
+        </div>
+      </div>
+
       {/* Hot PSI */}
       <div className="td-session-section">
         <div className="td-ss-label">Hot Pressures (PSI) — after session</div>
@@ -1235,11 +1289,27 @@ function SessionEditor({ session, index, onChange, geoProfiles }) {
         </div>
       </div>
 
+      {/* Lap Times */}
+      <div className="td-session-section">
+        <div className="td-ss-label">Lap Times</div>
+        <div className="ml-row">
+          <Field label="Best lap (seconds)" hint="Single fastest lap of the session. Primary model calibration reference.">
+            <NumIn value={session.bestLap ?? ''} onChange={v => set('bestLap', v)}
+              placeholder="e.g. 17.4" step="0.01" min="10" max="120" />
+          </Field>
+        </div>
+        <Field label="All laps (comma-separated)" hint="Paste all lap times. Used to see consistency and tire fade trends.">
+          <textarea className="ml-textarea" rows={2}
+            placeholder="e.g. 17.8, 17.4, 17.6, 17.5, 17.7"
+            value={session.lapTimes ?? ''} onChange={e => set('lapTimes', e.target.value)} />
+        </Field>
+      </div>
+
       {/* Notes */}
       <div className="td-session-section">
         <div className="td-ss-label">Lap Notes / Observations</div>
         <textarea className="ml-textarea" rows={3}
-          placeholder="Lap times, what changed from last session, anything the driver noticed..."
+          placeholder="What changed from last session, anything the driver noticed..."
           value={session.lapNotes} onChange={e => set('lapNotes', e.target.value)} />
       </div>
     </div>
@@ -1436,7 +1506,7 @@ function AnalysisPanel({ event, allSessions, geoProfiles, apiKey, onSendToOptimi
                   onChange={() => toggleSession(session.id)} />
                 <div className="td-sel-item-info">
                   <span className="td-sel-session-name">{session.name || 'Unnamed session'}</span>
-                  <span className="td-sel-car-name">{carLabel(session, geoProfiles)}</span>
+                  <span className="td-sel-car-name">{carLabel(session, geoProfiles)}{session.bestLap ? ` · Best ${session.bestLap}s` : ''}</span>
                 </div>
                 {session.condition && (
                   <span className="td-view-badge condition" style={{ marginLeft: 'auto', flexShrink: 0 }}>
