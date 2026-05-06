@@ -199,8 +199,8 @@ export const VEH = {
 //   These tiny coefficients confirm: on a short oval, nearly ALL camber must come from static.
 //   At 8.5° RF caster: caster gain = −(8.5 × 0.136) = −1.15° (not −5.67° as the old 0.667 gave).
 const _STEER_RAD    = 3.77 * Math.PI / 180; // ≈ 0.0658 rad — Ackermann at apex: atan(114.7"/1740")
-const CASTER_COEFF_RF = 0.136;              // °/°caster — pyrometer-validated April 2026, oval (3.77° steer)
-const CASTER_COEFF_LF = 0.034;              // °/°caster — pyrometer-validated April 2026, oval (3.77° steer)
+export const CASTER_COEFF_RF = 0.136;       // °/°caster — pyrometer-validated April 2026, oval (3.77° steer)
+export const CASTER_COEFF_LF = 0.034;       // °/°caster — pyrometer-validated April 2026, oval (3.77° steer)
 
 const GEOM = {
   kpi:         9.5,                          // ° — kingpin inclination (measured)
@@ -637,7 +637,7 @@ const BASE_K_ROLL_SPRING = (() => {
   return kFront + kRear; // lb-ft/rad at baseline springs, excluding ARB
 })();
 
-function rollStiffness(setup, geoCtx) {
+export function rollStiffness(setup, geoCtx) {
   const springLF = setup.springs?.LF ?? setup.springs?.front ?? BASE_SPRING_FRONT;
   const springRF = setup.springs?.RF ?? setup.springs?.front ?? BASE_SPRING_FRONT;
   const springF  = (springLF + springRF) / 2;
@@ -662,7 +662,7 @@ function rollStiffness(setup, geoCtx) {
 //
 // Dampers do NOT contribute to steady-state roll stiffness — they resist roll velocity,
 // not roll angle. They affect how quickly the car reaches equilibrium, not where it settles.
-function bodyRoll(lateralG, totalStiffness) {
+export function bodyRoll(lateralG, totalStiffness) {
   // totalStiffness is K_roll_spring (lb-ft/rad) from rollStiffness() — springs only.
   // The ARB is a physical roll resistor and must be included in both numerator (baseline)
   // and denominator (current) so that the ratio correctly accounts for ARB stiffening.

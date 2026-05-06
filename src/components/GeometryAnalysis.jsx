@@ -1,5 +1,6 @@
 import { useState, useMemo } from 'react';
 import { computeGeometry } from './GeometryVisualizer';
+import { rollStiffness, bodyRoll, CASTER_COEFF_RF as OVAL_CASTER_COEFF_RF, CASTER_COEFF_LF as OVAL_CASTER_COEFF_LF } from '../utils/raceSimulation';
 
 // ─── Constants ────────────────────────────────────────────────────────────────
 const P71_LOWER_ARM_LENGTH = 13.0;
@@ -34,8 +35,8 @@ const TARGETS = {
     idealRearRC_high:    16,
     idealFVSA_low:       14,
     idealFVSA_high:      22,
-    casterCoeffRF:       0.136,  // °/°caster at 3.77° steer
-    casterCoeffLF:       0.034,
+    casterCoeffRF:       OVAL_CASTER_COEFF_RF,  // imported from raceSimulation — pyrometer-validated
+    casterCoeffLF:       OVAL_CASTER_COEFF_LF,
     apexSteer:           3.77,   // ° — Ackermann at 1/4-mile oval
     trackG:              0.813,
     bodyRollPerG:        3.1,
@@ -101,50 +102,43 @@ export function analyzeGeometry(geo, trackType = 'oval') {
   const rfCaster = _rfCasterRaw ?? 5.0;
   const lfCaster = _lfCasterRaw ?? 3.5;
 
-  // ── (A) Use COMPUTED body roll from springs/ARB (not constant T.bodyRollPerG)
-  // We need rollGradient here, but it depends on spring rates which are read
-  // below. So compute springs early enough to feed the camber chain.
-  // If no spring rates entered, fall back to T.bodyRollPerG (the old constant).
+  // ── (A) Body roll — use the SAME rollStiffness/bodyRoll functions as the optimizer
+  // so geometry page and optimizer agree on body roll when springs are the same.
   const _ksLF = parseFloat(geo.springRate?.LF) || null;
   const _ksRF = parseFloat(geo.springRate?.RF) || null;
   const _ksLR = parseFloat(geo.springRate?.LR) || null;
   const _ksRR = parseFloat(geo.springRate?.RR) || null;
-  const _irF  = parseFloat(geo.installRatio?.front) || 0.85;  // P71 SLA — 11" spring pickup ÷ 13" arm
-  const _irR  = parseFloat(geo.installRatio?.rear)  || 1.0;
+  const _irF  = parseFloat(geo.installRatio?.front) || 0.85;
   const _tsRear = parseFloat(geo.rearSpringTrack) || num(geo.rearSpringBase) || 44;
-  const _kwFavg_pre = (_ksLF && _ksRF) ? ((_ksLF + _ksRF)/2) * _irF * _irF
-                    : (_ksLF || _ksRF) ? (_ksLF || _ksRF) * _irF * _irF : null;
-  const _kwRavg_pre = (_ksLR && _ksRR) ? ((_ksLR + _ksRR)/2) * _irR * _irR
-                    : (_ksLR || _ksRR) ? (_ksLR || _ksRR) * _irR * _irR : null;
   const _trackFt_F = trackWidthF / 12;
-  const _trackFt_R = trackWidthR / 12;
-  const _tsFt_pre  = _tsRear / 12;
-  const _kPhiF_spring_pre = _kwFavg_pre ? (_kwFavg_pre * _trackFt_F * _trackFt_F * 12 / 2) : null;
-  const _kPhiR_spring_pre = _kwRavg_pre ? (_kwRavg_pre * _tsFt_pre * _tsFt_pre * 12 / 2) : null;
-  // Add ARB contribution if entered (lb-ft/deg → lb-ft/rad)
-  const _arbFEntered_deg = parseFloat(geo.arbStiffness?.front) || 0;
-  const _arbREntered_deg = parseFloat(geo.arbStiffness?.rear)  || 0;
-  const _arbF_rad = _arbFEntered_deg * (180/Math.PI);
-  const _arbR_rad = _arbREntered_deg * (180/Math.PI);
-  const _kPhiF_total_pre = _kPhiF_spring_pre != null ? _kPhiF_spring_pre + _arbF_rad : null;
-  const _kPhiR_total_pre = _kPhiR_spring_pre != null ? _kPhiR_spring_pre + _arbR_rad : null;
-  const _kPhiTotal_pre = (_kPhiF_total_pre && _kPhiR_total_pre) ? _kPhiF_total_pre + _kPhiR_total_pre : null;
-  const _cgH_ft_pre = cgH / 12;
-  const rollGradient_total = _kPhiTotal_pre
-    ? ((P71_TOTAL_WEIGHT * _cgH_ft_pre) / _kPhiTotal_pre) * (180/Math.PI)
-    : null; // deg/g including ARB
-  // Sanity cap: no real race car exceeds ~8°/G body roll — if computed value is
-  // above that, the spring rate inputs are likely wrong (wrong units, typo, etc.)
-  // Cap at 8°/G and flag so the user sees a warning rather than absurd camber outputs.
-  const ROLL_GRAD_PHYSICAL_MAX = 8.0; // °/G
+  const hasSpringData = _ksLF || _ksRF;
+  // Build a setup object compatible with raceSimulation.rollStiffness()
+  const _setupForRoll = hasSpringData ? {
+    springs: {
+      LF: _ksLF ?? (_ksRF ?? 475),
+      RF: _ksRF ?? (_ksLF ?? 475),
+      LR: _ksLR ?? 160,
+      RR: _ksRR ?? 160,
+    },
+  } : null;
+  // geoCtx for rollStiffness: mrFront = IR (motion ratio), rearSpringBase in ft, tw in ft
+  const _geoCtxForRoll = {
+    mrFront: _irF,
+    rearSpringBase: _tsRear / 12,  // rollStiffness expects ft
+    tw: _trackFt_F,
+  };
+  const _kRoll = _setupForRoll ? rollStiffness(_setupForRoll, _geoCtxForRoll) : null;
+  // bodyRoll(lateralG=1.0, stiffness) gives deg/G; then scale to apex G
+  const rollGradient_total = _kRoll != null ? bodyRoll(1.0, _kRoll) : null;
+  // Sanity cap — if inputs are bad (e.g. IR=0.13 typo), cap at 8°/G and warn
+  const ROLL_GRAD_PHYSICAL_MAX = 8.0;
   const rollGradientCapped = rollGradient_total != null
-    ? Math.min(rollGradient_total, ROLL_GRAD_PHYSICAL_MAX)
-    : null;
+    ? Math.min(rollGradient_total, ROLL_GRAD_PHYSICAL_MAX) : null;
   const rollGradientSuspect = rollGradient_total != null && rollGradient_total > ROLL_GRAD_PHYSICAL_MAX;
-  // Use computed roll if springs available, else fall back to literature constant.
-  const rollPerG_used = rollGradientCapped ?? T.bodyRollPerG;
-  const rollAtApex    = rollPerG_used * T.trackG;
+  const rollPerG_used  = rollGradientCapped ?? T.bodyRollPerG;
+  const rollAtApex     = rollPerG_used * T.trackG;
   const rollIsComputed = rollGradient_total != null;
+  // _tsRear (inches) is used again in Section 8 roll rate computation below
 
   // ── (B) Sidewall compliance scales with RF apex load ──────────────────────
   // RF outside vertical load = static corner weight + lateral load transfer
