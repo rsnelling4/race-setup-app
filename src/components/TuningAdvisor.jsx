@@ -1,4 +1,4 @@
-import { useState, useMemo } from 'react';
+import { useState, useMemo, useEffect } from 'react';
 import { useSync } from '../utils/SyncContext';
 import { analyzeGeometry } from './GeometryAnalysis';
 import { REAR_SHOCKS, FRONT_STRUTS, shockLabel } from '../data/shockOptions';
@@ -6,6 +6,116 @@ import { REAR_SHOCKS, FRONT_STRUTS, shockLabel } from '../data/shockOptions';
 // Constants matching the rest of the app
 const P71_TOTAL_WEIGHT    = 3700;
 const P71_FRONT_AXLE_FRAC = 0.57;
+
+// Groq AI integration (shared with Track Day)
+const APIKEY_KEY = 'race_groq_api_key';
+const GROQ_MODEL = 'llama-3.3-70b-versatile';
+
+async function callGroq(apiKey, prompt) {
+  const resp = await fetch('https://api.groq.com/openai/v1/chat/completions', {
+    method: 'POST',
+    headers: { 'content-type': 'application/json', 'authorization': `Bearer ${apiKey}` },
+    body: JSON.stringify({
+      model: GROQ_MODEL,
+      max_tokens: 2000,
+      messages: [{ role: 'user', content: prompt }],
+    }),
+  });
+  if (!resp.ok) {
+    const err = await resp.json().catch(() => ({}));
+    throw new Error(err?.error?.message || `API error ${resp.status}`);
+  }
+  const data = await resp.json();
+  return data.choices?.[0]?.message?.content ?? '';
+}
+
+// Build the AI prompt — give the model the same data the rule-based engine had,
+// plus its own diagnoses, and ask for a second opinion.
+function buildSecondOpinionPrompt({ car, analysis, measured, symptoms, aggregatedFixes, trackType }) {
+  const isOval = trackType === 'oval';
+  const lines = [];
+  lines.push(`You are an experienced oval/figure-8 race crew chief reviewing a Crown Victoria P71 setup. The car uses an SLA front + Watts-link solid rear axle (factory Watts bracket is FIXED — not factory-adjustable; rear RC is changed by rear ride height or aftermarket bracket).`);
+  lines.push(``);
+  lines.push(`The local physics-based tuning advisor has produced its diagnosis below. Your job: review the data, confirm or disagree with each diagnosis, point out anything missed, and suggest the single most important next change. Be direct — no padding.`);
+  lines.push(``);
+  lines.push(`Track type: ${analysis.T.label}. Apex G ~${analysis.T.trackG}, apex steer ~${analysis.T.apexSteer}°.`);
+  lines.push(``);
+  lines.push(`── KEY GEOMETRY ──`);
+  lines.push(`Front RC ${analysis.rcAvg?.toFixed(1)}" / Rear RC ${analysis.rearRC.toFixed(1)}" / RC differential ${analysis.rcDiff?.toFixed(1)}"`);
+  lines.push(`Roll axis inclination: ${analysis.rollAxisInclination?.toFixed(2)}° (positive = rises toward rear)`);
+  lines.push(`Front geometric LLTD: ${analysis.geoLLTDF != null ? (analysis.geoLLTDF*100).toFixed(0)+'%' : '—'}`);
+  lines.push(`Roll gradient: ${analysis.rollGradient?.toFixed(2)}°/g, body roll at apex: ${analysis.rollAtApex?.toFixed(2)}°`);
+  lines.push(`RF dynamic ground camber: ${analysis.rfGroundCamber?.toFixed(2)}° (target ${analysis.T.idealRFGroundCamber}°)`);
+  lines.push(`LF dynamic ground camber: ${analysis.lfGroundCamber?.toFixed(2)}° (target ${analysis.T.idealLFGroundCamber}°)`);
+  lines.push(`Static alignment: LF camber ${analysis.lfStatic.toFixed(2)}° / RF ${analysis.rfStatic.toFixed(2)}°, LF caster ${analysis.lfCaster.toFixed(1)}° / RF ${analysis.rfCaster.toFixed(1)}°`);
+  if (car.toe) lines.push(`Front toe (in): ${car.toe}`);
+  if (car.rearToe) lines.push(`Rear toe (in): ${car.rearToe}`);
+  if (analysis.kwLF) {
+    lines.push(`Springs: LF ${car.springRate?.LF || '?'} RF ${car.springRate?.RF || '?'} LR ${car.springRate?.LR || '?'} RR ${car.springRate?.RR || '?'} (lb/in)`);
+    lines.push(`Wheel rates: F avg ${analysis.kwFavg?.toFixed(0)} / R avg ${analysis.kwRavg?.toFixed(0)} lb/in`);
+  }
+  if (car.shocks) {
+    lines.push(`Shocks: LF ${car.shocks.LF || '?'} / RF ${car.shocks.RF || '?'} / LR ${car.shocks.LR || '?'} / RR ${car.shocks.RR || '?'}`);
+  }
+
+  if (measured) {
+    lines.push(``);
+    lines.push(`── MEASURED THIS SESSION ──`);
+    if (measured.ambient != null) lines.push(`Ambient: ${measured.ambient}°F, tires set at ${measured.inflationTemp ?? '?'}°F`);
+    const cp = measured.coldPsi;
+    const hp = measured.hotPsi;
+    if (cp.LF != null || cp.RF != null) lines.push(`Cold PSI: LF ${cp.LF ?? '?'} / RF ${cp.RF ?? '?'} / LR ${cp.LR ?? '?'} / RR ${cp.RR ?? '?'}`);
+    if (hp.LF != null || hp.RF != null) lines.push(`Hot PSI:  LF ${hp.LF ?? '?'} / RF ${hp.RF ?? '?'} / LR ${hp.LR ?? '?'} / RR ${hp.RR ?? '?'}`);
+    const tt = measured.tireTemps;
+    for (const pos of ['LF', 'RF', 'LR', 'RR']) {
+      const t = tt[pos];
+      if (t.inside != null || t.middle != null || t.outside != null) {
+        lines.push(`Pyrometer ${pos}: I ${t.inside ?? '?'} / M ${t.middle ?? '?'} / O ${t.outside ?? '?'} °F`);
+      }
+    }
+    if (measured.condition) lines.push(`Driver feel: car ${measured.condition}${measured.phase ? ` in ${measured.phase}` : ''}`);
+    if (measured.bestLap) lines.push(`Best lap: ${measured.bestLap}s`);
+    if (measured.lapTimes) lines.push(`All laps: ${measured.lapTimes}`);
+    if (measured.lapNotes) lines.push(`Notes: ${measured.lapNotes}`);
+  }
+
+  lines.push(``);
+  lines.push(`── LOCAL ENGINE DIAGNOSIS ──`);
+  if (symptoms.length === 0) {
+    lines.push(`(no significant issues flagged)`);
+  } else {
+    for (const s of symptoms) {
+      const tag = s.isMixed ? `MIXED → NET ${s.behavior}` : s.behavior;
+      lines.push(`[${s.phase} · ${s.severity.toUpperCase()}] ${tag}: ${s.why}`);
+      if (s.contributors) {
+        for (const c of s.contributors) {
+          lines.push(`    └─ ${c.behavior}: ${c.why}`);
+        }
+      }
+    }
+  }
+
+  lines.push(``);
+  lines.push(`── LOCAL ENGINE FIXES ──`);
+  if (aggregatedFixes.track.length > 0) {
+    lines.push(`Track tunes:`);
+    for (const f of aggregatedFixes.track) lines.push(`  - [${f.magnitude}] ${f.action}`);
+  }
+  if (aggregatedFixes.garage.length > 0) {
+    lines.push(`Garage tunes:`);
+    for (const f of aggregatedFixes.garage) lines.push(`  - [${f.magnitude}] ${f.action}`);
+  }
+
+  lines.push(``);
+  lines.push(`── REQUEST ──`);
+  lines.push(`1. CONFIRM or DISAGREE with each diagnosed symptom (cite a number that supports your view).`);
+  lines.push(`2. List anything the local engine missed that the data shows.`);
+  lines.push(`3. State the single most important next change and why.`);
+  lines.push(`4. If track tunes (pressure/toe/camber-bolt) and garage tunes (shock/spring/alignment/RC) are both needed, separate them.`);
+  lines.push(`Format: short bullet points. Do not repeat the data back.`);
+
+  return lines.join('\n');
+}
 
 // ─── Plausibility limits (so fixes never recommend the impossible) ───────────
 const LIMITS = {
@@ -61,13 +171,68 @@ function lookupRating(label, isFront) {
   return found ? found.rating : null;
 }
 
+// ─── Build a "measured" context from a Track Day session ────────────────────
+// Returns null if no session selected. When present, has every field the
+// extended diagnose() rules consume. All numeric fields return null when
+// missing, never zero, so rules can guard with `!= null`.
+function buildMeasuredContext(session) {
+  if (!session) return null;
+  const num = v => {
+    const n = parseFloat(v);
+    return Number.isFinite(n) ? n : null;
+  };
+  const psi = (group, pos) => num(session[group]?.[pos]);
+  const temp = (pos, zone) => num(session.tireTemps?.[pos]?.[zone]);
+  const tempRow = pos => ({
+    inside:  temp(pos, 'inside'),
+    middle:  temp(pos, 'middle'),
+    outside: temp(pos, 'outside'),
+  });
+  const setupCold = (pos) => num(session.setup?.coldPsi?.[pos]);
+  return {
+    hasMeasured: true,
+    ambient:       num(session.ambient),
+    inflationTemp: num(session.inflationTemp),
+    // Cold PSI lives on session.setup.coldPsi (Track Day shape)
+    coldPsi: { LF: setupCold('LF'), RF: setupCold('RF'), LR: setupCold('LR'), RR: setupCold('RR') },
+    hotPsi:  { LF: psi('hotPsi', 'LF'), RF: psi('hotPsi', 'RF'), LR: psi('hotPsi', 'LR'), RR: psi('hotPsi', 'RR') },
+    tireTemps: { LF: tempRow('LF'), RF: tempRow('RF'), LR: tempRow('LR'), RR: tempRow('RR') },
+    condition: session.condition || null,    // 'push'|'loose'|'understeer'|...
+    phase: session.phase || null,            // 'entry'|'middle'|'exit'
+    bestLap:  num(session.bestLap),
+    lapTimes: session.lapTimes || null,
+    lapNotes: session.lapNotes || null,
+  };
+}
+
+// Map driver-feel condition values to our behavior taxonomy
+function conditionToBehavior(cond) {
+  if (!cond) return null;
+  const c = cond.toLowerCase();
+  if (c.includes('push') || c.includes('under')) return 'PUSH';
+  if (c.includes('loose') || c.includes('over'))  return 'LOOSE';
+  return null;
+}
+function phaseToCanonical(phase) {
+  if (!phase) return null;
+  const p = phase.toLowerCase();
+  if (p.includes('entry') || p.includes('turn-in')) return 'ENTRY';
+  if (p.includes('middle') || p.includes('apex'))   return 'MIDDLE';
+  if (p.includes('exit'))                            return 'EXIT';
+  return null;
+}
+
 // ─── Diagnose handling — produces a list of {phase, behavior, why, severity} ─
 //
 // `phase` ∈ ENTRY | MIDDLE | EXIT | OVERALL
 // `behavior` ∈ PUSH | LOOSE | NEUTRAL | INSTABILITY
 // `severity` ∈ low | medium | high
 //
-function diagnose(a, geo, trackType) {
+// `measured` is optional: when present, contains live session data (cold/hot
+// PSI, pyrometer readings, driver feel, lap times). Diagnostic rules that
+// consume measured data trump rules that infer from geometry alone.
+//
+function diagnose(a, geo, trackType, measured = null) {
   const symptoms = [];
   const isOval = trackType === 'oval';
 
@@ -274,20 +439,17 @@ function diagnose(a, geo, trackType) {
     }
   }
 
-  // ── 9. Tire pressure imbalance from cold settings ───────────────────────
-  // Using the raw cold PSI as a proxy for what the model would say is wrong
-  const psi = {
-    LF: parseFloat(geo.coldPsi?.LF) || null,
-    RF: parseFloat(geo.coldPsi?.RF) || null,
-    LR: parseFloat(geo.coldPsi?.LR) || null,
-    RR: parseFloat(geo.coldPsi?.RR) || null,
-  };
-  if (psi.LF && psi.RF && psi.LR && psi.RR) {
-    const frontAvg = (psi.LF + psi.RF) / 2;
-    const rearAvg  = (psi.LR + psi.RR) / 2;
-    if (isOval) {
-      // Oval-specific: RF should run highest (most loaded), LR lowest, etc.
-      if (psi.LF > psi.RF + 4) {
+  // ── 9. Cold tire pressure imbalance (from saved profile, used when no session) ──
+  // Less informative than measured data. Used only when session data unavailable.
+  if (!measured) {
+    const psi = {
+      LF: parseFloat(geo.coldPsi?.LF) || null,
+      RF: parseFloat(geo.coldPsi?.RF) || null,
+      LR: parseFloat(geo.coldPsi?.LR) || null,
+      RR: parseFloat(geo.coldPsi?.RR) || null,
+    };
+    if (psi.LF && psi.RF && psi.LR && psi.RR) {
+      if (isOval && psi.LF > psi.RF + 4) {
         symptoms.push({
           phase: 'MIDDLE',
           behavior: 'LOOSE',
@@ -295,6 +457,153 @@ function diagnose(a, geo, trackType) {
           magnitude: psi.LF - psi.RF,
           why: `LF pressure (${psi.LF}) is much higher than RF (${psi.RF}). On a left-turn oval the RF is the loaded outside tire and wants more pressure to support sidewall — the imbalance reduces RF grip relative to its load.`,
           causeTag: 'PSI_LR_LF_HIGH',
+        });
+      }
+    }
+  }
+
+  // ── 10. MEASURED — pyrometer cross-tread signature ──────────────────────
+  // Inside-hot, middle-cool, outside-cool = too much negative camber.
+  // Outside-hot, middle-cool, inside-cool = not enough negative camber.
+  // Middle hot vs edges = pressure too high. Middle cool vs edges = too low.
+  // These trump the geometry-only camber chain analysis because they are
+  // physical evidence rather than predicted dynamics.
+  if (measured && measured.tireTemps) {
+    for (const pos of ['LF', 'RF', 'LR', 'RR']) {
+      const t = measured.tireTemps[pos];
+      if (t.inside == null || t.middle == null || t.outside == null) continue;
+      const max = Math.max(t.inside, t.middle, t.outside);
+      const min = Math.min(t.inside, t.middle, t.outside);
+      const span = max - min;
+      // Edge analysis (camber)
+      const edgeDelta = t.inside - t.outside;
+      // Center analysis (pressure)
+      const centerDelta = t.middle - (t.inside + t.outside) / 2;
+
+      // Camber signal — only meaningful with a clear edge bias
+      if (Math.abs(edgeDelta) >= 8) {
+        const isOutsideTire = isOval ? pos === 'RF' : true; // outside front matters most
+        if (edgeDelta > 0 && pos === 'RF') {
+          // Inside hotter than outside on RF — too much neg camber
+          symptoms.push({
+            phase: 'EXIT',
+            behavior: 'LOOSE',
+            severity: bucket(edgeDelta, 8, 20),
+            magnitude: edgeDelta,
+            why: `RF pyrometer: inside ${t.inside}°F vs outside ${t.outside}°F (Δ ${edgeDelta.toFixed(0)}°F hotter inside). Inside edge is doing all the work — too much negative camber dynamically. Reduced contact patch under throttle, RF can't put power down on exit.`,
+            causeTag: 'MEAS_RF_INSIDE_HOT',
+          });
+        } else if (edgeDelta < -8 && pos === 'RF') {
+          // Outside hotter than inside on RF — not enough neg camber
+          symptoms.push({
+            phase: 'MIDDLE',
+            behavior: 'PUSH',
+            severity: bucket(-edgeDelta, 8, 20),
+            magnitude: -edgeDelta,
+            why: `RF pyrometer: outside ${t.outside}°F vs inside ${t.inside}°F (Δ ${(-edgeDelta).toFixed(0)}°F hotter outside). Outside edge is the only thing on the ground — RF leaning outward at apex from too little dynamic negative camber. Front pushes mid-corner.`,
+            causeTag: 'MEAS_RF_OUTSIDE_HOT',
+          });
+        } else if (edgeDelta < -8 && pos === 'LF') {
+          // Outside hotter than inside on LF — for oval LF is the inside (droop)
+          // tire, hot outside means LF static was too positive
+          symptoms.push({
+            phase: 'OVERALL',
+            behavior: 'INSTABILITY',
+            severity: 'low',
+            magnitude: -edgeDelta,
+            why: `LF pyrometer: outside ${t.outside}°F vs inside ${t.inside}°F (Δ ${(-edgeDelta).toFixed(0)}°F hotter outside). LF inside is unloaded in left-turn — outside edge running hot suggests LF static camber set too positive.`,
+            causeTag: 'MEAS_LF_OUTSIDE_HOT',
+          });
+        }
+      }
+
+      // Pressure signal
+      if (centerDelta >= 8) {
+        symptoms.push({
+          phase: 'OVERALL',
+          behavior: 'INSTABILITY',
+          severity: bucket(centerDelta, 8, 20),
+          magnitude: centerDelta,
+          why: `${pos} pyrometer: middle ${t.middle}°F vs edges avg ${((t.inside + t.outside) / 2).toFixed(0)}°F (Δ +${centerDelta.toFixed(0)}°F hotter middle). Center crowning — pressure too high. Tire rides on center, smaller contact patch, less grip.`,
+          causeTag: `MEAS_${pos}_PSI_HIGH`,
+        });
+      } else if (centerDelta <= -8) {
+        symptoms.push({
+          phase: 'OVERALL',
+          behavior: 'INSTABILITY',
+          severity: bucket(-centerDelta, 8, 20),
+          magnitude: -centerDelta,
+          why: `${pos} pyrometer: middle ${t.middle}°F vs edges avg ${((t.inside + t.outside) / 2).toFixed(0)}°F (Δ ${centerDelta.toFixed(0)}°F cooler middle). Tire bowing under load — pressure too low. Sidewalls flexing, vague feel.`,
+          causeTag: `MEAS_${pos}_PSI_LOW`,
+        });
+      }
+    }
+  }
+
+  // ── 11. MEASURED — overall tire temperature balance (front vs rear) ─────
+  if (measured && measured.tireTemps) {
+    const avgF = (() => {
+      const v = ['LF', 'RF']
+        .map(p => measured.tireTemps[p])
+        .filter(t => t.inside != null && t.middle != null && t.outside != null)
+        .map(t => (t.inside + t.middle + t.outside) / 3);
+      return v.length ? v.reduce((a, b) => a + b) / v.length : null;
+    })();
+    const avgR = (() => {
+      const v = ['LR', 'RR']
+        .map(p => measured.tireTemps[p])
+        .filter(t => t.inside != null && t.middle != null && t.outside != null)
+        .map(t => (t.inside + t.middle + t.outside) / 3);
+      return v.length ? v.reduce((a, b) => a + b) / v.length : null;
+    })();
+    if (avgF != null && avgR != null) {
+      const delta = avgF - avgR;
+      if (delta >= 25) {
+        symptoms.push({
+          phase: 'MIDDLE',
+          behavior: 'PUSH',
+          severity: bucket(delta - 25, 5, 20),
+          magnitude: delta,
+          why: `Front tires averaged ${avgF.toFixed(0)}°F vs rear ${avgR.toFixed(0)}°F (Δ +${delta.toFixed(0)}°F front hotter). Front working much harder than rear — front tires saturated, push.`,
+          causeTag: 'MEAS_FRONT_HOT',
+        });
+      } else if (delta <= -25) {
+        symptoms.push({
+          phase: 'MIDDLE',
+          behavior: 'LOOSE',
+          severity: bucket(-delta - 25, 5, 20),
+          magnitude: -delta,
+          why: `Rear tires averaged ${avgR.toFixed(0)}°F vs front ${avgF.toFixed(0)}°F (Δ +${(-delta).toFixed(0)}°F rear hotter). Rear working harder — rear gets to grip limit first, loose.`,
+          causeTag: 'MEAS_REAR_HOT',
+        });
+      }
+    }
+  }
+
+  // ── 12. MEASURED — driver feel report (subjective truth) ────────────────
+  // The driver's reported feel is direct primary evidence. We add it as its
+  // own symptom that mirrors any matching geometric symptom (or stands alone
+  // if geometry didn't predict it). This both confirms predictions and
+  // surfaces feel that the geometry-only model missed.
+  if (measured?.condition) {
+    const drvBehavior = conditionToBehavior(measured.condition);
+    const drvPhase    = phaseToCanonical(measured.phase) || 'MIDDLE';
+    if (drvBehavior) {
+      // Check whether geometry already predicted this — if so, mark it as
+      // confirmed; if not, add it as a new symptom with high credibility.
+      const matched = symptoms.find(s => s.phase === drvPhase && s.behavior === drvBehavior);
+      if (matched) {
+        matched.driverConfirmed = true;
+        matched.why = `[DRIVER CONFIRMED] ${matched.why}`;
+      } else {
+        symptoms.push({
+          phase: drvPhase,
+          behavior: drvBehavior,
+          severity: 'high',
+          magnitude: 1,
+          why: `Driver reports the car ${drvBehavior === 'PUSH' ? 'pushes' : 'is loose'} in the ${drvPhase.toLowerCase()} of the corner. Geometry alone did not predict this — possible causes: tire pressure, shock balance, or an alignment number not yet measured. See "How to fix it" below.`,
+          causeTag: `DRIVER_${drvBehavior}_${drvPhase}`,
+          driverOnly: true,
         });
       }
     }
@@ -576,6 +885,173 @@ function fixesFor(symptom, a, geo, trackType) {
       break;
     }
 
+    // ── Measured: pyrometer cross-tread signature ────────────────────────
+    case 'MEAS_RF_OUTSIDE_HOT':
+      // Same fixes as RF_CAMBER_INSUFFICIENT but evidence is now physical
+      fixes.track.push({
+        action: `Drop RF cold pressure by 1–2 PSI immediately for next session.`,
+        impact: `Reduces center crowning and broadens contact patch so the outside edge isn't carrying everything. Fastest possible mitigation while alignment is being scheduled.`,
+        magnitude: 'medium',
+      });
+      fixes.track.push({
+        action: `Add 1/16" of front toe-out for next session if toe plates are available.`,
+        impact: `Toe-out lets the outside front bite earlier on entry, reducing the time spent on the overheated outside edge.`,
+        magnitude: 'low',
+      });
+      fixes.garage.push({
+        action: `Add ½–1° more static negative camber to RF at the alignment rack. Install P71 camber bolt if not already.`,
+        impact: `Pyrometer shows the outside edge is the only thing on the ground — RF needs more dynamic negative camber. Static increase is the most direct fix until the cam bolt limit (~−3°) is reached.`,
+        magnitude: 'high',
+      });
+      if (a.rfCaster < 7) {
+        fixes.garage.push({
+          action: `Increase RF caster from ${a.rfCaster.toFixed(1)}° toward ${Math.min(a.rfCaster + 2, 7).toFixed(1)}° via the lower control arm eccentric.`,
+          impact: `Each 1° of RF caster adds ~${a.T.casterCoeffRF.toFixed(3)}° dynamic negative camber on the outside front — free improvement on top of the static change.`,
+          magnitude: 'medium',
+        });
+      }
+      break;
+
+    case 'MEAS_RF_INSIDE_HOT':
+      fixes.track.push({
+        action: `Raise RF cold pressure by 1–2 PSI for next session.`,
+        impact: `Lifts the inside edge off the surface slightly, redistributing load toward the middle of the tread.`,
+        magnitude: 'medium',
+      });
+      fixes.garage.push({
+        action: `Reduce RF static negative camber by ½–1° at the alignment rack.`,
+        impact: `Inside edge is doing all the work — RF has too much dynamic negative camber. Less static brings the contact patch back to flat.`,
+        magnitude: 'high',
+      });
+      if (a.rfCaster > 4) {
+        fixes.garage.push({
+          action: `Optionally reduce RF caster slightly (within range; do not go below 3°).`,
+          impact: `Lower caster reduces the dynamic negative camber added on top of static. Use this if a static reduction alone isn't enough.`,
+          magnitude: 'low',
+        });
+      }
+      break;
+
+    case 'MEAS_LF_OUTSIDE_HOT':
+      fixes.garage.push({
+        action: `Reduce LF static positive camber. Set closer to +1° to +1.5° (currently more positive).`,
+        impact: `LF is unloaded in left-turn oval. The outside edge running hot suggests LF static was set too positive — pull some out so the inside-edge isn't carrying nothing.`,
+        magnitude: 'medium',
+      });
+      break;
+
+    // ── Measured: pyrometer pressure signature ───────────────────────────
+    case 'MEAS_LF_PSI_HIGH':
+    case 'MEAS_RF_PSI_HIGH':
+    case 'MEAS_LR_PSI_HIGH':
+    case 'MEAS_RR_PSI_HIGH': {
+      const pos = tag.split('_')[1];
+      const cur = parseFloat(geo.coldPsi?.[pos]) || null;
+      fixes.track.push({
+        action: `Drop ${pos} cold pressure by 2 PSI for next session${cur ? ` (current ${cur} → ${cur - 2})` : ''}.`,
+        impact: `Pyrometer shows center crowning — pressure too high. Drop until the middle/edge spread is within 5°F.`,
+        magnitude: 'high',
+      });
+      break;
+    }
+
+    case 'MEAS_LF_PSI_LOW':
+    case 'MEAS_RF_PSI_LOW':
+    case 'MEAS_LR_PSI_LOW':
+    case 'MEAS_RR_PSI_LOW': {
+      const pos = tag.split('_')[1];
+      const cur = parseFloat(geo.coldPsi?.[pos]) || null;
+      fixes.track.push({
+        action: `Raise ${pos} cold pressure by 2 PSI for next session${cur ? ` (current ${cur} → ${cur + 2})` : ''}.`,
+        impact: `Pyrometer shows the middle is cooler than the edges — tire bowing under load, pressure too low. Raise until middle/edge spread closes.`,
+        magnitude: 'high',
+      });
+      break;
+    }
+
+    // ── Measured: front/rear thermal balance ─────────────────────────────
+    case 'MEAS_FRONT_HOT':
+      fixes.track.push({
+        action: `Drop both front cold pressures 1 PSI; raise both rears 1 PSI.`,
+        impact: `Mild rebalance — gives the front more compliance and stiffens the rear sidewall to share more lateral work.`,
+        magnitude: 'medium',
+      });
+      fixes.garage.push({
+        action: `Stiffer rear springs (e.g. P71 200 lb/in HD) to recruit more rear roll work.`,
+        impact: `Front tires are saturated because the front is doing all the cornering work. Stiffer rear roll stiffness pulls some lateral burden rearward.`,
+        magnitude: 'high',
+      });
+      fixes.garage.push({
+        action: `Or softer front struts to reduce front roll stiffness contribution.`,
+        impact: `Same effect from the other end — less front roll resistance = less front load saturation.`,
+        magnitude: 'medium',
+      });
+      break;
+
+    case 'MEAS_REAR_HOT':
+      fixes.track.push({
+        action: `Drop both rear cold pressures 1 PSI; raise both fronts 1 PSI.`,
+        impact: `Gives the rear more compliance, stiffens front sidewall to absorb more lateral work.`,
+        magnitude: 'medium',
+      });
+      fixes.garage.push({
+        action: `Softer rear springs (160 lb/in stock) or softer rear shocks.`,
+        impact: `Reduces rear roll stiffness, shifting lateral load distribution forward to share work with the front.`,
+        magnitude: 'high',
+      });
+      break;
+
+    // ── Driver-feel-only symptom (geometry didn't predict it) ────────────
+    case 'DRIVER_PUSH_ENTRY':
+    case 'DRIVER_PUSH_MIDDLE':
+    case 'DRIVER_PUSH_EXIT':
+      fixes.track.push({
+        action: `Drop RF cold pressure 1 PSI for next session.`,
+        impact: `Quickest mid-event change. Broadens RF contact patch when the front isn't biting.`,
+        magnitude: 'medium',
+      });
+      fixes.track.push({
+        action: `Add 1/16" front toe-out if toe plates are available.`,
+        impact: `Toe-out helps the outside front bite earlier on entry — directly addresses driver-reported push.`,
+        magnitude: 'medium',
+      });
+      fixes.garage.push({
+        action: `Add ½° more RF static negative camber.`,
+        impact: `Direct grip improvement on the loaded outside-front tire — most effective when geometry alone didn't predict push.`,
+        magnitude: 'high',
+      });
+      fixes.garage.push({
+        action: `Investigate: re-measure RF camber, toe, and tire pressures. Driver feel disagrees with geometry prediction — something is different from what's recorded.`,
+        impact: `When the driver reports a problem the math didn't predict, the input data is usually the issue. Re-verify the inputs before parts changes.`,
+        magnitude: 'high',
+      });
+      break;
+
+    case 'DRIVER_LOOSE_ENTRY':
+    case 'DRIVER_LOOSE_MIDDLE':
+    case 'DRIVER_LOOSE_EXIT':
+      fixes.track.push({
+        action: `Add 1 PSI to both rear tires for next session.`,
+        impact: `Stiffens rear sidewall, increases rear lateral grip to plant the back end.`,
+        magnitude: 'medium',
+      });
+      fixes.track.push({
+        action: `Reduce front toe-out by 1/16" if currently aggressive.`,
+        impact: `Less front bite at turn-in slows the rotation, calming a loose-entry condition.`,
+        magnitude: 'low',
+      });
+      fixes.garage.push({
+        action: `Stiffer rear shocks: pick a rating 1–2 steps stiffer from the catalog.`,
+        impact: `Slows the rear from rotating away — direct fix for driver-reported looseness when geometry doesn't predict it.`,
+        magnitude: 'high',
+      });
+      fixes.garage.push({
+        action: `Investigate: re-measure rear toe and rear ride height. Driver feel disagrees with geometry — something measured may be off.`,
+        impact: `Loose feel without a geometric cause often traces to rear toe-out, sagging rear springs, or worn bushings.`,
+        magnitude: 'high',
+      });
+      break;
+
     // ── Bumpstop ─────────────────────────────────────────────────────────
     default:
       if (tag.startsWith('BUMPSTOP_')) {
@@ -699,11 +1175,37 @@ const PHASE_ORDER = ['ENTRY', 'MIDDLE', 'EXIT', 'OVERALL'];
 
 // ─── Main component ──────────────────────────────────────────────────────────
 export default function TuningAdvisor() {
-  const { geometry: geoList } = useSync();
-  const [selectedIdx, setSelectedIdx] = useState(0);
+  const { geometry: geoList, events } = useSync();
 
-  const car = geoList[selectedIdx];
+  // Source selector: 'profile' = analyze a car profile alone (geometry only)
+  //                  'session' = analyze a Track Day session (geometry + measured)
+  const [source, setSource] = useState('profile');
+  const [selectedIdx, setSelectedIdx] = useState(0);
+  const [selectedEventId, setSelectedEventId]     = useState(null);
+  const [selectedSessionId, setSelectedSessionId] = useState(null);
+
+  // Resolve the selected session and its event
+  const selectedEvent   = useMemo(() => events.find(e => e.id === selectedEventId) ?? null, [events, selectedEventId]);
+  const selectedSession = useMemo(
+    () => selectedEvent?.sessions?.find(s => s.id === selectedSessionId) ?? null,
+    [selectedEvent, selectedSessionId]
+  );
+
+  // Resolve the car: either explicit profile pick, or session.carProfileId
+  const car = useMemo(() => {
+    if (source === 'session' && selectedSession) {
+      return geoList.find(g => g.id === selectedSession.carProfileId) ?? geoList[selectedIdx] ?? null;
+    }
+    return geoList[selectedIdx] ?? null;
+  }, [source, selectedSession, geoList, selectedIdx]);
+
   const trackType = car?.trackType ?? 'oval';
+
+  // Build measured-data context only when a session source is active
+  const measured = useMemo(() => {
+    if (source !== 'session') return null;
+    return buildMeasuredContext(selectedSession);
+  }, [source, selectedSession]);
 
   const analysis = useMemo(
     () => car ? analyzeGeometry(car, trackType) : null,
@@ -711,8 +1213,8 @@ export default function TuningAdvisor() {
   );
 
   const symptoms = useMemo(
-    () => analysis ? diagnose(analysis, car, trackType) : [],
-    [analysis, car, trackType]
+    () => analysis ? diagnose(analysis, car, trackType, measured) : [],
+    [analysis, car, trackType, measured]
   );
 
   // Group symptoms by phase, then merge their fixes
@@ -770,39 +1272,160 @@ export default function TuningAdvisor() {
     );
   }
 
+  // Filter events to only those that have at least one session with a carProfileId
+  const eventsWithSessions = useMemo(
+    () => events.filter(e => (e.sessions ?? []).length > 0),
+    [events]
+  );
+
+  // ── Groq AI second opinion ──
+  const [apiKey, setApiKeyRaw] = useState(() => localStorage.getItem(APIKEY_KEY) || '');
+  const setApiKey = (k) => {
+    setApiKeyRaw(k);
+    if (k) localStorage.setItem(APIKEY_KEY, k);
+    else localStorage.removeItem(APIKEY_KEY);
+  };
+  const [aiResult, setAiResult] = useState('');
+  const [aiRunning, setAiRunning] = useState(false);
+  const [aiError, setAiError] = useState('');
+
+  // Reset AI result whenever the source changes
+  useEffect(() => { setAiResult(''); setAiError(''); }, [source, selectedIdx, selectedSessionId]);
+
+  async function runAI() {
+    if (!apiKey || !analysis) return;
+    setAiRunning(true);
+    setAiError('');
+    setAiResult('');
+    try {
+      const prompt = buildSecondOpinionPrompt({
+        car, analysis, measured, symptoms, aggregatedFixes, trackType,
+      });
+      const text = await callGroq(apiKey, prompt);
+      setAiResult(text);
+    } catch (e) {
+      setAiError(e.message || 'Unknown error');
+    } finally {
+      setAiRunning(false);
+    }
+  }
+
   return (
     <div className="tuning-page">
-      {/* Car selector */}
+      {/* Source selector */}
       <div className="tuning-header">
         <div className="tuning-header-row">
-          <label className="tuning-label">Analyze car:</label>
-          <select className="tuning-select" value={selectedIdx} onChange={e => setSelectedIdx(parseInt(e.target.value))}>
-            {geoList.map((g, i) => (
-              <option key={g.id} value={i}>
-                {g.title || 'Unnamed'} — {g.date} ({g.trackType === 'figure8' ? 'Figure-8' : 'Oval'})
-              </option>
-            ))}
-          </select>
+          <label className="tuning-label">Source:</label>
+          <div className="tuning-source-toggle">
+            <button
+              className={`tuning-source-btn${source === 'profile' ? ' active' : ''}`}
+              onClick={() => setSource('profile')}
+            >Car profile (geometry only)</button>
+            <button
+              className={`tuning-source-btn${source === 'session' ? ' active' : ''}`}
+              onClick={() => setSource('session')}
+              disabled={eventsWithSessions.length === 0}
+              title={eventsWithSessions.length === 0 ? 'No sessions logged yet — add one in Track Day' : ''}
+            >Track Day session (geometry + measured)</button>
+          </div>
         </div>
+
+        {source === 'profile' && (
+          <div className="tuning-header-row" style={{ marginTop: 10 }}>
+            <label className="tuning-label">Car:</label>
+            <select className="tuning-select" value={selectedIdx} onChange={e => setSelectedIdx(parseInt(e.target.value))}>
+              {geoList.map((g, i) => (
+                <option key={g.id} value={i}>
+                  {g.title || 'Unnamed'} — {g.date} ({g.trackType === 'figure8' ? 'Figure-8' : 'Oval'})
+                </option>
+              ))}
+            </select>
+          </div>
+        )}
+
+        {source === 'session' && (
+          <>
+            <div className="tuning-header-row" style={{ marginTop: 10 }}>
+              <label className="tuning-label">Event:</label>
+              <select
+                className="tuning-select"
+                value={selectedEventId ?? ''}
+                onChange={e => {
+                  const id = e.target.value ? Number(e.target.value) : null;
+                  setSelectedEventId(id);
+                  // Default to first session of newly chosen event
+                  const ev = events.find(x => x.id === id);
+                  setSelectedSessionId(ev?.sessions?.[0]?.id ?? null);
+                }}
+              >
+                <option value="">— Select an event —</option>
+                {eventsWithSessions.map(e => (
+                  <option key={e.id} value={e.id}>
+                    {e.name || 'Unnamed'} — {e.date}{e.track ? ` @ ${e.track}` : ''}
+                  </option>
+                ))}
+              </select>
+            </div>
+            {selectedEvent && (
+              <div className="tuning-header-row" style={{ marginTop: 10 }}>
+                <label className="tuning-label">Session:</label>
+                <select
+                  className="tuning-select"
+                  value={selectedSessionId ?? ''}
+                  onChange={e => setSelectedSessionId(e.target.value ? Number(e.target.value) : null)}
+                >
+                  <option value="">— Select a session —</option>
+                  {(selectedEvent.sessions ?? []).map((s, i) => (
+                    <option key={s.id} value={s.id}>
+                      {s.name || `Practice ${i + 1}`}
+                      {s.bestLap ? ` — best ${s.bestLap}s` : ''}
+                      {s.condition ? ` — ${s.condition}` : ''}
+                    </option>
+                  ))}
+                </select>
+              </div>
+            )}
+            {selectedSession && !car && (
+              <div className="tuning-header-row" style={{ marginTop: 10, color: '#f59e0b', fontSize: 12 }}>
+                ⚠ This session has no car profile linked. Open Track Day → edit session → set Car Profile.
+              </div>
+            )}
+          </>
+        )}
+
         {car && (
           <div className="tuning-summary">
-            Track: {analysis?.T?.label}{' '}
-            ·{' '}
-            Front RC: {analysis?.rcAvg?.toFixed(1)}"{' '}
-            ·{' '}
-            Rear RC: {analysis?.rearRC?.toFixed(1)}"{' '}
-            ·{' '}
-            Front LLTD: {analysis?.geoLLTDF != null ? `${(analysis.geoLLTDF*100).toFixed(0)}%` : '—'}{' '}
-            ·{' '}
-            Body roll: {analysis?.rollAtApex?.toFixed(1)}°{' '}
-            ·{' '}
-            RF dyn camber: {analysis?.rfGroundCamber != null ? `${analysis.rfGroundCamber>=0?'+':''}${analysis.rfGroundCamber.toFixed(2)}°` : '—'}
+            <div>
+              <strong style={{ color: '#cbd5e1' }}>{car.title || 'Unnamed'}</strong>{' '}
+              · {analysis?.T?.label}
+              {measured && <> · session: <strong style={{ color: '#cbd5e1' }}>{selectedSession?.name || 'Practice'}</strong></>}
+            </div>
+            <div style={{ marginTop: 4 }}>
+              Front RC: {analysis?.rcAvg?.toFixed(1)}"{' · '}
+              Rear RC: {analysis?.rearRC?.toFixed(1)}"{' · '}
+              Front LLTD: {analysis?.geoLLTDF != null ? `${(analysis.geoLLTDF*100).toFixed(0)}%` : '—'}{' · '}
+              Body roll: {analysis?.rollAtApex?.toFixed(1)}°{' · '}
+              RF dyn camber: {analysis?.rfGroundCamber != null ? `${analysis.rfGroundCamber>=0?'+':''}${analysis.rfGroundCamber.toFixed(2)}°` : '—'}
+            </div>
+            {measured && (
+              <div style={{ marginTop: 4, color: '#22c55e' }}>
+                Measured data: {measured.bestLap ? `best lap ${measured.bestLap}s · ` : ''}
+                {measured.condition ? `driver feel: ${measured.condition}${measured.phase ? ` (${measured.phase})` : ''} · ` : ''}
+                pyrometer: {Object.values(measured.tireTemps).filter(t => t.middle != null).length}/4 corners ·
+                hot PSI: {Object.values(measured.hotPsi).filter(v => v != null).length}/4 corners
+              </div>
+            )}
           </div>
         )}
       </div>
 
       {/* What the car will do */}
-      <Section title="WHAT THE CAR WILL DO" subtitle="Mathematical prediction from geometry, alignment, and shock data">
+      <Section
+        title={measured ? 'WHAT THE CAR IS DOING' : 'WHAT THE CAR WILL DO'}
+        subtitle={measured
+          ? 'Diagnosis combines geometry prediction with measured pyrometer data, hot/cold PSI, and driver feel from the session'
+          : 'Mathematical prediction from geometry, alignment, and shock data'}
+      >
         {symptoms.length === 0 ? (
           <div style={{ padding: 16, color: '#22c55e', fontSize: 14 }}>
             ✓ No significant handling issues predicted from current measurements. The car should feel balanced.
@@ -902,6 +1525,96 @@ export default function TuningAdvisor() {
           </>
         )}
       </Section>
+
+      {/* AI second opinion */}
+      <AiSecondOpinion
+        apiKey={apiKey}
+        setApiKey={setApiKey}
+        canRun={!!analysis}
+        running={aiRunning}
+        result={aiResult}
+        error={aiError}
+        onRun={runAI}
+      />
+    </div>
+  );
+}
+
+// ─── AI second opinion panel ────────────────────────────────────────────────
+function AiSecondOpinion({ apiKey, setApiKey, canRun, running, result, error, onRun }) {
+  const [editing, setEditing] = useState(false);
+  const [draft, setDraft] = useState(apiKey);
+
+  function save() { setApiKey(draft.trim()); setEditing(false); }
+  function clear() { setApiKey(''); setDraft(''); setEditing(false); }
+
+  return (
+    <div className="tuning-section">
+      <div className="tuning-section-head">
+        <div className="tuning-section-title">AI SECOND OPINION</div>
+        <div className="tuning-section-sub">
+          Sends the diagnosis above to {GROQ_MODEL} via Groq for an independent crew-chief review.
+          Your API key is stored only in your browser and only sent to api.groq.com.
+        </div>
+      </div>
+
+      {/* API key bar */}
+      {!editing ? (
+        <div className="tuning-ai-keybar">
+          <span className={`tuning-ai-status${apiKey ? ' active' : ''}`}>
+            <span className="tuning-ai-dot" />
+            {apiKey ? 'Groq API key configured' : 'No API key — AI second opinion disabled'}
+          </span>
+          <button className="tuning-ai-keybtn" onClick={() => { setDraft(apiKey); setEditing(true); }}>
+            {apiKey ? 'Edit key' : 'Add API key'}
+          </button>
+        </div>
+      ) : (
+        <div className="tuning-ai-keybar">
+          <input
+            className="ml-input tuning-ai-keyinput"
+            type="password"
+            placeholder="gsk_..."
+            value={draft}
+            onChange={e => setDraft(e.target.value)}
+          />
+          <button className="ml-save-btn" onClick={save}>Save</button>
+          <button className="ml-cancel-btn" onClick={() => setEditing(false)}>Cancel</button>
+          {apiKey && <button className="ml-cancel-btn" onClick={clear}>Remove</button>}
+        </div>
+      )}
+
+      {/* Run button */}
+      <div style={{ marginTop: 12 }}>
+        <button
+          className="tuning-ai-runbtn"
+          disabled={!apiKey || !canRun || running}
+          onClick={onRun}
+        >
+          {running ? 'Asking the AI…' : result ? 'Re-run AI second opinion' : 'Get AI second opinion'}
+        </button>
+        {!apiKey && (
+          <span style={{ marginLeft: 12, color: '#94a3b8', fontSize: 12 }}>
+            Add a Groq API key to enable. Free keys at console.groq.com.
+          </span>
+        )}
+      </div>
+
+      {error && (
+        <div className="tuning-ai-error">
+          <strong>Error:</strong> {error}
+        </div>
+      )}
+
+      {result && (
+        <div className="tuning-ai-result">
+          <div className="tuning-ai-result-head">
+            <span style={{ color: '#a78bfa', fontWeight: 700 }}>AI second opinion</span>
+            <span style={{ color: '#64748b', fontSize: 11, marginLeft: 8 }}>{GROQ_MODEL}</span>
+          </div>
+          <pre className="tuning-ai-result-body">{result}</pre>
+        </div>
+      )}
     </div>
   );
 }

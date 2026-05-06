@@ -1156,7 +1156,61 @@ function SessionEditor({ session, index, onChange, geoProfiles }) {
         <div className="td-ss-label">Car Profile</div>
         <select className="ml-input ml-select"
           value={session.carProfileId ?? ''}
-          onChange={e => set('carProfileId', e.target.value ? Number(e.target.value) : null)}>
+          onChange={e => {
+            const id = e.target.value ? Number(e.target.value) : null;
+            const next = { ...session, carProfileId: id };
+            // Auto-populate from the chosen car profile.
+            // Only overwrite fields the user hasn't filled yet — never clobber data.
+            if (id) {
+              const geo = geoProfiles.find(g => g.id === id);
+              if (geo) {
+                // Cold PSI on session.setup.coldPsi
+                const curSetup = session.setup ?? blankSetup();
+                const nextSetup = { ...curSetup, coldPsi: { ...curSetup.coldPsi } };
+                let setupChanged = false;
+                for (const pos of ['LF', 'RF', 'LR', 'RR']) {
+                  const geoPsi = parseFloat(geo.coldPsi?.[pos]);
+                  // Only fill if session value is the blankSetup default and geo has a real value
+                  if (Number.isFinite(geoPsi)) {
+                    nextSetup.coldPsi[pos] = geoPsi;
+                    setupChanged = true;
+                  }
+                }
+                // Setup alignment from geo
+                const camLF = parseFloat(geo.camber?.LF);
+                const camRF = parseFloat(geo.camber?.RF);
+                const casLF = parseFloat(geo.caster?.LF);
+                const casRF = parseFloat(geo.caster?.RF);
+                const toe   = parseFloat(geo.toe);
+                if (Number.isFinite(camLF)) { nextSetup.camber = { ...nextSetup.camber, LF: camLF }; setupChanged = true; }
+                if (Number.isFinite(camRF)) { nextSetup.camber = { ...nextSetup.camber, RF: camRF }; setupChanged = true; }
+                if (Number.isFinite(casLF)) { nextSetup.caster = { ...nextSetup.caster, LF: casLF }; setupChanged = true; }
+                if (Number.isFinite(casRF)) { nextSetup.caster = { ...nextSetup.caster, RF: casRF }; setupChanged = true; }
+                if (Number.isFinite(toe))   { nextSetup.toe = toe; setupChanged = true; }
+                // Spring rates
+                if (geo.springRate) {
+                  const sr = { ...nextSetup.springs };
+                  let sChanged = false;
+                  for (const pos of ['LF', 'RF', 'LR', 'RR']) {
+                    const v = parseFloat(geo.springRate[pos]);
+                    if (Number.isFinite(v)) { sr[pos] = v; sChanged = true; }
+                  }
+                  if (sChanged) { nextSetup.springs = sr; setupChanged = true; }
+                }
+                if (setupChanged) next.setup = nextSetup;
+                // Top-level session.springRate (display only)
+                const isEmpty = v => v == null || v === '';
+                if (geo.springRate && (isEmpty(session.springRate?.LF) || isEmpty(session.springRate?.RF) || isEmpty(session.springRate?.LR))) {
+                  next.springRate = {
+                    LF: !isEmpty(session.springRate?.LF) ? session.springRate.LF : (geo.springRate.LF || ''),
+                    RF: !isEmpty(session.springRate?.RF) ? session.springRate.RF : (geo.springRate.RF || ''),
+                    LR: !isEmpty(session.springRate?.LR) ? session.springRate.LR : (geo.springRate.LR || ''),
+                  };
+                }
+              }
+            }
+            onChange(next);
+          }}>
           <option value="">Model default (P71)</option>
           {geoProfiles.map(g => (
             <option key={g.id} value={g.id}>{g.title || 'Unnamed'} — {g.date}</option>
@@ -1165,6 +1219,9 @@ function SessionEditor({ session, index, onChange, geoProfiles }) {
         {session.carProfileId && (
           <div className="td-geo-badge" style={{ marginTop: 6 }}>
             {carLabel(session, geoProfiles)}
+            <span style={{ marginLeft: 8, color: '#22c55e', fontSize: 11 }}>
+              ✓ alignment, springs &amp; cold PSI auto-populated from profile
+            </span>
           </div>
         )}
       </div>
