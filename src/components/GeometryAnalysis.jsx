@@ -133,8 +133,16 @@ export function analyzeGeometry(geo, trackType = 'oval') {
   const rollGradient_total = _kPhiTotal_pre
     ? ((P71_TOTAL_WEIGHT * _cgH_ft_pre) / _kPhiTotal_pre) * (180/Math.PI)
     : null; // deg/g including ARB
+  // Sanity cap: no real race car exceeds ~8°/G body roll — if computed value is
+  // above that, the spring rate inputs are likely wrong (wrong units, typo, etc.)
+  // Cap at 8°/G and flag so the user sees a warning rather than absurd camber outputs.
+  const ROLL_GRAD_PHYSICAL_MAX = 8.0; // °/G
+  const rollGradientCapped = rollGradient_total != null
+    ? Math.min(rollGradient_total, ROLL_GRAD_PHYSICAL_MAX)
+    : null;
+  const rollGradientSuspect = rollGradient_total != null && rollGradient_total > ROLL_GRAD_PHYSICAL_MAX;
   // Use computed roll if springs available, else fall back to literature constant.
-  const rollPerG_used = rollGradient_total ?? T.bodyRollPerG;
+  const rollPerG_used = rollGradientCapped ?? T.bodyRollPerG;
   const rollAtApex    = rollPerG_used * T.trackG;
   const rollIsComputed = rollGradient_total != null;
 
@@ -477,7 +485,7 @@ export function analyzeGeometry(geo, trackType = 'oval') {
     T,
     rf, lf, halfTrack, trackWidthF, trackWidthR, wh,
     rcAvg, rearRC, cgH, momentArm,
-    rollAtApex, rollPerG_used, rollIsComputed, rfApexLoad,
+    rollAtApex, rollPerG_used, rollIsComputed, rollGradientSuspect, rfApexLoad,
     rfStatic, lfStatic, rfCaster, lfCaster,
     rfCasterGain, lfCasterGain, rfBodyRoll, lfBodyRoll, swCamber,
     rfGroundCamber, lfGroundCamber, rfCamberDev, lfCamberDev,
@@ -1035,7 +1043,7 @@ export default function GeometryAnalysis({ geo }) {
             : `${Math.abs(a.rfCamberDev).toFixed(2)}° past ideal (over-cambered). Only inside edge contacts at apex — pyrometer inside zone hottest. Inside edge wears fast. Reduce static negative.`}
           tip={<Tip
             changeable={true}
-            text={`Ground camber chain at ${T.trackG}G (${a.rollAtApex.toFixed(2)}° body roll ${a.rollIsComputed ? '— COMPUTED from your springs/ARB' : '— literature constant, enter spring rates for real value'}):
+            text={`Ground camber chain at ${T.trackG}G (${a.rollAtApex.toFixed(2)}° body roll ${a.rollIsComputed ? '— COMPUTED from your springs/ARB' : '— literature constant, enter spring rates for real value'}):${a.rollGradientSuspect ? '\n⚠ BODY ROLL CAPPED AT 8°/G — your spring rate inputs imply an unrealistically high roll gradient. Check spring rates (lb/in) and install ratio in your geometry profile.' : ''}
   static          ${sign(a.rfStatic)}°
   caster gain     ${a.rfCasterGain.toFixed(2)}°  (${a.rfCaster}° × −${T.casterCoeffRF}°/° at ${T.apexSteer}° steer)
   SLA jounce      ${a.rfBodyRoll.toFixed(2)}°  (${a.rollAtApex.toFixed(2)}° × −${T.slaJounceCoeff}°/°)
@@ -1096,20 +1104,22 @@ To reach the ideal at current dynamic terms, static would need to be ${a.rfStati
           title="Caster (RF / LF)"
           measured={`RF ${a.rfCaster}° / LF ${a.lfCaster}°`}
           stock={`${stockStr(STOCK_P71.casterRF, v => `${v}°`)} / ${stockStr(STOCK_P71.casterLF, v => `${v}°`)} — Ford service manual midpoint, symmetric`}
-          optimal={isOval ? `RF 5–7° / LF 8–10° (asymmetric — LF higher pulls the car LEFT down straights)` : `Both 5–7° symmetric (figure-8 turns both directions)`}
-          sev={isOval ? ((a.lfCaster - a.rfCaster) > 1.5 && (a.lfCaster - a.rfCaster) < 4 ? 'good' : 'warning') : (Math.abs(a.lfCaster - a.rfCaster) < 1 ? 'good' : 'warning')}
+          optimal={isOval ? `RF 5–7° / LF 3–5° (RF higher pulls the car LEFT — more RF self-centering steers it toward the inside)` : `Both 5–7° symmetric (figure-8 turns both directions)`}
+          sev={isOval ? ((a.rfCaster - a.lfCaster) > 1.5 && (a.rfCaster - a.lfCaster) < 4 ? 'good' : 'warning') : (Math.abs(a.lfCaster - a.rfCaster) < 1 ? 'good' : 'warning')}
           handling={isOval
-            ? (a.lfCaster - a.rfCaster) >= 1.5 && (a.lfCaster - a.rfCaster) <= 4
-              ? `Caster split working in your favor — the higher LF caster pulls the car gently left down straights, reducing steering effort and adding self-centering on left turn entry.`
-              : (a.lfCaster - a.rfCaster) < 1.5
-                ? `Caster split too small or symmetric — car wanders straight, no left-pull benefit. Set LF to 8–9° to add left-pull.`
-              : `LF caster MUCH higher than RF — heavy left-pull, may make right corrections difficult on straights.`
+            ? (a.rfCaster - a.lfCaster) >= 1.5 && (a.rfCaster - a.lfCaster) <= 4
+              ? `Caster split working in your favor — higher RF caster gives the right-front more self-centering, which steers the car gently left down straights and reduces steering effort entering left turns.`
+              : (a.rfCaster - a.lfCaster) < 1.5
+                ? `Caster split too small or symmetric — no left-pull benefit. Increase RF caster or decrease LF caster to add natural left-turn pull. RF 2–4° more than LF is typical.`
+              : `RF caster MUCH higher than LF — heavy left-pull, may make right corrections difficult on straights.`
             : Math.abs(a.lfCaster - a.rfCaster) < 1
               ? `Symmetric caster — figure-8 will turn left and right with equal effort.`
-              : `Asymmetric caster on figure-8 — car will pull to one side on straights, asymmetric camber gain L vs R turns.`}
+              : a.rfCaster > a.lfCaster
+                ? `RF higher than LF — car will pull LEFT on straights. For figure-8 this creates left/right imbalance.`
+                : `LF higher than RF — car will pull RIGHT on straights. For figure-8 this creates left/right imbalance.`}
           tip={<Tip
             changeable={true}
-            text="Caster is the fore-aft tilt of the steering axis. Higher caster = more self-centering, more camber gain at steer. On oval, asymmetric caster (LF higher) creates a constant pull toward the inside of the corner, reducing driver effort."
+            text="Caster is the fore-aft tilt of the steering axis. Higher caster = more self-centering torque on that wheel. The wheel with MORE caster pulls the car AWAY from its side (toward the opposite side) because it resists being turned more than the other. On oval: RF higher than LF → car pulls left naturally."
             fixMethod="P71 lower control arm uses eccentric caster bolts — turn each to shift the lower arm pivot fore/aft. ±2° range typical. Set at alignment rack."
           />}
         />
