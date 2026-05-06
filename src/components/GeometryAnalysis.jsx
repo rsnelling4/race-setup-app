@@ -750,20 +750,18 @@ function sign(n) { return n >= 0 ? `+${n.toFixed(2)}` : n.toFixed(2); }
 // ─── Main component ───────────────────────────────────────────────────────────
 export default function GeometryAnalysis({ geo }) {
   const trackType = geo.trackType || 'oval';
-  const a = useMemo(() => analyzeGeometry(geo, trackType), [geo, trackType]);
-  const T = a.T;
-  const isOval = trackType === 'oval';
+  // aBase = profile as-saved. a = what's displayed (what-if when active, else aBase).
+  // All render code uses `a` so sections automatically reflect what-if changes.
+  const aBase = useMemo(() => analyzeGeometry(geo, trackType), [geo, trackType]);
 
   // ── What-if spring explorer state ─────────────────────────────────────────
-  // Null means "use profile values". When set, analyzeGeometry is re-run with
-  // these overrides so the user can scrub spring rates without editing the profile.
   const [wiLF, setWiLF] = useState('');
   const [wiRF, setWiRF] = useState('');
   const [wiLR, setWiLR] = useState('');
   const [wiRR, setWiRR] = useState('');
   const [wiIRF, setWiIRF] = useState('');
   const [wiIRR, setWiIRR] = useState('');
-  const wiActive = wiLF || wiRF || wiLR || wiRR || wiIRF || wiIRR;
+  const wiActive = !!(wiLF || wiRF || wiLR || wiRR || wiIRF || wiIRR);
   const geoWi = useMemo(() => {
     if (!wiActive) return null;
     return {
@@ -781,8 +779,10 @@ export default function GeometryAnalysis({ geo }) {
     };
   }, [wiActive, wiLF, wiRF, wiLR, wiRR, wiIRF, wiIRR, geo]);
   const aWi = useMemo(() => geoWi ? analyzeGeometry(geoWi, trackType) : null, [geoWi, trackType]);
-  // Active analysis: what-if if set, else baseline
-  const aDisp = aWi ?? a;
+  // `a` is what every section renders — what-if when active, else profile
+  const a = aWi ?? aBase;
+  const T = a.T;
+  const isOval = trackType === 'oval';
 
   function rcSev(rc, lo, hi) {
     if (rc == null) return 'info';
@@ -951,6 +951,45 @@ export default function GeometryAnalysis({ geo }) {
             : `Figure-8 targets use symmetric camber goals — both tires must handle being the outside tire. Apex steer angle estimated at ${T.apexSteer}° (${T.trackG}G avg lateral).`}
           {a.upPivEstimated && <span style={{ color: '#f59e0b' }}> ⚠ Upper arm pivot is estimated — RC and FVSA values will shift when measured.</span>}
         </div>
+      </div>
+
+      {/* ── Spring / IR What-If Explorer ───────────────────────────────────
+          Overrides spring rates and IR for the entire analysis — every
+          section (camber chain, LLTD, roll gradient, synopsis) updates.
+          Does not modify the saved profile.
+      ─────────────────────────────────────────────────────────────────── */}
+      <div style={{background:'#1e1b4b',border:`2px solid ${wiActive?'#7c3aed':'#374151'}`,borderRadius:8,padding:'12px 14px',marginBottom:16}}>
+        <div style={{display:'flex',alignItems:'center',gap:10,marginBottom:8,flexWrap:'wrap'}}>
+          <span style={{color:'#c084fc',fontFamily:'monospace',fontSize:12,fontWeight:700}}>SPRING / IR WHAT-IF</span>
+          <span style={{color:'#64748b',fontSize:11}}>— enter candidates to see the full effect on every section below. Leave blank = use profile value.</span>
+          {wiActive && <button onClick={()=>{setWiLF('');setWiRF('');setWiLR('');setWiRR('');setWiIRF('');setWiIRR('');}} style={{marginLeft:'auto',fontSize:10,padding:'3px 10px',background:'#374151',border:'1px solid #6b7280',borderRadius:4,color:'#d1d5db',cursor:'pointer'}}>✕ Reset to profile</button>}
+        </div>
+        <div style={{display:'grid',gridTemplateColumns:'repeat(4,1fr) 1fr 1fr',gap:8}}>
+          {[['LF spring',wiLF,setWiLF,geo.springRate?.LF,'25'],['RF spring',wiRF,setWiRF,geo.springRate?.RF,'25'],['LR spring',wiLR,setWiLR,geo.springRate?.LR,'25'],['RR spring',wiRR,setWiRR,geo.springRate?.RR,'25'],['Front IR',wiIRF,setWiIRF,geo.installRatio?.front,'0.05'],['Rear IR',wiIRR,setWiIRR,geo.installRatio?.rear,'0.05']].map(([lbl,val,set,cur,step])=>(
+            <div key={lbl}>
+              <label style={{color:'#94a3b8',fontSize:10,display:'block',marginBottom:2}}>{lbl}{cur?` [${cur}]`:''}</label>
+              <input type="number" step={step} value={val} onChange={e=>set(e.target.value)} placeholder={cur||'—'} style={{width:'100%',background:'#111827',border:`1px solid ${val?'#7c3aed':'#374151'}`,borderRadius:4,color:'#e2e8f0',padding:'4px 6px',fontSize:12,boxSizing:'border-box'}} />
+            </div>
+          ))}
+        </div>
+        {wiActive && aWi && (
+          <div style={{marginTop:10,padding:'8px 10px',background:'#0f172a',borderRadius:4,fontSize:11,fontFamily:'monospace',display:'flex',flexWrap:'wrap',gap:'12px'}}>
+            {[
+              ['Roll gradient', aWi.rollGradient!=null?`${aWi.rollGradient.toFixed(2)} °/g`:'—', aBase.rollGradient!=null?`${aBase.rollGradient.toFixed(2)}`:'—'],
+              ['Body roll @apex', `${(aWi.rollAtApex).toFixed(2)}°`, `${(aBase.rollAtApex).toFixed(2)}°`],
+              ['RF apex camber', aWi.rfGroundCamber!=null?(aWi.rfGroundCamber>=0?'+':'')+aWi.rfGroundCamber.toFixed(2)+'°':'—', aBase.rfGroundCamber!=null?(aBase.rfGroundCamber>=0?'+':'')+aBase.rfGroundCamber.toFixed(2)+'°':'—'],
+              ['Static demanded', aWi.rfStaticDemanded!=null?aWi.rfStaticDemanded.toFixed(2)+'°':'—', aBase.rfStaticDemanded!=null?aBase.rfStaticDemanded.toFixed(2)+'°':'—'],
+              ['F ride freq', aWi.rideFreqF_cpm!=null?`${aWi.rideFreqF_cpm.toFixed(0)} cpm`:'—', aBase.rideFreqF_cpm!=null?`${aBase.rideFreqF_cpm.toFixed(0)}`:'—'],
+              ['R ride freq', aWi.rideFreqR_cpm!=null?`${aWi.rideFreqR_cpm.toFixed(0)} cpm`:'—', aBase.rideFreqR_cpm!=null?`${aBase.rideFreqR_cpm.toFixed(0)}`:'—'],
+            ].map(([label, wiVal, baseVal])=>(
+              <div key={label} style={{minWidth:100}}>
+                <div style={{color:'#64748b',fontSize:10}}>{label}</div>
+                <div style={{color:'#c084fc',fontWeight:700}}>{wiVal}</div>
+                <div style={{color:'#475569',fontSize:10}}>was {baseVal}</div>
+              </div>
+            ))}
+          </div>
+        )}
       </div>
 
       {/* ══════════════════════════════════════════════════════════════════
@@ -1597,47 +1636,14 @@ To reach the ideal at current dynamic terms, static would need to be ${a.rfStati
         <Section title="8 — RIDE & ROLL RATE ANALYSIS" color="#c084fc">
 
           {/* ── What-if spring explorer ───────────────────────────────────── */}
-          <div style={{background:'#1e1b4b',border:'1px solid #7c3aed',borderRadius:6,padding:'12px 14px',marginBottom:14}}>
-            <div style={{display:'flex',alignItems:'center',gap:10,marginBottom:8}}>
-              <span style={{color:'#c084fc',fontFamily:'monospace',fontSize:12,fontWeight:700}}>SPRING WHAT-IF EXPLORER</span>
-              {wiActive && <button onClick={()=>{setWiLF('');setWiRF('');setWiLR('');setWiRR('');setWiIRF('');setWiIRR('');}} style={{fontSize:10,padding:'2px 8px',background:'#374151',border:'1px solid #6b7280',borderRadius:4,color:'#d1d5db',cursor:'pointer'}}>Reset to profile</button>}
-            </div>
-            <p style={{color:'#94a3b8',fontSize:11,margin:'0 0 10px'}}>Enter candidate spring rates below — all tiles in this section update live. Leave blank to use the saved profile value. Does not modify your profile.</p>
-            <div style={{display:'grid',gridTemplateColumns:'repeat(4,1fr)',gap:8,marginBottom:10}}>
-              {[['LF',wiLF,setWiLF,geo.springRate?.LF],['RF',wiRF,setWiRF,geo.springRate?.RF],['LR',wiLR,setWiLR,geo.springRate?.LR],['RR',wiRR,setWiRR,geo.springRate?.RR]].map(([pos,val,set,cur])=>(
-                <div key={pos}>
-                  <label style={{color:'#94a3b8',fontSize:10,display:'block',marginBottom:2}}>{pos} Spring (lb/in){cur ? ` [${cur}]` : ''}</label>
-                  <input type="number" step="25" value={val} onChange={e=>set(e.target.value)} placeholder={cur || '—'} style={{width:'100%',background:'#111827',border:`1px solid ${val?'#7c3aed':'#374151'}`,borderRadius:4,color:'#e2e8f0',padding:'4px 6px',fontSize:12,boxSizing:'border-box'}} />
-                </div>
-              ))}
-            </div>
-            <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:8}}>
-              {[['Front IR',wiIRF,setWiIRF,geo.installRatio?.front],['Rear IR',wiIRR,setWiIRR,geo.installRatio?.rear]].map(([lbl,val,set,cur])=>(
-                <div key={lbl}>
-                  <label style={{color:'#94a3b8',fontSize:10,display:'block',marginBottom:2}}>{lbl}{cur ? ` [${cur}]` : ''}</label>
-                  <input type="number" step="0.05" value={val} onChange={e=>set(e.target.value)} placeholder={cur || '—'} style={{width:'100%',background:'#111827',border:`1px solid ${val?'#7c3aed':'#374151'}`,borderRadius:4,color:'#e2e8f0',padding:'4px 6px',fontSize:12,boxSizing:'border-box'}} />
-                </div>
-              ))}
-            </div>
-            {wiActive && aWi && (
-              <div style={{marginTop:10,padding:'8px 10px',background:'#0f172a',borderRadius:4,fontSize:11,color:'#94a3b8',fontFamily:'monospace'}}>
-                <span style={{color:'#c084fc'}}>WHAT-IF RESULT: </span>
-                F wheel rate {aWi.kwFavg?.toFixed(0) ?? '—'} lb/in → ride freq {aWi.rideFreqF_cpm?.toFixed(0) ?? '—'} cpm
-                {'  |  '}R wheel rate {aWi.kwRavg?.toFixed(0) ?? '—'} lb/in → {aWi.rideFreqR_cpm?.toFixed(0) ?? '—'} cpm
-                {'  |  '}Roll {aWi.rollGradient?.toFixed(2) ?? '—'} deg/g (springs only)
-                {'  |  '}RF apex camber {aWi.rfGroundCamber != null ? (aWi.rfGroundCamber >= 0 ? '+' : '') + aWi.rfGroundCamber.toFixed(2) : '—'}°
-              </div>
-            )}
-          </div>
-
           <Metric
             title="Wheel Rates"
-            measured={aDisp.kwFavg != null ? `F ${aDisp.kwFavg.toFixed(0)} / R ${aDisp.kwRavg?.toFixed(0) ?? '—'} lb/in` : null}
+            measured={a.kwFavg != null ? `F ${a.kwFavg.toFixed(0)} / R ${a.kwRavg?.toFixed(0) ?? '—'} lb/in` : null}
             stock={`F ${stockStr(STOCK_P71.kwF)} / R ${stockStr(STOCK_P71.kwR)} lb/in — derived: 475 × 0.85² (IR from arm geometry) / 160 × 1.0²`}
             optimal={`F 130–250 / R 130–200 lb/in (race-tuned, depends on track roughness)`}
-            sev={aDisp.kwFavg != null ? 'info' : 'info'}
-            handling={aDisp.kwFavg == null ? 'Enter spring rates to compute.'
-              : `Wheel rate determines how much load each tire sees per inch of wheel travel. Higher = stiffer ride, less body roll, more responsive but less compliant on rough surfaces. F: ${aDisp.kwLF?.toFixed(0) ?? '—'}/${aDisp.kwRF?.toFixed(0) ?? '—'}, R: ${aDisp.kwLR?.toFixed(0) ?? '—'}/${aDisp.kwRR?.toFixed(0) ?? '—'}. Note: wheel rate is ALWAYS lower than spring rate because IR² < 1.`}
+            sev={a.kwFavg != null ? 'info' : 'info'}
+            handling={a.kwFavg == null ? 'Enter spring rates to compute.'
+              : `Wheel rate determines how much load each tire sees per inch of wheel travel. Higher = stiffer ride, less body roll, more responsive but less compliant on rough surfaces. F: ${a.kwLF?.toFixed(0) ?? '—'}/${a.kwRF?.toFixed(0) ?? '—'}, R: ${a.kwLR?.toFixed(0) ?? '—'}/${a.kwRR?.toFixed(0) ?? '—'}. Note: wheel rate is ALWAYS lower than spring rate because IR² < 1.`}
             tip={<Tip
               changeable={true}
               text={`Milliken §16.1: Wheel center rate = spring rate × installation ratio². P71 SLA front IR ≈ 0.85 (geometric: ~11" spring pickup ÷ 13" arm length). Verify on your car by jacking the wheel up 1" and measuring spring travel.`}
@@ -1647,11 +1653,11 @@ To reach the ideal at current dynamic terms, static would need to be ${a.rfStati
 
           <Metric
             title="Ride Frequency"
-            measured={aDisp.rideFreqF_cpm != null ? `F ${aDisp.rideFreqF_cpm.toFixed(0)} / R ${aDisp.rideFreqR_cpm?.toFixed(0) ?? '—'} cpm` : null}
+            measured={a.rideFreqF_cpm != null ? `F ${a.rideFreqF_cpm.toFixed(0)} / R ${a.rideFreqR_cpm?.toFixed(0) ?? '—'} cpm` : null}
             stock={`F ${stockStr(STOCK_P71.rideFreqF)} / R ${stockStr(STOCK_P71.rideFreqR)} cpm — derived from stock springs + sprung mass`}
             optimal={`F 95–120 / R 85–110 cpm — front MUST exceed rear (anti-pitch)`}
             sev={(() => {
-              const f = aDisp.rideFreqF_cpm; const r = aDisp.rideFreqR_cpm;
+              const f = a.rideFreqF_cpm; const r = a.rideFreqR_cpm;
               if (!f && !r) return 'info';
               const fOk = f >= 95 && f <= 130;
               const rOk = r ? r >= 85 && r <= 120 : true;
@@ -1660,12 +1666,12 @@ To reach the ideal at current dynamic terms, static would need to be ${a.rfStati
               if (!fOk || !rOk) return 'warning';
               return 'good';
             })()}
-            handling={aDisp.rideFreqF_cpm == null ? 'Enter spring rates.'
-              : aDisp.rideFreqF_cpm < aDisp.rideFreqR_cpm
+            handling={a.rideFreqF_cpm == null ? 'Enter spring rates.'
+              : a.rideFreqF_cpm < a.rideFreqR_cpm
                 ? `⚠ REAR FREQ EXCEEDS FRONT — pitch coupling will produce hobby-horse motion. Car bobs front-rear over bumps, tires lose contact intermittently. Stiffen front or soften rear immediately.`
-              : aDisp.rideFreqF_cpm < 95
+              : a.rideFreqF_cpm < 95
                 ? `Front too soft for race — too much body motion, slow weight transfer to RF on entry. Add front spring rate.`
-              : aDisp.rideFreqF_cpm > 130
+              : a.rideFreqF_cpm > 130
                 ? `Front very stiff — fast weight transfer but tire contact patch will skip on bumps. Rough surfaces cost grip.`
               : `In race window — front higher than rear means the chassis settles to a level attitude after a bump (anti-pitch). Predictable transient response.`}
             tip={<Tip
@@ -1677,22 +1683,22 @@ To reach the ideal at current dynamic terms, static would need to be ${a.rfStati
 
           <Metric
             title="Spring Roll Rate & Roll Gradient"
-            measured={aDisp.rollGradient != null ? `${aDisp.rollGradient.toFixed(2)} deg/g (springs only)` : null}
+            measured={a.rollGradient != null ? `${a.rollGradient.toFixed(2)} deg/g (springs only)` : null}
             stock={`${stockStr(STOCK_P71.rollGradient, v => `${v}`)} deg/g — derived from stock springs and 22" CG estimate`}
             optimal={`1.0–1.8 deg/g (with ARBs) for non-aero racing sedan (Milliken Table 16.5)`}
             sev={(() => {
-              const rg = aDisp.rollGradient;
+              const rg = a.rollGradient;
               if (rg == null) return 'info';
               if (rg <= 2.5) return 'good';
               if (rg <= 4.0) return 'warning';
               return 'critical';
             })()}
-            handling={aDisp.rollGradient == null ? 'Enter springs and rear spring track.'
-              : aDisp.rollGradient > 4.0
-                ? `Roll gradient much too high — at ${T.trackG}G apex car will roll ${aDisp.rollFromSprings?.toFixed(1)}° from springs alone. Camber chain is stretched (outside tire goes positive), tires roll over onto sidewalls. Need stiffer springs AND ARBs.`
-              : aDisp.rollGradient > 2.5
-                ? `Springs alone are soft — ARBs must add the rest. With ARB, total roll gradient should hit 1.5 deg/g (~${(aDisp.rollFromSprings * 1.5/aDisp.rollGradient).toFixed(1)}° at apex).`
-              : aDisp.rollGradient < 1.5
+            handling={a.rollGradient == null ? 'Enter springs and rear spring track.'
+              : a.rollGradient > 4.0
+                ? `Roll gradient much too high — at ${T.trackG}G apex car will roll ${a.rollFromSprings?.toFixed(1)}° from springs alone. Camber chain is stretched (outside tire goes positive), tires roll over onto sidewalls. Need stiffer springs AND ARBs.`
+              : a.rollGradient > 2.5
+                ? `Springs alone are soft — ARBs must add the rest. With ARB, total roll gradient should hit 1.5 deg/g (~${(a.rollFromSprings * 1.5/a.rollGradient).toFixed(1)}° at apex).`
+              : a.rollGradient < 1.5
                 ? `Springs already stiffer than 1.5 deg/g target — body barely rolls. ARBs not needed for roll control (can be used for LLTD balance only).`
               : `Springs within expected range. ARBs will fine-tune to final target.`}
             tip={<Tip
@@ -1704,13 +1710,13 @@ To reach the ideal at current dynamic terms, static would need to be ${a.rfStati
 
           <Metric
             title="ARB Requirement (to reach 1.5 deg/g)"
-            measured={aDisp.arbFRequired_deg != null ? `F ${aDisp.arbFRequired_deg.toFixed(0)} / R ${aDisp.arbRRequired_deg?.toFixed(0) ?? '—'} lb-ft/deg` : null}
+            measured={a.arbFRequired_deg != null ? `F ${a.arbFRequired_deg.toFixed(0)} / R ${a.arbRRequired_deg?.toFixed(0) ?? '—'} lb-ft/deg` : null}
             stock={`F ~50 / R 0 lb-ft/deg (stock 29.5mm front bar, no rear bar)`}
             optimal={`Whatever brings springs + ARBs to 1.5 deg/g total — varies with springs`}
-            sev={aDisp.arbFRequired_deg == null ? 'info' : (aDisp.arbFRequired_deg > 0 || (aDisp.arbRRequired_deg ?? 0) > 0) ? 'warning' : 'good'}
-            handling={aDisp.arbFRequired_deg == null ? 'Enter spring rates.'
-              : (aDisp.arbFRequired_deg > 0 || (aDisp.arbRRequired_deg ?? 0) > 0)
-                ? `Springs supply ${((aDisp.kPhiTotal ?? 0) / (aDisp.kPhiRequired ?? 1) * 100).toFixed(0)}% of needed roll stiffness. ARBs must add the rest: Front ${aDisp.arbFRequired_deg?.toFixed(0)} lb-ft/deg + Rear ${aDisp.arbRRequired_deg?.toFixed(0)} lb-ft/deg. Front bar increases front LLTD (push); rear bar increases rear LLTD (loose). Use ARB front-rear ratio to bias balance.`
+            sev={a.arbFRequired_deg == null ? 'info' : (a.arbFRequired_deg > 0 || (a.arbRRequired_deg ?? 0) > 0) ? 'warning' : 'good'}
+            handling={a.arbFRequired_deg == null ? 'Enter spring rates.'
+              : (a.arbFRequired_deg > 0 || (a.arbRRequired_deg ?? 0) > 0)
+                ? `Springs supply ${((a.kPhiTotal ?? 0) / (a.kPhiRequired ?? 1) * 100).toFixed(0)}% of needed roll stiffness. ARBs must add the rest: Front ${a.arbFRequired_deg?.toFixed(0)} lb-ft/deg + Rear ${a.arbRRequired_deg?.toFixed(0)} lb-ft/deg. Front bar increases front LLTD (push); rear bar increases rear LLTD (loose). Use ARB front-rear ratio to bias balance.`
               : `Springs alone exceed the roll gradient target — no ARB needed for roll control. ARBs may still be used for fine LLTD balance.`}
             tip={<Tip
               changeable={true}
@@ -1721,11 +1727,11 @@ To reach the ideal at current dynamic terms, static would need to be ${a.rfStati
 
           <Metric
             title="Target Spring Rate (if not yet selected)"
-            measured={`F ${aDisp.ksF_target.toFixed(0)} / R ${aDisp.ksR_target.toFixed(0)} lb/in`}
+            measured={`F ${a.ksF_target.toFixed(0)} / R ${a.ksR_target.toFixed(0)} lb/in`}
             stock={`F ${stockStr(STOCK_P71.springF)} / R ${stockStr(STOCK_P71.springR)} lb/in — Eaton Detroit Spring catalog (Police/Taxi front, stock rear coil)`}
             optimal={`Match calc target — gives 108/97 cpm front/rear ride frequency`}
             sev="info"
-            handling={`Calculated targets to hit 108 cpm front / 97 cpm rear at IR ${aDisp.irF.toFixed(2)}/${aDisp.irR.toFixed(2)}. F${aDisp.ksF_target.toFixed(0)} lb/in spring → ${(aDisp.ksF_target * aDisp.irF * aDisp.irF).toFixed(0)} lb/in wheel rate. R${aDisp.ksR_target.toFixed(0)} → ${(aDisp.ksR_target * aDisp.irR * aDisp.irR).toFixed(0)} lb/in wheel. Static spring load: F${aDisp.springLoadF.toFixed(0)} lb / R${aDisp.springLoadR.toFixed(0)} lb. Adjust ±50 lb/in for track roughness preferences.`}
+            handling={`Calculated targets to hit 108 cpm front / 97 cpm rear at IR ${a.irF.toFixed(2)}/${a.irR.toFixed(2)}. F${a.ksF_target.toFixed(0)} lb/in spring → ${(a.ksF_target * a.irF * a.irF).toFixed(0)} lb/in wheel rate. R${a.ksR_target.toFixed(0)} → ${(a.ksR_target * a.irR * a.irR).toFixed(0)} lb/in wheel. Static spring load: F${a.springLoadF.toFixed(0)} lb / R${a.springLoadR.toFixed(0)} lb. Adjust ±50 lb/in for track roughness preferences.`}
             tip={<Tip
               changeable={true}
               text="Milliken §21.4: Back-solved from target ride frequency. Formula: K_s = (2πω)² × W_corner / (IR² × 386.4)."
@@ -1733,22 +1739,22 @@ To reach the ideal at current dynamic terms, static would need to be ${a.rfStati
             />}
           />
 
-          {(aDisp.stressF_max || aDisp.stressR_max) && (
+          {(a.stressF_max || a.stressR_max) && (
             <Finding
               title="Spring Stress Check (Milliken §21.2)"
               value={(() => {
-                const sf = aDisp.stressF_wahl ?? aDisp.stressF_max;
-                const sr = aDisp.stressR_wahl ?? aDisp.stressR_max;
+                const sf = a.stressF_wahl ?? a.stressF_max;
+                const sr = a.stressR_wahl ?? a.stressR_max;
                 if (!sf && !sr) return '—';
                 const worst = Math.max(sf ?? 0, sr ?? 0);
                 return `${(worst/1000).toFixed(0)}k psi max`;
               })()} unit=""
               sev={(() => {
-                const sf = aDisp.stressF_wahl ?? aDisp.stressF_max ?? 0;
-                const sr = aDisp.stressR_wahl ?? aDisp.stressR_max ?? 0;
+                const sf = a.stressF_wahl ?? a.stressF_max ?? 0;
+                const sr = a.stressR_wahl ?? a.stressR_max ?? 0;
                 const worst = Math.max(sf, sr);
-                if (worst > aDisp.stressLimit) return 'critical';
-                if (worst > aDisp.stressLimit * 0.85) return 'warning';
+                if (worst > a.stressLimit) return 'critical';
+                if (worst > a.stressLimit * 0.85) return 'warning';
                 return 'good';
               })()}
               tip={<Tip
@@ -1758,18 +1764,18 @@ To reach the ideal at current dynamic terms, static would need to be ${a.rfStati
               />}
             >
               {[
-                aDisp.stressF_max && `Front: static load ${aDisp.springLoadF.toFixed(0)} lb → max load at ${T.trackG}G: ${aDisp.springLoadF_max.toFixed(0)} lb. Uncorrected stress ${aDisp.stressF_max.toFixed(0)} psi${aDisp.wahlF ? `, Wahl-corrected ${aDisp.stressF_wahl?.toFixed(0)} psi (K_w=${aDisp.wahlF.toFixed(2)})` : ''}. Limit: ${aDisp.stressLimit.toLocaleString()} psi. ${(aDisp.stressF_wahl ?? aDisp.stressF_max) > aDisp.stressLimit ? '⚠ EXCEEDS LIMIT — spring may yield under race loads.' : (aDisp.stressF_wahl ?? aDisp.stressF_max) > aDisp.stressLimit * 0.85 ? 'Approaching limit — verify material grade with supplier.' : 'Within safe operating range.'}`,
-                aDisp.stressR_max && `Rear: static load ${aDisp.springLoadR.toFixed(0)} lb → max load at ${T.trackG}G: ${aDisp.springLoadR_max.toFixed(0)} lb. Uncorrected stress ${aDisp.stressR_max.toFixed(0)} psi${aDisp.wahlR ? `, Wahl-corrected ${aDisp.stressR_wahl?.toFixed(0)} psi (K_w=${aDisp.wahlR.toFixed(2)})` : ''}. ${(aDisp.stressR_wahl ?? aDisp.stressR_max) > aDisp.stressLimit ? '⚠ EXCEEDS LIMIT.' : 'Within range.'}`,
-                aDisp.ksF_calc && `Front rate from dimensions (Gd⁴/8D³N): ${aDisp.ksF_calc.toFixed(0)} lb/in ${aDisp.ksLF ? `vs entered ${aDisp.ksLF} lb/in — ${Math.abs(aDisp.ksF_calc - aDisp.ksLF) < 20 ? 'consistent.' : 'discrepancy — verify active coil count or dimensions.'}` : '(no entered rate to compare).'}`,
-                aDisp.ksR_calc && `Rear rate from dimensions: ${aDisp.ksR_calc.toFixed(0)} lb/in ${aDisp.ksRR ? `vs entered ${aDisp.ksRR} lb/in — ${Math.abs(aDisp.ksR_calc - aDisp.ksRR) < 20 ? 'consistent.' : 'discrepancy.'}` : ''}.`,
+                a.stressF_max && `Front: static load ${a.springLoadF.toFixed(0)} lb → max load at ${T.trackG}G: ${a.springLoadF_max.toFixed(0)} lb. Uncorrected stress ${a.stressF_max.toFixed(0)} psi${a.wahlF ? `, Wahl-corrected ${a.stressF_wahl?.toFixed(0)} psi (K_w=${a.wahlF.toFixed(2)})` : ''}. Limit: ${a.stressLimit.toLocaleString()} psi. ${(a.stressF_wahl ?? a.stressF_max) > a.stressLimit ? '⚠ EXCEEDS LIMIT — spring may yield under race loads.' : (a.stressF_wahl ?? a.stressF_max) > a.stressLimit * 0.85 ? 'Approaching limit — verify material grade with supplier.' : 'Within safe operating range.'}`,
+                a.stressR_max && `Rear: static load ${a.springLoadR.toFixed(0)} lb → max load at ${T.trackG}G: ${a.springLoadR_max.toFixed(0)} lb. Uncorrected stress ${a.stressR_max.toFixed(0)} psi${a.wahlR ? `, Wahl-corrected ${a.stressR_wahl?.toFixed(0)} psi (K_w=${a.wahlR.toFixed(2)})` : ''}. ${(a.stressR_wahl ?? a.stressR_max) > a.stressLimit ? '⚠ EXCEEDS LIMIT.' : 'Within range.'}`,
+                a.ksF_calc && `Front rate from dimensions (Gd⁴/8D³N): ${a.ksF_calc.toFixed(0)} lb/in ${a.ksLF ? `vs entered ${a.ksLF} lb/in — ${Math.abs(a.ksF_calc - a.ksLF) < 20 ? 'consistent.' : 'discrepancy — verify active coil count or dimensions.'}` : '(no entered rate to compare).'}`,
+                a.ksR_calc && `Rear rate from dimensions: ${a.ksR_calc.toFixed(0)} lb/in ${a.ksRR ? `vs entered ${a.ksRR} lb/in — ${Math.abs(a.ksR_calc - a.ksRR) < 20 ? 'consistent.' : 'discrepancy.'}` : ''}.`,
               ].filter(Boolean).join('\n')}
             </Finding>
           )}
 
-          {(aDisp.ksF_eff || aDisp.ksR_eff) && (
+          {(a.ksF_eff || a.ksR_eff) && (
             <Finding
               title="Bumpstop Series Rate (Milliken §21.3)"
-              value={`F ${aDisp.ksF_eff?.toFixed(0) ?? '—'} / R ${aDisp.ksR_eff?.toFixed(0) ?? '—'}`} unit="lb/in (coil+bump combined)"
+              value={`F ${a.ksF_eff?.toFixed(0) ?? '—'} / R ${a.ksR_eff?.toFixed(0) ?? '—'}`} unit="lb/in (coil+bump combined)"
               sev="warning"
               tip={<Tip
                 changeable={true}
@@ -1778,8 +1784,8 @@ To reach the ideal at current dynamic terms, static would need to be ${a.rfStati
               />}
             >
               {[
-                aDisp.ksF_eff && `Front: ${aDisp.ksLF ?? aDisp.ksRF} lb/in coil + ${aDisp.ksBumpF} lb/in bumpstop in series = ${aDisp.ksF_eff.toFixed(0)} lb/in combined at bumpstop contact. ${aDisp.ksBumpF < (aDisp.ksLF ?? aDisp.ksRF) * 5 ? `Bumpstop is only ${(aDisp.ksBumpF / (aDisp.ksLF ?? aDisp.ksRF)).toFixed(1)}× coil rate — combined rate is SOFTER than coil alone. Use stiffer bump rubber (≥${((aDisp.ksLF ?? aDisp.ksRF) * 5).toFixed(0)} lb/in) for a true progressive rate increase.` : 'Bumpstop is stiff relative to coil — effective rate increase at contact.'}`,
-                aDisp.ksR_eff && `Rear: ${aDisp.ksLR ?? aDisp.ksRR} lb/in coil + ${aDisp.ksBumpR} lb/in bumpstop = ${aDisp.ksR_eff.toFixed(0)} lb/in combined.`,
+                a.ksF_eff && `Front: ${a.ksLF ?? a.ksRF} lb/in coil + ${a.ksBumpF} lb/in bumpstop in series = ${a.ksF_eff.toFixed(0)} lb/in combined at bumpstop contact. ${a.ksBumpF < (a.ksLF ?? a.ksRF) * 5 ? `Bumpstop is only ${(a.ksBumpF / (a.ksLF ?? a.ksRF)).toFixed(1)}× coil rate — combined rate is SOFTER than coil alone. Use stiffer bump rubber (≥${((a.ksLF ?? a.ksRF) * 5).toFixed(0)} lb/in) for a true progressive rate increase.` : 'Bumpstop is stiff relative to coil — effective rate increase at contact.'}`,
+                a.ksR_eff && `Rear: ${a.ksLR ?? a.ksRR} lb/in coil + ${a.ksBumpR} lb/in bumpstop = ${a.ksR_eff.toFixed(0)} lb/in combined.`,
               ].filter(Boolean).join('\n')}
             </Finding>
           )}
