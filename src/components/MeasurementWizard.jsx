@@ -412,27 +412,45 @@ const STEPS = [
         <Sub>Spring rate is stamped on the spring or found by part number. Do NOT confuse with wheel
           rate — wheel rate = spring rate × IR².</Sub>
         <Sub>
-          <strong>Front Installation Ratio (IR) — how to measure:</strong><br />
-          1. Car at ride height on flat ground.<br />
-          2. Mark the current spring length with a paint pen or tape on the coil.<br />
-          3. Place a floor jack under the lower control arm near the ball joint. Jack the wheel up
-          exactly 1.0&quot; — measure the rise at the wheel centerline with a tape.<br />
-          4. Measure how much the spring compressed (distance from your mark to current top of coil).<br />
-          5. IR = spring compression ÷ 1.0 (the wheel travel).<br />
-          Stock P71 SLA front: ~0.85 (spring pickup 11&quot; from pivot on a 13&quot; arm → 11÷13 = 0.846).
-          If you can&apos;t measure, use 0.85.
+          <strong>Front IR — estimated from your spring pickup measurement:</strong> IR = spring pickup
+          distance ÷ lower arm length. You measured the spring pickup distance in Steps 3 &amp; 4 —
+          the estimate below is calculated automatically from those numbers using the P71&apos;s 13.0&quot;
+          arm length. Accept it or override with a direct measurement.
         </Sub>
         <Sub>
-          <strong>Rear IR — P71 solid axle:</strong> The rear coil springs sit directly on the axle
-          perches with no lever arm — 1&quot; of axle movement = 1&quot; of spring compression. IR = 1.0.
-          Only enter a different value if your springs are mounted at a significant angle or on an
-          offset bracket.
+          <strong>Front IR — direct measurement (more accurate):</strong><br />
+          1. Car at ride height on flat ground.<br />
+          2. Mark the current spring length on the coil with a paint pen or tape.<br />
+          3. Floor jack under the lower control arm near the ball joint. Jack the wheel up
+          exactly 1.0&quot; — confirm rise at the wheel centerline with a tape.<br />
+          4. Measure how much the spring compressed from your mark.<br />
+          5. IR = spring compression ÷ 1.0.
         </Sub>
-        <Sub><strong>Rear spring track:</strong> tape measure along the top of the axle tube from the
+        <Sub>
+          <strong>Rear IR — P71 solid axle:</strong> Springs sit directly on the axle perches —
+          1&quot; of axle travel = 1&quot; of spring compression → IR = 1.0. Only differs if springs
+          are on an angled or offset bracket.
+        </Sub>
+        <Sub><strong>Rear spring track:</strong> tape along the top of the axle tube from the
           center of the left spring perch cup to the center of the right perch cup.</Sub>
       </>
     ),
-    fields: (data, set, setN) => (
+    fields: (data, set, setN) => {
+      // Geometric IR estimate from spring pickup measurements entered in Steps 3 & 4.
+      // P71 lower arm length is a fixed 13.0" constant.
+      const P71_ARM = 13.0;
+      const lfPickup = parseFloat(data.springPickup?.LF);
+      const rfPickup = parseFloat(data.springPickup?.RF);
+      const validPickups = [lfPickup, rfPickup].filter(v => !isNaN(v) && v > 0);
+      const avgPickup = validPickups.length > 0
+        ? validPickups.reduce((a, b) => a + b, 0) / validPickups.length
+        : null;
+      const irEstimate = avgPickup ? (avgPickup / P71_ARM) : null;
+      const irEstStr = irEstimate ? irEstimate.toFixed(3) : null;
+      const currentFrontIR = data.installRatio?.front ?? '';
+      const irMatchesEstimate = irEstStr && Math.abs(parseFloat(currentFrontIR) - irEstimate) < 0.001;
+
+      return (
       <>
         <div className="ml-tire-grid" style={{ marginBottom: 12 }}>
           {['LF', 'RF', 'LR', 'RR'].map(pos => (
@@ -444,12 +462,45 @@ const STEPS = [
         </div>
         <Row>
           <WField label="Front IR (per side)"
-            hint="Mark spring length at ride height. Jack wheel up exactly 1.0&quot; at the wheel centerline. Measure spring compression from your mark. IR = spring compression ÷ 1.0. Stock P71: 0.85. Plausible range: 0.75–0.90. A value below 0.70 or above 1.0 is almost certainly wrong — re-measure.">
-            <NIn value={data.installRatio?.front ?? ''} onChange={v => setN('installRatio', 'front', v)} placeholder="e.g. 0.85" step="0.01" />
+            hint="IR = spring pickup ÷ arm length (geometric estimate), or measure directly: jack wheel 1&quot;, measure spring compression, divide. Plausible range 0.75–0.90. Below 0.70 or above 1.0 is almost certainly wrong.">
+            <NIn value={currentFrontIR} onChange={v => setN('installRatio', 'front', v)} placeholder="e.g. 0.85" step="0.01" />
+            {irEstStr && (
+              <div style={{ marginTop: 5, fontSize: 11, color: '#94a3b8', display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
+                <span>
+                  Geometric estimate: <strong style={{ color: '#e2e8f0' }}>{irEstStr}</strong>
+                  {avgPickup && (
+                    <span style={{ color: '#64748b' }}>
+                      {' '}({validPickups.length === 2
+                        ? `avg of LF ${lfPickup}&quot; + RF ${rfPickup}&quot;`
+                        : `${avgPickup}&quot;`} ÷ ${P71_ARM}&quot; arm)
+                    </span>
+                  )}
+                </span>
+                {!irMatchesEstimate && (
+                  <button
+                    style={{ background: 'rgba(59,130,246,0.15)', border: '1px solid rgba(59,130,246,0.35)', borderRadius: 4, color: '#93c5fd', fontSize: 11, padding: '2px 8px', cursor: 'pointer' }}
+                    onClick={() => setN('installRatio', 'front', irEstStr)}
+                  >
+                    Use {irEstStr}
+                  </button>
+                )}
+                {irMatchesEstimate && (
+                  <span style={{ color: '#34d399' }}>✓ using estimate</span>
+                )}
+              </div>
+            )}
+            {!irEstStr && (
+              <div style={{ marginTop: 5, fontSize: 11, color: '#64748b' }}>
+                Enter spring pickup distances in Steps 3 &amp; 4 to auto-calculate an estimate.
+              </div>
+            )}
           </WField>
           <WField label="Rear IR"
-            hint="P71 rear: springs sit directly on axle perches, no lever arm. 1&quot; of axle travel = 1&quot; of spring compression → IR = 1.0. Only change this if your springs are on an angled or offset bracket — in that case measure the same way as front (jack axle 1&quot;, measure spring compression).">
+            hint="P71 rear: springs sit directly on axle perches, no lever arm. 1&quot; of axle travel = 1&quot; of spring compression → IR = 1.0. Only change if springs are on an angled or offset bracket.">
             <NIn value={data.installRatio?.rear ?? ''} onChange={v => setN('installRatio', 'rear', v)} placeholder="e.g. 1.0" step="0.01" />
+            <div style={{ marginTop: 5, fontSize: 11, color: '#94a3b8' }}>
+              Solid axle direct-mount → IR = <strong style={{ color: '#e2e8f0' }}>1.0</strong>
+            </div>
           </WField>
           <WField label="Rear spring track (inches)"
             hint="Center-to-center between rear spring perch cups on the axle. Wider = more rear roll stiffness. Stock est: ~44&quot;.">
@@ -470,7 +521,8 @@ const STEPS = [
           </WField>
         </Row>
       </>
-    ),
+      );
+    },
     fillDefaults: () => ({
       springRate:    { LF: P71.springFront, RF: P71.springFront, LR: P71.springRear, RR: P71.springRear },
       installRatio:  { front: P71.installRatioFront, rear: P71.installRatioRear },
