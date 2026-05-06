@@ -602,7 +602,7 @@ const S = (val, verified, source = '') => ({ val, verified, source });
 const STOCK_P71 = {
   // ── Roll centers (back-solved to match published 2–5" SLA passenger-sedan range) ──
   frontRC:        S(4.0,    'estimated', 'Back-solved to match Suspension Secrets / Milliken passenger-SLA RC range. Earlier 10.5" value was wrong (produced ~19" computed RC).'),
-  rearRC:         S(11.0,   'estimated', 'P71 uses Panhard bar (not Watts); pivot height ~11" est. from frame rail height. Aftermarket Watts conversions adjustable 8–14".'),
+  rearRC:         S(11.0,   'estimated', 'P71 uses a Watts link rear (factory). Center pivot height ~11" est. from frame bracket geometry. No published OEM figure. Aftermarket adjustable Watts brackets allow ±1–4".'),
   rcDiff:         S(-7.0,   'derived',   'frontRC − rearRC (both estimated)'),
   cgHeight:       S(22.0,   'estimated', 'Body-on-frame full-size sedan typical 21–23". No published P71 value.'),
   momentArm:      S(18.0,   'derived',   'cgHeight − frontRC (both estimated)'),
@@ -621,7 +621,7 @@ const STOCK_P71 = {
   bjAsymmetry:    S(0.0,    'verified',  'Stock factory build is symmetric L/R'),
   pivotAsymmetry: S(0.0,    'verified',  'Stock factory build is symmetric L/R'),
   fvsa:           S(32.5,   'derived',   'Computed from back-solved hardpoints'),
-  scrubRadius:    S(0.45,   'derived',   'wh × tan(KPI) − offset; KPI 9.5° is typical SLA value not P71-verified'),
+  scrubRadius:    S(0.45,   'derived',   'wh × tan(KPI) − offset. KPI 9.5° is "typical SLA" — not P71-measured; the value in raceSimulation.js claims "confirmed" but no source. Stock 16x7 wheel offset 1.75". Verify by measuring the kingpin axis tilt directly.'),
   wheelHeight:    S(13.6,   'published', 'Tire Rack: 235/55R17 nominal radius at 32 psi cold'),
 
   // ── LLTD (derived from estimated RC values — directly affected if RC is wrong) ──
@@ -650,11 +650,11 @@ const STOCK_P71 = {
   rake:           S(0.5,    'estimated', 'Slight nose-up rake observed on stock cars; not from spec sheet'),
 
   // ── Damping (Milliken Table 22.2 passenger-car typical, not Panther-measured) ──
-  zetaBumpF:      S(0.25,   'estimated', 'Milliken Table 22.2 passenger-car typical. Stock KYB Excel-G or Motorcraft strut not dyno-verified.'),
-  zetaRebF:       S(0.50,   'estimated', 'Same'),
-  zetaBumpR:      S(0.25,   'estimated', 'Same'),
-  zetaRebR:       S(0.50,   'estimated', 'Same'),
-  brRatio:        S(2.0,    'estimated', 'Standard 1:2 manufactured ratio for passenger shocks'),
+  zetaBumpF:      S(0.25,   'estimated', 'Estimated for stock OEM Motorcraft strut (factory P71 fitment). Never publicly dyno-tested. Range 0.20–0.30 is typical for passenger-car comfort tuning per Milliken Table 22.2. To verify: dyno your shock at 5 in/sec.'),
+  zetaRebF:       S(0.50,   'estimated', 'Estimated stock OEM front rebound. Range 0.40–0.55 typical. Verify by shock dyno.'),
+  zetaBumpR:      S(0.25,   'estimated', 'Estimated stock OEM rear bump (KYB or Motorcraft monotube/twin-tube). Verify by shock dyno.'),
+  zetaRebR:       S(0.50,   'estimated', 'Estimated stock OEM rear rebound. Verify by shock dyno.'),
+  brRatio:        S(2.0,    'verified',  'Standard 1:2 bump:rebound ratio is manufactured into passenger shocks at the valve stack. Universal for OEM applications unless reshimmed.'),
 };
 
 // Helper: format a stock value with an "(est.)" tag if not published-verified.
@@ -931,20 +931,20 @@ export default function GeometryAnalysis({ geo }) {
         />
 
         <Metric
-          title="Rear Roll Center (Panhard bar / Watts link)"
+          title="Rear Roll Center (Watts Link)"
           measured={`${a.rearRC.toFixed(2)}"`}
-          stock={`${stockStr(STOCK_P71.rearRC, v => `${v}"`)} — STOCK P71 USES A PANHARD BAR (not a Watts link); midpoint height estimated. No published OEM value.`}
+          stock={`${stockStr(STOCK_P71.rearRC, v => `${v}"`)} — Watts link center pivot height. No published Ford figure; estimated from frame bracket geometry.`}
           optimal={`${T.idealRearRC_low}–${T.idealRearRC_high}" for ${T.label}`}
           sev={rearRCSev}
           handling={a.rearRC > T.idealRearRC_high
-            ? `Rear RC too high — rear axle loads up geometrically faster than front. Tail sets first in corner = oversteer / loose entry. Lower the Panhard bar (or drop Watts pivot if converted) by ${(a.rearRC - T.idealRearRC_high).toFixed(1)}–${(a.rearRC - (T.idealRearRC_high + T.idealRearRC_low)/2).toFixed(1)}".`
+            ? `Rear RC too high — rear axle loads up geometrically faster than front. Tail sets first in corner = oversteer / loose entry. Lower the Watts link center pivot by ${(a.rearRC - T.idealRearRC_high).toFixed(1)}–${(a.rearRC - (T.idealRearRC_high + T.idealRearRC_low)/2).toFixed(1)}".`
             : a.rearRC < T.idealRearRC_low
               ? `Rear RC too low — rear elastic transfer dominates, slow weight build on rear tires. Car may understeer mid-corner as front loads up before rear catches up.`
-            : `In target — rear lateral restraint providing balanced geometric transfer. Predictable rotation through corner.`}
+            : `In target — Watts link providing balanced geometric transfer. Predictable rotation through corner.`}
           tip={<Tip
             changeable={true}
-            text={`Stock P71 uses a Panhard bar — its roll center sits at the midpoint of the bar, around 11" off the ground at ride height. Aftermarket Watts link conversions move the RC to the center pivot of the Watts. Target ${T.idealRearRC_low}–${T.idealRearRC_high}" for ${T.label}. The Panhard bar also creates a small lateral side-load asymmetry as the suspension cycles (the axle moves slightly side-to-side in an arc) — Watts link eliminates this. Roll steer is controlled by the fore-aft inclination of the lateral restraint in side view.`}
-            fixMethod={`Stock Panhard bar height is fixed by chassis brackets — adjustable Panhard bars or Watts conversions allow ±1–4". Each 1" raise increases rear geometric LLTD ~0.5–1%. ${isOval ? 'Target 12–16" for oval.' : 'For figure-8 target 10–18" symmetric.'} Keep lateral restraint as level as possible in side view to minimize roll steer.`}
+            text={`The P71 has a factory Watts link rear (not Panhard) — its roll center sits at the center pivot bolt mounted on the axle housing bracket, between the two horizontal balance arms. Stock height ~11" est. (no published Ford figure). Watts gives near-linear lateral motion of the axle (better than a Panhard arc). Aftermarket adjustable Watts brackets allow raising or lowering by 1–4". Target ${T.idealRearRC_low}–${T.idealRearRC_high}" for ${T.label}.`}
+            fixMethod={`Adjustable Watts link center pivot bracket. Each 1" raise increases rear geometric LLTD ~0.5–1%. ${isOval ? 'Target 12–16" for oval.' : 'For figure-8 target 10–18" symmetric.'} Keep Watts link as level as possible in side view to minimize roll steer.`}
           />}
         />
 
@@ -1303,8 +1303,8 @@ To reach the ideal at current dynamic terms, static would need to be ${a.rfStati
             : `Moderate scrub — adequate feel but heavier steering. Single-wheel impacts cause noticeable kickback.`}
           tip={<Tip
             changeable={false}
-            text="Scrub radius is the distance between the kingpin axis projected to ground and the tire contact patch center. Fixed by KPI (9.5°, cast into spindle) and wheel offset."
-            fixMethod="Fixed on P71. Wheel spacers/different offset can modify slightly — do not change unless specific steering complaint."
+            text="Scrub radius is the distance between the kingpin axis projected to ground and the tire contact patch center. Fixed by KPI (cast into the spindle/knuckle) and wheel offset. The model assumes KPI = 9.5° based on typical SLA values — this is NOT P71-verified. To be sure: measure your spindle's kingpin tilt directly, or look up the spindle part number in a service manual."
+            fixMethod="Fixed by KPI (spindle casting, not adjustable) and wheel offset. Different wheel offset shifts scrub by the same amount the offset changes. Do not modify unless you have a specific steering complaint."
           />}
         />
 

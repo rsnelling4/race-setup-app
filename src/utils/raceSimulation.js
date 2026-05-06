@@ -152,7 +152,9 @@ export const VEH = {
 };
 
 // ============ FRONT SUSPENSION GEOMETRY ============
-// Kingpin inclination (KPI): 9.5° (measured/confirmed for P71 front SLA)
+// Kingpin inclination (KPI): 9.5° — TYPICAL SLA value, NOT P71-measured.
+// (Earlier comment claimed "measured/confirmed" but no source was documented.
+//  Verify by measuring your spindle's kingpin-axis tilt directly.)
 // Wheel: 17×7 steel, offset +44.45 mm = +1.75" (factory P71)
 // Tire radius: 13.6" (235/55R17)
 //

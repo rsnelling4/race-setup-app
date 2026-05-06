@@ -1017,8 +1017,8 @@ function GeoEditor({ editing, setEditing }) {
       {/* Rear Roll Center */}
       <div className="ml-section">
         <h3 className="ml-section-heading">Rear Roll Center &amp; Spring Base</h3>
-        <Field label="Rear roll center height (Panhard bar or Watts link pivot, inches)"
-          hint="STOCK P71 USES A PANHARD BAR — not a Watts link. The Panhard bar runs across the car between the axle and the chassis; its roll center height equals the bar's vertical midpoint at ride height. WHAT TO MEASURE: car at ride height with driver weight, crawl under the rear and find the Panhard bar (or Watts link if converted). Measure floor-to-bar-center at the bar's midpoint between its two end mounts. STOCK ESTIMATE: ~11&quot; (back-solved — stock Panhard bar passes near frame rail height; not from a published Ford spec). If you have an aftermarket Watts link conversion, measure the center pivot bolt height instead. This value directly sets rear roll center and rear geometric LLTD — a 1&quot; error here moves the rear-share number by ~3%.">
+        <Field label="Rear roll center height (Watts link center pivot, inches)"
+          hint="STOCK P71 HAS A WATTS LINK from the factory. WHAT TO MEASURE: car at ride height with driver weight, crawl under the rear of the car. Find the Watts link center pivot bolt — it's mounted on a bracket on the axle housing, centered left-to-right, between the two horizontal balance arms. WHERE: center of that pivot bolt. HOW: plumb bob from bolt center straight down to the floor; read with a tape. STOCK ESTIMATE: ~11&quot; (estimated from frame bracket geometry — no published Ford figure). This value directly sets rear roll center and rear geometric LLTD — a 1&quot; error here moves the rear-share number by ~3%.">
           <NumIn value={editing.rearRollCenter} onChange={v => set('rearRollCenter', v)} placeholder="e.g. 11.0 (est)" step="0.125" />
         </Field>
         <Field label="Rear spring base width (inches)"
