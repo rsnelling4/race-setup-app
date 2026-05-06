@@ -102,7 +102,7 @@ export function analyzeGeometry(geo, trackType = 'oval') {
   const _ksRF = parseFloat(geo.springRate?.RF) || null;
   const _ksLR = parseFloat(geo.springRate?.LR) || null;
   const _ksRR = parseFloat(geo.springRate?.RR) || null;
-  const _irF  = parseFloat(geo.installRatio?.front) || 0.52;
+  const _irF  = parseFloat(geo.installRatio?.front) || 0.85;  // P71 SLA — 11" spring pickup ÷ 13" arm
   const _irR  = parseFloat(geo.installRatio?.rear)  || 1.0;
   const _tsRear = parseFloat(geo.rearSpringTrack) || num(geo.rearSpringBase) || 44;
   const _kwFavg_pre = (_ksLF && _ksRF) ? ((_ksLF + _ksRF)/2) * _irF * _irF
@@ -238,8 +238,8 @@ export function analyzeGeometry(geo, trackType = 'oval') {
   const ksRF = parseFloat(geo.springRate?.RF) || null;
   const ksLR = parseFloat(geo.springRate?.LR) || null;
   const ksRR = parseFloat(geo.springRate?.RR) || null;
-  const irF  = parseFloat(geo.installRatio?.front) || 0.52;  // P71 SLA default
-  const irR  = parseFloat(geo.installRatio?.rear)  || 1.0;   // solid axle default
+  const irF  = parseFloat(geo.installRatio?.front) || 0.85;  // P71 SLA — 11" spring pickup ÷ 13" arm
+  const irR  = parseFloat(geo.installRatio?.rear)  || 1.0;   // solid axle direct-acting
   const tsRear = parseFloat(geo.rearSpringTrack) || num(geo.rearSpringBase) || 44; // rear spring track in
 
   // Wheel rates = spring rate × IR²
@@ -631,13 +631,13 @@ const STOCK_P71 = {
   // ── Springs / wheel rates / frequencies ──
   springF:        S(475,    'published', 'Eaton Detroit Spring catalog: P71 Police/Taxi front strut (most common). Civilian base 440, Heavy Duty 700.'),
   springR:        S(160,    'published', 'Eaton catalog + multiple Panther vendors confirm stock rear coil'),
-  irF:            S(0.52,   'estimated', 'Typical SLA installation ratio ~0.50–0.55. Not P71-measured. Verify by measuring spring travel ÷ wheel travel over a known stroke.'),
+  irF:            S(0.85,   'derived',   'Geometric: spring pickup ~11" out on a 13" lower arm = 11/13 ≈ 0.85. Verify on your car by jacking the front wheel up exactly 1" and measuring spring compression — IR = spring travel ÷ wheel travel.'),
   irR:            S(1.0,    'verified',  'Geometric truth: solid axle, spring directly between axle tube and frame'),
-  kwF:            S(128,    'derived',   '475 × 0.52² = 128 (depends on irF being correct)'),
-  kwR:            S(160,    'derived',   '160 × 1.0² = 160'),
-  rideFreqF:      S(80,     'derived',   'Computed from kwF and sprung corner mass'),
-  rideFreqR:      S(88,     'derived',   'Computed from kwR and sprung corner mass'),
-  rollGradient:   S(5.5,    'derived',   'Computed from spring rates + cgHeight (cgHeight is estimated)'),
+  kwF:            S(343,    'derived',   '475 lb/in × 0.85² ≈ 343 lb/in (depends on irF being correct)'),
+  kwR:            S(160,    'derived',   '160 lb/in × 1.0² = 160 lb/in'),
+  rideFreqF:      S(112,    'derived',   'Computed from kwF=343 and sprung corner mass'),
+  rideFreqR:      S(89,     'derived',   'Computed from kwR=160 and sprung corner mass'),
+  rollGradient:   S(5.4,    'derived',   'Springs-only roll gradient at 22" CG. Stock ARB adds stiffness — total likely ~3.5 deg/g.'),
 
   // ── ARB ──
   arbDiameter:    S(1.161,  'published', 'Confirmed Police Interceptor 29.5mm solid front bar (multiple vendor catalogs)'),
@@ -931,20 +931,20 @@ export default function GeometryAnalysis({ geo }) {
         />
 
         <Metric
-          title="Rear Roll Center (Watts Link)"
+          title="Rear Roll Center (Panhard bar / Watts link)"
           measured={`${a.rearRC.toFixed(2)}"`}
-          stock={`${stockStr(STOCK_P71.rearRC, v => `${v}"`)} — Panhard bar pivot height estimated from frame rail. No published OEM value.`}
+          stock={`${stockStr(STOCK_P71.rearRC, v => `${v}"`)} — STOCK P71 USES A PANHARD BAR (not a Watts link); midpoint height estimated. No published OEM value.`}
           optimal={`${T.idealRearRC_low}–${T.idealRearRC_high}" for ${T.label}`}
           sev={rearRCSev}
           handling={a.rearRC > T.idealRearRC_high
-            ? `Rear RC too high — rear axle loads up geometrically faster than front. Tail sets first in corner = oversteer / loose entry. Watts link likely needs to drop ${(a.rearRC - T.idealRearRC_high).toFixed(1)}–${(a.rearRC - (T.idealRearRC_high + T.idealRearRC_low)/2).toFixed(1)}".`
+            ? `Rear RC too high — rear axle loads up geometrically faster than front. Tail sets first in corner = oversteer / loose entry. Lower the Panhard bar (or drop Watts pivot if converted) by ${(a.rearRC - T.idealRearRC_high).toFixed(1)}–${(a.rearRC - (T.idealRearRC_high + T.idealRearRC_low)/2).toFixed(1)}".`
             : a.rearRC < T.idealRearRC_low
               ? `Rear RC too low — rear elastic transfer dominates, slow weight build on rear tires. Car may understeer mid-corner as front loads up before rear catches up.`
-            : `In target — Watts link providing balanced geometric transfer to rear. Predictable rotation through corner.`}
+            : `In target — rear lateral restraint providing balanced geometric transfer. Predictable rotation through corner.`}
           tip={<Tip
             changeable={true}
-            text={`The Watts link pivot height sets rear RC. Target ${T.idealRearRC_low}–${T.idealRearRC_high}" for ${T.label}. Aftermarket adjustable Watts link brackets allow raising or lowering by 1–4". Note: the Watts link roll axis (line connecting front and rear lateral restraint centers in the side view) also controls roll steer — if the roll axis tilts downward toward the front, the axle has roll understeer geometry; tilted up toward the front = roll oversteer. (Milliken §17.4)`}
-            fixMethod={`Adjustable Watts link center pivot bracket. Each 1" raise increases rear geometric LLTD ~0.5–1%. ${isOval ? 'Target 12–16" for oval.' : 'For figure-8 target 10–18" — symmetric handling, lower RC reduces rear-end stiffness in both directions.'} Keep Watts link as level as possible in the side view to minimize roll steer.`}
+            text={`Stock P71 uses a Panhard bar — its roll center sits at the midpoint of the bar, around 11" off the ground at ride height. Aftermarket Watts link conversions move the RC to the center pivot of the Watts. Target ${T.idealRearRC_low}–${T.idealRearRC_high}" for ${T.label}. The Panhard bar also creates a small lateral side-load asymmetry as the suspension cycles (the axle moves slightly side-to-side in an arc) — Watts link eliminates this. Roll steer is controlled by the fore-aft inclination of the lateral restraint in side view.`}
+            fixMethod={`Stock Panhard bar height is fixed by chassis brackets — adjustable Panhard bars or Watts conversions allow ±1–4". Each 1" raise increases rear geometric LLTD ~0.5–1%. ${isOval ? 'Target 12–16" for oval.' : 'For figure-8 target 10–18" symmetric.'} Keep lateral restraint as level as possible in side view to minimize roll steer.`}
           />}
         />
 
@@ -1533,14 +1533,14 @@ To reach the ideal at current dynamic terms, static would need to be ${a.rfStati
           <Metric
             title="Wheel Rates"
             measured={a.kwFavg != null ? `F ${a.kwFavg.toFixed(0)} / R ${a.kwRavg?.toFixed(0) ?? '—'} lb/in` : null}
-            stock={`F ${stockStr(STOCK_P71.kwF)} / R ${stockStr(STOCK_P71.kwR)} lb/in — derived: 475 × 0.52² (IR estimated) / 160 × 1.0² (IR exact)`}
+            stock={`F ${stockStr(STOCK_P71.kwF)} / R ${stockStr(STOCK_P71.kwR)} lb/in — derived: 475 × 0.85² (IR from arm geometry) / 160 × 1.0²`}
             optimal={`F 130–250 / R 130–200 lb/in (race-tuned, depends on track roughness)`}
             sev={a.kwFavg != null ? 'info' : 'info'}
             handling={a.kwFavg == null ? 'Enter spring rates to compute.'
               : `Wheel rate determines how much load each tire sees per inch of wheel travel. Higher = stiffer ride, less body roll, more responsive but less compliant on rough surfaces. F: ${a.kwLF?.toFixed(0) ?? '—'}/${a.kwRF?.toFixed(0) ?? '—'}, R: ${a.kwLR?.toFixed(0) ?? '—'}/${a.kwRR?.toFixed(0) ?? '—'}. Note: wheel rate is ALWAYS lower than spring rate because IR² < 1.`}
             tip={<Tip
               changeable={true}
-              text="Milliken §16.1: Wheel center rate = spring rate × installation ratio². P71 SLA front IR ≈ 0.52."
+              text={`Milliken §16.1: Wheel center rate = spring rate × installation ratio². P71 SLA front IR ≈ 0.85 (geometric: ~11" spring pickup ÷ 13" arm length). Verify on your car by jacking the wheel up 1" and measuring spring travel.`}
               fixMethod="Change spring rate or move spring attachment outboard (increases IR). Spring rate is the easier P71 adjustment."
             />}
           />

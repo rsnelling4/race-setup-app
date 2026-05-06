@@ -19,7 +19,7 @@ const P71_STOCK = {
   // Springs
   springFront:      475,    // lbs/in — P71 Police/Taxi strut assembly (FCS/Monroe/PRT)
   springRear:       160,    // lbs/in — P71 stock rear coil spring
-  installRatioFront: 0.87,  // dimensionless — SLA spring-on-lower-arm motion ratio (MR_FRONT)
+  installRatioFront: 0.85,  // dimensionless — geometric: 11" spring pickup ÷ 13" lower arm length
   installRatioRear:  1.0,   // dimensionless — solid axle, spring at axle center
   // Track geometry
   trackFront:       64.0,   // inches — measured front track width (contact patch centers)
@@ -870,7 +870,7 @@ function GeoEditor({ editing, setEditing }) {
       <div className="ml-section">
         <h3 className="ml-section-heading">Spring Rates &amp; Installation Ratios (Milliken Ch.16)</h3>
         <p className="ml-section-note">
-          Spring rate at the spring (lb/in). For coil springs: read the rate stamped on the spring or from the manufacturer spec. Installation ratio (IR) is the fraction of wheel travel that compresses the spring — for the P71 SLA front, IR ≈ 0.52 (spring mounted inboard of wheel center). Wheel rate = spring rate × IR². Ride frequency and roll gradient are computed from these values.
+          Spring rate at the spring (lb/in). For coil springs: read the rate stamped on the spring or from the manufacturer spec. Installation ratio (IR) is the fraction of wheel travel that compresses the spring — for the P71 SLA front, IR ≈ 0.85 (spring mounted ~11" out on a 13" lower arm; 11/13 ≈ 0.85). Wheel rate = spring rate × IR². Ride frequency and roll gradient are computed from these values.
         </p>
 
         <h4 style={{ color: '#94a3b8', fontFamily: 'monospace', fontSize: 12, margin: '12px 0 6px' }}>Spring Rate (lb/in at spring)</h4>
@@ -884,11 +884,11 @@ function GeoEditor({ editing, setEditing }) {
         </div>
 
         <h4 style={{ color: '#94a3b8', fontFamily: 'monospace', fontSize: 12, margin: '12px 0 6px' }}>Installation Ratio</h4>
-        <p className="ml-section-note">Inches of spring compression per inch of wheel travel. Measure by jacking wheel up 1 inch and measuring spring length change, or use direct measurement method (Milliken §16.3). P71 SLA front ≈ 0.52. P71 rear solid axle spring-to-axle ≈ 1.0 (spring at axle center).</p>
+        <p className="ml-section-note">Inches of spring compression per inch of wheel travel. Measure by jacking wheel up 1 inch and measuring spring length change, or use direct measurement method (Milliken §16.3). P71 SLA front ≈ 0.85 (geometric: 11" spring pickup ÷ 13" arm). P71 rear solid axle spring-to-axle ≈ 1.0 (spring at axle center).</p>
         <div className="ml-row">
           <Field label="Front IR (per side)"
-            hint="Jack the front wheel up exactly 1 inch from ride height. Measure how much the spring compresses. IR = spring compression / wheel travel. Stock P71 SLA: IR ≈ 0.87 (spring pickup ~11&quot; from pivot, arm ~13&quot; total — confirmed by the measured 3.1°/G baseline body roll). Typical range 0.80–0.90.">
-            <NumIn value={editing.installRatio?.front ?? ''} onChange={v => setN('installRatio', 'front', v)} placeholder="e.g. 0.52" step="0.01" />
+            hint="HOW: Jack the front wheel up exactly 1 inch from ride height. Measure how much the spring compresses (mark the spring with chalk, measure the gap change). IR = spring compression ÷ wheel travel. STOCK ESTIMATE: 0.85 (geometric: ~11&quot; spring pickup distance from inner pivot ÷ 13&quot; total arm length). Typical SLA passenger car range 0.75–0.90. The earlier value of 0.52 used in this app was wrong and underpredicted wheel rate by ~3×.">
+            <NumIn value={editing.installRatio?.front ?? ''} onChange={v => setN('installRatio', 'front', v)} placeholder="e.g. 0.85 (est)" step="0.01" />
           </Field>
           <Field label="Rear IR (per side)"
             hint="For the P71 solid rear axle: the coil springs sit on perches on the axle housing. If the spring is directly above the axle, IR ≈ 1.0. If mounted at an angle or offset, measure directly. Leaf spring equivalent: IR is inherently 1.0 for a spring sitting at the axle.">
@@ -975,7 +975,7 @@ function GeoEditor({ editing, setEditing }) {
         {(() => {
           const ksF = parseFloat(editing.springRate?.LF || editing.springRate?.RF);
           const ksR = parseFloat(editing.springRate?.LR || editing.springRate?.RR);
-          const irF = parseFloat(editing.installRatio?.front) || 0.52;
+          const irF = parseFloat(editing.installRatio?.front) || 0.85;
           const irR = parseFloat(editing.installRatio?.rear)  || 1.0;
           if (!ksF && !ksR) return null;
           const kwF = ksF ? (ksF * irF * irF).toFixed(0) : '—';
@@ -1017,13 +1017,13 @@ function GeoEditor({ editing, setEditing }) {
       {/* Rear Roll Center */}
       <div className="ml-section">
         <h3 className="ml-section-heading">Rear Roll Center &amp; Spring Base</h3>
-        <Field label="Watts link center pivot height from floor (inches)"
-          hint="Car at ride height with driver weight (~200 lbs on seat). Crawl under the rear of the car and locate the Watts link center pivot bolt — it's on a bracket mounted on the axle housing, centered left-to-right, connecting the two horizontal balance arms. Measure from the center of that bolt straight down to the floor. Stock P71: 14.5&quot; (physically measured — the Watts link bracket sets this at a fixed height). This directly sets the rear roll center height in the model — wrong value = wrong rear LLTD.">
-          <NumIn value={editing.rearRollCenter} onChange={v => set('rearRollCenter', v)} placeholder="e.g. 14.5" step="0.125" />
+        <Field label="Rear roll center height (Panhard bar or Watts link pivot, inches)"
+          hint="STOCK P71 USES A PANHARD BAR — not a Watts link. The Panhard bar runs across the car between the axle and the chassis; its roll center height equals the bar's vertical midpoint at ride height. WHAT TO MEASURE: car at ride height with driver weight, crawl under the rear and find the Panhard bar (or Watts link if converted). Measure floor-to-bar-center at the bar's midpoint between its two end mounts. STOCK ESTIMATE: ~11&quot; (back-solved — stock Panhard bar passes near frame rail height; not from a published Ford spec). If you have an aftermarket Watts link conversion, measure the center pivot bolt height instead. This value directly sets rear roll center and rear geometric LLTD — a 1&quot; error here moves the rear-share number by ~3%.">
+          <NumIn value={editing.rearRollCenter} onChange={v => set('rearRollCenter', v)} placeholder="e.g. 11.0 (est)" step="0.125" />
         </Field>
         <Field label="Rear spring base width (inches)"
-          hint="Distance between the centers of the two rear coil spring perches on the axle tube. Measure along the axle from the center of the left spring perch cup to the center of the right spring perch cup. This is narrower than the track width. Stock P71: ~44&quot; (estimated — narrower than 65.125&quot; rear track). Wider base = more rear roll stiffness, which shifts LLTD toward the rear (more oversteer tendency). Used directly in the roll stiffness model.">
-          <NumIn value={editing.rearSpringBase} onChange={v => set('rearSpringBase', v)} placeholder="e.g. 42" step="0.25" />
+          hint="WHAT: Distance between the centers of the two rear coil spring perches as they sit on the axle tube. WHERE: Measure along the axle from the center of the LR spring perch cup to the center of the RR spring perch cup. HOW: Tape across the top of the axle tube. STOCK ESTIMATE: ~44&quot; (back-solved — narrower than the 65&quot; rear track because perches sit inboard of the wheel flanges). NOT from a published Ford spec. Wider base = more rear roll stiffness from the same springs, which shifts LLTD rearward (looser).">
+          <NumIn value={editing.rearSpringBase} onChange={v => set('rearSpringBase', v)} placeholder="e.g. 44 (est)" step="0.25" />
         </Field>
       </div>
 
@@ -1087,8 +1087,8 @@ function GeoEditor({ editing, setEditing }) {
           </Field>
         </div>
         <Field label="Front wheel center height (inches)"
-          hint="Measure from the center of the front hub/axle to the floor. Plumb a string or straight-edge from the hub center to the ground. Stock P71 with 235/55R17 tires: 13.6&quot; (tire radius = 129.25mm sidewall + 215.9mm half-rim = 345.15mm = 13.59&quot;). Used to establish the suspension geometry reference plane.">
-          <NumIn value={editing.wheelCenterHeight} onChange={v => set('wheelCenterHeight', v)} placeholder="e.g. 13.0" step="0.125" />
+          hint="WHAT: Center of the front hub/axle, measured straight down to the floor. HOW: Plumb a string or straight-edge from the hub bolt center to the ground; read with a tape. STOCK: 13.6&quot; — VERIFIED from Tire Rack 235/55R17 spec (sidewall 129.25mm + half-rim 215.9mm = 345.15mm = 13.59&quot;). If running a different tire size, measure directly. This sets the suspension geometry reference plane — small errors here cascade into RC and FVSA calculations.">
+          <NumIn value={editing.wheelCenterHeight} onChange={v => set('wheelCenterHeight', v)} placeholder="e.g. 13.6" step="0.125" />
         </Field>
       </div>
 
@@ -1173,11 +1173,11 @@ function GeoEditor({ editing, setEditing }) {
       <div className="ml-section">
         <h3 className="ml-section-heading">Ride Height</h3>
         <p className="ml-section-note">
-          If running cut or lowered springs, enter how many inches lower than stock the car sits at ride height. Each inch of lowering drops the CG approximately 0.6–0.7 inches. The model uses this to adjust its CG height estimate from the stock P71 baseline.
+          If running cut or lowered springs, enter how many inches lower than stock the car sits at ride height. Each inch of lowering drops the CG approximately 0.6–0.7 inches (estimate, not Ford-published). Note: stock CG height of 22&quot; is itself an ESTIMATE based on full-size body-on-frame sedan norms — Ford never published a Panther CG figure.
         </p>
         <div className="ml-row">
           <Field label="Ride height lowering from stock (inches)"
-            hint="Measure: (1) Find a stock P71 ride height reference (factory spec or photo). (2) Measure your car's ride height at the rocker panel or a consistent body reference point. (3) Enter the difference. 0 if running stock springs. Leave blank if unknown — the model uses the stock CG height baseline.">
+            hint="WHAT TO ENTER: Inches your car sits LOWER than stock at the rocker panel or fender lip (positive number). HOW TO MEASURE STOCK: hard to find an unmodified P71 to reference; closest to a published figure is fender-lip-to-floor of ~30&quot; on Crown Vics, but this varies by tire. EASIER METHOD: if you have stock springs and ride height, enter 0. If you've installed shorter springs, enter how much shorter (e.g. 1.5&quot; drop springs → enter 1.5). The model uses this to adjust its 22&quot; stock CG estimate; each 1&quot; lowering drops CG ~0.65&quot;. Leave blank if unknown — model defaults to stock CG.">
             <NumIn value={editing.rideLowering} onChange={v => set('rideLowering', v)} placeholder="0 if stock" step="0.25" />
           </Field>
         </div>
@@ -1192,10 +1192,10 @@ function GeoEditor({ editing, setEditing }) {
       <div className="ml-section">
         <h3 className="ml-section-heading">Front Anti-Roll Bar</h3>
         <p className="ml-section-note">
-          The P71 front ARB wheel rate is hardcoded to 475 lbs/in (29.5mm solid bar). If you have a different bar, measure its diameter so the model can use the correct roll stiffness.
+          The P71 front ARB wheel rate model assumes a 29.5mm solid bar. If you've fitted an aftermarket bar (Addco, Hellwig, etc.), measure its diameter so the model uses the correct roll stiffness. ARB roll stiffness scales as diameter^4 — small diameter changes have large effects.
         </p>
         <Field label="Front ARB bar diameter (inches)"
-          hint="Measure the solid steel bar diameter at the straight section (not at the bends or end links). Use calipers. Stock P71: 29.5mm = 1.161&quot; (largest factory Panther bar option). ARB roll stiffness scales as diameter^4 — a 1.0&quot; bar has only 55% of the stock bar's stiffness. No rear ARB on P71 from the factory. Leave blank to use the stock 29.5mm value.">
+          hint="WHAT: Solid steel bar diameter at the straight (un-bent) section between the bushings, NOT at the bends or end links. HOW: Calipers across the bar. STOCK: 1.161&quot; (29.5mm) — VERIFIED from multiple Police Interceptor parts catalogs as the factory P71 bar. Civilian Crown Vic uses a smaller 28mm bar. ARB roll stiffness ∝ d^4: a 1.0&quot; aftermarket bar = 55% of stock; a 1.25&quot; bar = 1.34× stock. Leave blank to use stock 1.161&quot;. NO REAR ARB factory — leave any rear ARB input blank unless you've added one.">
           <NumIn value={editing.arbDiameter ?? ''} onChange={v => set('arbDiameter', v)} placeholder="e.g. 1.161 (stock 29.5mm)" step="0.001" min="0.5" max="2.0" />
         </Field>
       </div>
