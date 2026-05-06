@@ -131,8 +131,9 @@ const EMPTY_GEO = {
   bumpstopRate:      { front: '', rear: '' },  // lb/in, bumpstop progressive rate
   // ── Damping forces (optional — for Ch.22 damping ratio analysis) ──
   dampingForce:      { bumpFront: '', rebFront: '', bumpRear: '', rebRear: '' }, // lbs at 5 in/sec
-  // ── Cold tire pressures — stock Ford spec ──
-  coldPsi:           { LF: String(P71_STOCK.coldPsiLF), RF: String(P71_STOCK.coldPsiRF), LR: String(P71_STOCK.coldPsiLR), RR: String(P71_STOCK.coldPsiRR) },
+  // Note: tire pressures are session-specific data and live on Track Day
+  // sessions (session.setup.coldPsi / session.hotPsi), not on the geometry
+  // profile. Do NOT add coldPsi here.
 };
 
 // ─── Persistence ─────────────────────────────────────────────────────────────

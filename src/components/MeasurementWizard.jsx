@@ -15,7 +15,6 @@ const P71 = {
   springPickup: '11.0',
   arbDiameter: '1.161',
   droopTravel: '1.25', bumpTravel: '2.0',
-  coldPsiLF: '32', coldPsiRF: '32', coldPsiLR: '35', coldPsiRR: '35',
 };
 
 // ─── Small shared inputs ──────────────────────────────────────────────────────
@@ -512,13 +511,6 @@ const STEPS = [
             hint="Measure the bar diameter at the straight section between bushings with calipers. Stock P71 Police: 1.161&quot; (29.5mm verified). ARB stiffness scales as d⁴ — small changes have large effects.">
             <NIn value={data.arbDiameter ?? ''} onChange={v => set('arbDiameter', v)} placeholder="e.g. 1.161" step="0.001" min="0.5" max="2.0" />
           </WField>
-          <WField label="Cold tire pressures — LF / RF / LR / RR (PSI)">
-            <div style={{ display: 'flex', gap: 8 }}>
-              {['LF', 'RF', 'LR', 'RR'].map(pos => (
-                <NIn key={pos} value={data.coldPsi?.[pos] ?? ''} onChange={v => setN('coldPsi', pos, v)} placeholder={pos.startsWith('L') && pos.endsWith('F') ? '32' : pos.endsWith('F') ? '32' : pos.endsWith('R') ? '35' : '35'} step="1" min="5" max="60" />
-              ))}
-            </div>
-          </WField>
         </Row>
       </>
       );
@@ -528,7 +520,6 @@ const STEPS = [
       installRatio:  { front: P71.installRatioFront, rear: P71.installRatioRear },
       rearSpringTrack: P71.rearSpringBase,
       arbDiameter:   P71.arbDiameter,
-      coldPsi:       { LF: P71.coldPsiLF, RF: P71.coldPsiRF, LR: P71.coldPsiLR, RR: P71.coldPsiRR },
     }),
   },
 

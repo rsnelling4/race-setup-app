@@ -1164,18 +1164,11 @@ function SessionEditor({ session, index, onChange, geoProfiles }) {
             if (id) {
               const geo = geoProfiles.find(g => g.id === id);
               if (geo) {
-                // Cold PSI on session.setup.coldPsi
+                // Cold tire pressures are session-specific data, NOT pulled from
+                // the geometry profile. The user enters them on the session.
                 const curSetup = session.setup ?? blankSetup();
                 const nextSetup = { ...curSetup, coldPsi: { ...curSetup.coldPsi } };
                 let setupChanged = false;
-                for (const pos of ['LF', 'RF', 'LR', 'RR']) {
-                  const geoPsi = parseFloat(geo.coldPsi?.[pos]);
-                  // Only fill if session value is the blankSetup default and geo has a real value
-                  if (Number.isFinite(geoPsi)) {
-                    nextSetup.coldPsi[pos] = geoPsi;
-                    setupChanged = true;
-                  }
-                }
                 // Setup alignment from geo
                 const camLF = parseFloat(geo.camber?.LF);
                 const camRF = parseFloat(geo.camber?.RF);
@@ -1220,7 +1213,7 @@ function SessionEditor({ session, index, onChange, geoProfiles }) {
           <div className="td-geo-badge" style={{ marginTop: 6 }}>
             {carLabel(session, geoProfiles)}
             <span style={{ marginLeft: 8, color: '#22c55e', fontSize: 11 }}>
-              ✓ alignment, springs &amp; cold PSI auto-populated from profile
+              ✓ alignment &amp; springs auto-populated from profile (enter session-specific cold PSI below)
             </span>
           </div>
         )}

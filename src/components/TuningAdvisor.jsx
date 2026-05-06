@@ -439,26 +439,20 @@ function diagnose(a, geo, trackType, measured = null) {
     }
   }
 
-  // ── 9. Cold tire pressure imbalance (from saved profile, used when no session) ──
-  // Less informative than measured data. Used only when session data unavailable.
-  if (!measured) {
-    const psi = {
-      LF: parseFloat(geo.coldPsi?.LF) || null,
-      RF: parseFloat(geo.coldPsi?.RF) || null,
-      LR: parseFloat(geo.coldPsi?.LR) || null,
-      RR: parseFloat(geo.coldPsi?.RR) || null,
-    };
-    if (psi.LF && psi.RF && psi.LR && psi.RR) {
-      if (isOval && psi.LF > psi.RF + 4) {
-        symptoms.push({
-          phase: 'MIDDLE',
-          behavior: 'LOOSE',
-          severity: 'low',
-          magnitude: psi.LF - psi.RF,
-          why: `LF pressure (${psi.LF}) is much higher than RF (${psi.RF}). On a left-turn oval the RF is the loaded outside tire and wants more pressure to support sidewall — the imbalance reduces RF grip relative to its load.`,
-          causeTag: 'PSI_LR_LF_HIGH',
-        });
-      }
+  // ── 9. Measured cold PSI imbalance (oval-specific) ──────────────────────
+  // Tire pressures are session data and only diagnosed when a session is the
+  // analysis source. Without a session there is nothing to compare against.
+  if (measured && measured.coldPsi) {
+    const psi = measured.coldPsi;
+    if (psi.LF != null && psi.RF != null && isOval && psi.LF > psi.RF + 4) {
+      symptoms.push({
+        phase: 'MIDDLE',
+        behavior: 'LOOSE',
+        severity: 'low',
+        magnitude: psi.LF - psi.RF,
+        why: `Cold PSI: LF ${psi.LF} vs RF ${psi.RF} (Δ +${(psi.LF - psi.RF).toFixed(0)}). On a left-turn oval the RF is the loaded outside tire and wants more pressure to support sidewall — the imbalance reduces RF grip relative to its load.`,
+        causeTag: 'PSI_LR_LF_HIGH',
+      });
     }
   }
 
@@ -628,15 +622,15 @@ function fixesFor(symptom, a, geo, trackType, measured = null) {
     return out;
   }
 
-  // Resolve cold PSI: prefer the actual measured session value when available,
-  // fall back to the saved car profile. Recipes display "current X" using this.
+  // Resolve cold PSI from the Track Day session only. Tire pressures are
+  // session-specific data and never live on the car profile. When no session
+  // is selected, recipes that reference current PSI render generic guidance
+  // without a "current X" anchor.
   const psiAt = (pos) => {
     const m = measured?.coldPsi?.[pos];
-    if (Number.isFinite(m)) return m;
-    const g = parseFloat(geo.coldPsi?.[pos]);
-    return Number.isFinite(g) ? g : null;
+    return Number.isFinite(m) ? m : null;
   };
-  const psiSourceLabel = measured ? 'session' : 'profile';
+  const psiSourceLabel = 'session';
 
   const fixes = { track: [], garage: [] };
   const isOval = trackType === 'oval';
@@ -699,7 +693,9 @@ function fixesFor(symptom, a, geo, trackType, measured = null) {
         magnitude: 'high',
       });
       fixes.track.push({
-        action: `Raise RF cold pressure by 1–2 PSI (${psiSourceLabel} ${psiAt('RF') ?? '—'} → ${psiAt('RF') != null ? psiAt('RF') + 2 : 34}).`,
+        action: psiAt('RF') != null
+          ? `Raise RF cold pressure by 1–2 PSI (session ${psiAt('RF')} → ${psiAt('RF') + 2}).`
+          : `Raise RF cold pressure by 1–2 PSI for next session.`,
         impact: `Stiffens RF sidewall to support loaded outside tire. Doesn't fix LLTD root cause but recovers some of the lost lateral grip.`,
         magnitude: 'low',
       });
@@ -757,7 +753,9 @@ function fixesFor(symptom, a, geo, trackType, measured = null) {
       }
       // Track-side: tire pressure helps a hot outside edge
       fixes.track.push({
-        action: `Drop RF cold pressure by 1–2 PSI (${psiSourceLabel} ${psiAt('RF') ?? '—'} → ${psiAt('RF') != null ? psiAt('RF') - 2 : 30}).`,
+        action: psiAt('RF') != null
+          ? `Drop RF cold pressure by 1–2 PSI (session ${psiAt('RF')} → ${psiAt('RF') - 2}).`
+          : `Drop RF cold pressure by 1–2 PSI for next session.`,
         impact: `Lower pressure widens contact patch, broadens load distribution across the tire so the outside edge isn't the only thing on the ground. Mitigates push until camber is fixed.`,
         magnitude: 'low',
       });
