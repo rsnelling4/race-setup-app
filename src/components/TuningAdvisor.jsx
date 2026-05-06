@@ -142,25 +142,43 @@ function bucket(v, lo, hi) {
 const SEV_RANK = { high: 3, medium: 2, low: 1, info: 0 };
 
 // ─── Find a recommended shock from the database for an action ───────────────
+//
+// deltaSteps semantics: +N = stiffer = LOWER rating number; -N = softer = HIGHER.
+//
+// The result also enforces meaningful direction: a "stiffer" recommendation is
+// rejected if the result is still in the soft half (rating > 5), and likewise
+// a "softer" recommendation is rejected if still in the stiff half (rating < 5).
+// This prevents the UI from telling a user with rating-10 fronts to "go stiffer
+// to rating 8" — still soft, no real change.
 function findShock(corner, currentRating, deltaSteps, isFront) {
-  // deltaSteps: +N = stiffer (lower rating number), -N = softer (higher rating)
   const list = isFront ? FRONT_STRUTS : REAR_SHOCKS;
   if (currentRating == null) {
-    // No baseline — recommend a sensible "balanced firm" baseline
-    const target = isFront ? 4 : 4;
+    const target = 4;
     const pick = list.find(s => s.rating === target);
     return pick ? { ...pick, label: shockLabel(pick), reason: 'starting baseline' } : null;
   }
-  const targetRating = Math.max(0, Math.min(10, currentRating - deltaSteps));
+  let targetRating = Math.max(0, Math.min(10, currentRating - deltaSteps));
+  // Direction guard: ensure the result actually crosses the midpoint when the
+  // user is far from it. If currentRating is very soft (8+) and we're asking
+  // for stiffer, push the target into the firm half (≤4). Same for very stiff
+  // current going softer.
+  const wantStiffer = deltaSteps > 0;
+  const wantSofter  = deltaSteps < 0;
+  if (wantStiffer && targetRating > 5) {
+    // Land in the firm half
+    targetRating = Math.min(targetRating, 4);
+  }
+  if (wantSofter && targetRating < 5) {
+    targetRating = Math.max(targetRating, 6);
+  }
   // Find shock with that exact rating; if none, find the closest
   let pick = list.find(s => s.rating === targetRating);
   if (!pick) {
-    // Closest by rating
     pick = [...list].sort((a, b) =>
       Math.abs(a.rating - targetRating) - Math.abs(b.rating - targetRating)
     )[0];
   }
-  return pick ? { ...pick, label: shockLabel(pick) } : null;
+  return pick ? { ...pick, label: shockLabel(pick), fromRating: currentRating } : null;
 }
 
 // Lookup the rating of a saved shock label
@@ -856,14 +874,14 @@ function fixesFor(symptom, a, geo, trackType, measured = null) {
       const stifferFront = lfRating != null ? findShock('LF', lfRating, +2, true) : null;
       if (softerRear) {
         fixes.garage.push({
-          action: `Softer rear shocks. Try ${softerRear.label} (rating ${softerRear.rating}) at LR/RR.`,
+          action: `Softer rear shocks at LR/RR — try ${softerRear.label}. Rating ${softerRear.rating} vs your current rating ${lrRating} (higher rating = softer).`,
           impact: `${softerRear.ovalRole.split('.')[0]}.`,
           magnitude: 'high',
         });
       }
       if (stifferFront) {
         fixes.garage.push({
-          action: `Or stiffer front struts: ${stifferFront.label} (rating ${stifferFront.rating}).`,
+          action: `Or stiffer front struts — try ${stifferFront.label}. Rating ${stifferFront.rating} vs your current rating ${lfRating} (lower rating = stiffer).`,
           impact: `${stifferFront.ovalRole.split('.')[0]}.`,
           magnitude: 'medium',
         });
@@ -878,14 +896,14 @@ function fixesFor(symptom, a, geo, trackType, measured = null) {
       const stifferRear = lrRating != null ? findShock('LR', lrRating, +2, false) : null;
       if (softerFront) {
         fixes.garage.push({
-          action: `Softer front struts. Try ${softerFront.label} (rating ${softerFront.rating}).`,
+          action: `Softer front struts — try ${softerFront.label}. Rating ${softerFront.rating} vs your current rating ${lfRating} (higher rating = softer).`,
           impact: `${softerFront.ovalRole.split('.')[0]}.`,
           magnitude: 'high',
         });
       }
       if (stifferRear) {
         fixes.garage.push({
-          action: `Or stiffer rear shocks: ${stifferRear.label} (rating ${stifferRear.rating}).`,
+          action: `Or stiffer rear shocks — try ${stifferRear.label}. Rating ${stifferRear.rating} vs your current rating ${lrRating} (lower rating = stiffer).`,
           impact: `${stifferRear.ovalRole.split('.')[0]}.`,
           magnitude: 'medium',
         });
