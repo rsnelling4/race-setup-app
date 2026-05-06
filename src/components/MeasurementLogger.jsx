@@ -29,11 +29,15 @@ const P71_STOCK = {
   // Rear suspension
   wattsLinkHeight:  14.5,   // inches — measured Watts link center pivot height
   rearSpringBase:   44.0,   // inches — estimated center-to-center rear spring perches on axle
-  // Front SLA hardpoints — measured/estimated (see raceSimulation.js comments)
-  lowerBallJoint:   7.75,   // inches — floor to lower ball joint stud center
-  upperBallJoint:   18.5,   // inches — floor to upper ball joint stud center
-  lowerArmPivot:    10.0,   // inches — floor to lower arm inner pivot midpoint
-  upperArmPivot:    13.5,   // inches — estimated from published Ford geometry
+  // Front SLA hardpoints — BACK-SOLVED estimates (no published Ford data exists).
+  // Tuned to produce ~4" front roll center, matching published 2–5" range for
+  // SLA passenger sedans (Suspension Secrets, Milliken). Earlier values produced
+  // a ~19" RC which is geometrically impossible for any street car.
+  // Verify by direct measurement on your specific car — see hint text on each input.
+  lowerBallJoint:   7.50,   // inches — floor to lower ball joint stud center (est.)
+  upperBallJoint:   17.00,  // inches — floor to upper ball joint stud center (est.)
+  lowerArmPivot:    6.00,   // inches — floor to lower arm inner pivot midpoint (est.)
+  upperArmPivot:    13.00,  // inches — floor to upper arm inner pivot (est.)
   springPickup:     11.0,   // inches — lower arm pivot to spring mount (≈MR 0.87 × 13" arm)
   // ARB
   arbDiameter:      1.161,  // inches — stock 29.5mm solid bar
@@ -1027,46 +1031,49 @@ function GeoEditor({ editing, setEditing }) {
       <div className="ml-section">
         <h3 className="ml-section-heading">Front SLA Hardpoint Heights</h3>
         <p className="ml-section-note">
-          Car at ride height on flat ground with driver weight (~200 lbs) on seat. All measurements are from the center of the joint/pivot bolt straight down to the floor. These four hardpoints define the instant center and roll center height — the most accuracy-critical geometry measurements in the model.
+          ⚠ <strong>The defaults below are BACK-SOLVED ESTIMATES</strong> — Ford never published Panther suspension hardpoint geometry. The defaults produce a front roll center near 4&quot;, matching the typical 2–5&quot; range for SLA passenger sedans. Your actual car may vary by 1–3&quot; on any of these dimensions.{' '}
+          <strong>Measure your specific car</strong> — these four heights drive the instant center, roll center, FVSA, and camber chain. A 1&quot; error on the upper inner pivot moves the computed front RC by ~3&quot;.
+          <br /><br />
+          <strong>Setup:</strong> car at race ride height on level ground, full fluid load, driver weight (~200 lbs) in seat. Measure each height from the floor to the center of the joint stud or pivot bolt with a tape measure and a plumb bob (or a magnetic level off the bolt face). All four corners should be measured the same way for consistency.
         </p>
         <div className="ml-row">
           <Field label="LF lower ball joint (inches)"
-            hint="The lower ball joint is at the outer end of the lower control arm where it connects to the steering knuckle/spindle. On the P71, look at the bottom-outside corner of the front hub assembly. The ball joint stud points downward through the knuckle. Measure from the center of that stud (top of the stud nut, minus half the stud exposed length) down to the floor. Stock P71: ~7.75&quot; (estimated from SLA geometry at stock ride height).">
-            <NumIn value={editing.lowerBallJoint.LF} onChange={v => setN('lowerBallJoint', 'LF', v)} placeholder="e.g. 7.75" step="0.125" />
+            hint="WHAT: Outer end of the lower control arm — the joint connecting the arm to the bottom of the steering knuckle. Look at the bottom-outside corner of the front hub assembly; the stud points down through the knuckle. WHERE: Center of the stud (top of the castle nut, less half the exposed thread). HOW: Plumb bob from the stud center to the floor. Read with a tape. STOCK ESTIMATE: ~7.50&quot; (back-solved — not measured). PRECISION: ±0.125&quot; matters; ±0.5&quot; will shift computed RC by ~1&quot;.">
+            <NumIn value={editing.lowerBallJoint.LF} onChange={v => setN('lowerBallJoint', 'LF', v)} placeholder="e.g. 7.50 (est)" step="0.125" />
           </Field>
           <Field label="RF lower ball joint (inches)"
-            hint="Same as LF lower ball joint — right side. Stock P71: ~7.75&quot;. The RF may sit slightly lower than LF due to asymmetric caster settings. Measure stud center to floor.">
-            <NumIn value={editing.lowerBallJoint.RF} onChange={v => setN('lowerBallJoint', 'RF', v)} placeholder="e.g. 6.75" step="0.125" />
+            hint="Same procedure as LF, on the right side. STOCK ESTIMATE: ~7.50&quot; (back-solved). On a stock car LF and RF should be within 0.25&quot; — if your car shows more, check spring sag or asymmetric perch heights.">
+            <NumIn value={editing.lowerBallJoint.RF} onChange={v => setN('lowerBallJoint', 'RF', v)} placeholder="e.g. 7.50 (est)" step="0.125" />
           </Field>
         </div>
         <div className="ml-row">
           <Field label="LF upper ball joint (inches)"
-            hint="The upper ball joint is at the outer end of the upper control arm, connecting to the top of the steering knuckle. On the P71 SLA, look directly above the lower ball joint at the top of the hub assembly. The stud points upward. Measure from stud center to floor. Stock P71: ~18.5&quot; (estimated from SLA geometry — upper-to-lower ball joint spread ≈ 10.75&quot;).">
-            <NumIn value={editing.upperBallJoint.LF} onChange={v => setN('upperBallJoint', 'LF', v)} placeholder="e.g. 18.5" step="0.125" />
+            hint="WHAT: Outer end of the upper control arm — the joint at the top of the steering knuckle, directly above the lower ball joint. The stud points UP through the knuckle. WHERE: Center of the stud (read the same as the lower BJ). HOW: Plumb bob from stud center to floor. STOCK ESTIMATE: ~17.0&quot; (back-solved). The upper-to-lower BJ spread should be ~9.5&quot; on a P71 — if your measurement differs by more than 1&quot;, double-check the lower BJ reading.">
+            <NumIn value={editing.upperBallJoint.LF} onChange={v => setN('upperBallJoint', 'LF', v)} placeholder="e.g. 17.00 (est)" step="0.125" />
           </Field>
           <Field label="RF upper ball joint (inches)"
-            hint="Same as LF upper ball joint — right side. Stock P71: ~18.5&quot;. Stud center to floor.">
-            <NumIn value={editing.upperBallJoint.RF} onChange={v => setN('upperBallJoint', 'RF', v)} placeholder="e.g. 17.625" step="0.125" />
+            hint="Same as LF upper ball joint, right side. STOCK ESTIMATE: ~17.0&quot; (back-solved). LF and RF should match within 0.25&quot;.">
+            <NumIn value={editing.upperBallJoint.RF} onChange={v => setN('upperBallJoint', 'RF', v)} placeholder="e.g. 17.00 (est)" step="0.125" />
           </Field>
         </div>
         <div className="ml-row">
           <Field label="LF lower arm inner pivot (inches)"
-            hint="The inner end of the lower control arm where it bolts to the K-member/subframe. The P71 lower arm uses two bolt pivot — measure the height of the midpoint between the two bolts. Use a straightedge or plumb bob from the bolt center to the floor. Stock P71: ~10.0&quot; (estimated from K-member geometry at stock ride height).">
-            <NumIn value={editing.lowerArmPivot.LF} onChange={v => setN('lowerArmPivot', 'LF', v)} placeholder="e.g. 10.0" step="0.125" />
+            hint="WHAT: The inner (chassis) end of the lower control arm — the bushing or bolt where the arm pivots on the K-member/subframe. P71 uses two bolts/bushings on the lower arm front and rear. WHERE: Take the midpoint between the front and rear pivot bolt centers. HOW: Lay a straight-edge across both bolt heads, find the midpoint, plumb bob to floor. STOCK ESTIMATE: ~6.0&quot; (back-solved — pivot is at frame K-member height, slightly LOWER than the lower BJ so the arm slopes down inboard). If your measurement shows the pivot HIGHER than the lower BJ, the model will produce an unrealistic high RC.">
+            <NumIn value={editing.lowerArmPivot.LF} onChange={v => setN('lowerArmPivot', 'LF', v)} placeholder="e.g. 6.00 (est)" step="0.125" />
           </Field>
           <Field label="RF lower arm inner pivot (inches)"
-            hint="Same as LF lower arm inner pivot — right side. Stock P71: ~10.0&quot;. Measure midpoint of the two pivot bolt centers to floor.">
-            <NumIn value={editing.lowerArmPivot.RF} onChange={v => setN('lowerArmPivot', 'RF', v)} placeholder="e.g. 9.375" step="0.125" />
+            hint="Same as LF, right side. STOCK ESTIMATE: ~6.0&quot; (back-solved). Symmetric with LF on a stock car.">
+            <NumIn value={editing.lowerArmPivot.RF} onChange={v => setN('lowerArmPivot', 'RF', v)} placeholder="e.g. 6.00 (est)" step="0.125" />
           </Field>
         </div>
         <div className="ml-row">
           <Field label="LF upper arm inner pivot (inches)"
-            hint="The inner end of the upper control arm where it bolts to the tower/subframe above the lower arm. On the P71, this is a single bolt (or bushing) high up on the inner fender structure. This is the hardest point to measure accurately — it directly determines the instant center position and roll center height. Stock P71: ~13.5&quot; (estimated from published Ford geometry). Plumb bob from the bolt centerline to the floor. Measure if at all possible — this estimate produces a front RCH of ~20.4&quot;.">
-            <NumIn value={editing.upperArmPivot?.LF ?? ''} onChange={v => setN('upperArmPivot', 'LF', v)} placeholder="e.g. 13.5 (est)" step="0.125" />
+            hint="WHAT: The inner end of the upper control arm — the bushing or bolt where the upper arm pivots on the chassis tower bracket above the lower arm. WHERE: Center of the pivot bolt (the bolt is roughly horizontal, fore-aft; you want the center of its shank). HOW: Plumb bob from the bolt center to floor. CRITICAL: this is the SINGLE MOST IMPORTANT measurement for front RC accuracy — a ±0.5&quot; error here moves the computed RC by ~1.5&quot;. STOCK ESTIMATE: ~13.0&quot; (back-solved to produce a 4&quot; RC). If your measured value is much higher (e.g. 14&quot;+), the model will compute an unrealistically high RC. Verify by re-measuring or by checking that both control arms slope DOWN toward the chassis.">
+            <NumIn value={editing.upperArmPivot?.LF ?? ''} onChange={v => setN('upperArmPivot', 'LF', v)} placeholder="e.g. 13.00 (est)" step="0.125" />
           </Field>
           <Field label="RF upper arm inner pivot (inches)"
-            hint="Same as LF upper arm inner pivot — right side. Stock P71: ~13.5&quot; (estimated). Measure or estimate the bolt center height from the floor.">
-            <NumIn value={editing.upperArmPivot?.RF ?? ''} onChange={v => setN('upperArmPivot', 'RF', v)} placeholder="e.g. 13.5 (est)" step="0.125" />
+            hint="Same as LF upper inner pivot, right side. STOCK ESTIMATE: ~13.0&quot; (back-solved). Symmetric with LF on a stock car.">
+            <NumIn value={editing.upperArmPivot?.RF ?? ''} onChange={v => setN('upperArmPivot', 'RF', v)} placeholder="e.g. 13.00 (est)" step="0.125" />
           </Field>
         </div>
         <div className="ml-row">

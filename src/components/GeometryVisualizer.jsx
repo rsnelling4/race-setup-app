@@ -1,9 +1,16 @@
 import { useMemo } from 'react';
 
 // ─── Geometry engine ──────────────────────────────────────────────────────────
+// IMPORTANT: Hardpoint defaults below are BACK-SOLVED ESTIMATES, not OEM-published
+// or measured values. Ford never released Panther suspension hardpoint geometry.
+// These values were chosen to produce a front roll center of ~4" — which matches
+// the typical published range for SLA passenger sedans (Suspension Secrets, Milliken
+// reference table). The earlier defaults produced a ~19" RC which is geometrically
+// implausible for any street car. Treat all hardpoint outputs as ESTIMATED until
+// the user enters actual measurements taken from their specific car.
 const P71_UPPER_ARM_LENGTH  = 9.5;
 const P71_LOWER_ARM_LENGTH  = 13.0;
-const P71_UPPER_PIVOT_H_EST = 13.5;
+const P71_UPPER_PIVOT_H_EST = 13.0;  // back-solved (was 13.5", which forced RC ~19")
 
 function num(v) { return parseFloat(v) || 0; }
 
@@ -27,10 +34,14 @@ export function computeGeometry(geo, side) {
   const halfTrack = num(geo.trackWidth?.front || 64) / 2;
   const wh       = num(geo.wheelCenterHeight || 13.0);
 
-  const loBJ = { x: sign * halfTrack, y: num(geo.lowerBallJoint?.[side]  || (side === 'RF' ? 6.75  : 7.75)) };
-  const upBJ = { x: sign * halfTrack, y: num(geo.upperBallJoint?.[side]  || (side === 'RF' ? 17.625: 18.5)) };
+  // Back-solved defaults — see note at top of file. Lower BJ ~7.5" off ground,
+  // upper BJ ~17" (giving ~9.5" knuckle height for 17" wheel + brake clearance).
+  // Lower inner pivot 6.0" (frame K-member). Upper inner pivot 13.0" (shock tower
+  // bracket). Both arms slope DOWN inboard at modest angles, IC sits low, RC ≈4".
+  const loBJ = { x: sign * halfTrack, y: num(geo.lowerBallJoint?.[side]  || (side === 'RF' ? 7.50  : 7.50)) };
+  const upBJ = { x: sign * halfTrack, y: num(geo.upperBallJoint?.[side]  || (side === 'RF' ? 17.00 : 17.00)) };
 
-  const loPivH = num(geo.lowerArmPivot?.[side]  || (side === 'RF' ? 9.375 : 10.0));
+  const loPivH = num(geo.lowerArmPivot?.[side]  || (side === 'RF' ? 6.00  : 6.00));
   const upPivH = num(geo.upperArmPivot?.[side]  || P71_UPPER_PIVOT_H_EST);
   const upPivEstimated = !geo.upperArmPivot?.[side];
 

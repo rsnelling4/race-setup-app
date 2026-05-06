@@ -582,65 +582,88 @@ function Finding({ title, value, unit, sev, children, tip }) {
 }
 
 // ─── Stock P71 reference baselines ────────────────────────────────────────────
-// All values are factory stock at stock ride height (no lowering, OEM springs/struts).
-// Sources: Ford service manual, Crown Vic Police Interceptor specs, prior measurements.
+// HONESTY POLICY: every value carries a `verified` field describing where the
+// number actually comes from. Ford never released Panther suspension geometry
+// data, so anything labeled `estimated` or `back-solved` should be treated as
+// a placeholder until verified by direct measurement. The Metric tile shows an
+// "(est.)" tag next to any STOCK value that isn't `verified: 'published'`.
+//
+// VERIFIED SOURCES:
+//   Eaton Detroit Spring catalog (P71 spring rates)
+//   Ford service manual (alignment specs)
+//   Confirmed Police Interceptor parts (29.5mm ARB)
+//   Tire Rack 235/55R17 spec (radius)
+//   Geometric truth (solid axle direct-acting IR = 1.0)
+//
+// EVERYTHING ELSE is back-solved, estimated from passenger-car norms, or
+// derived from values that themselves are not from a published source.
+const S = (val, verified, source = '') => ({ val, verified, source });
+
 const STOCK_P71 = {
-  // Roll centers
-  frontRC:        10.5,    // " — stock ride height with stock 440/475 lb/in struts
-  rearRC:         13.0,    // " — stock Watts link / Panhard equivalent
-  rcDiff:         -2.5,    // " — front lower than rear stock
-  cgHeight:       22.0,    // " — measured COG of unloaded P71
-  momentArm:      11.5,    // " — CG (22) − front RC (10.5)
+  // ── Roll centers (back-solved to match published 2–5" SLA passenger-sedan range) ──
+  frontRC:        S(4.0,    'estimated', 'Back-solved to match Suspension Secrets / Milliken passenger-SLA RC range. Earlier 10.5" value was wrong (produced ~19" computed RC).'),
+  rearRC:         S(11.0,   'estimated', 'P71 uses Panhard bar (not Watts); pivot height ~11" est. from frame rail height. Aftermarket Watts conversions adjustable 8–14".'),
+  rcDiff:         S(-7.0,   'derived',   'frontRC − rearRC (both estimated)'),
+  cgHeight:       S(22.0,   'estimated', 'Body-on-frame full-size sedan typical 21–23". No published P71 value.'),
+  momentArm:      S(18.0,   'derived',   'cgHeight − frontRC (both estimated)'),
 
-  // Static alignment (Ford spec, symmetric)
-  camberRF:       -0.3,    // ° — Ford spec ±0.5
-  camberLF:       -0.3,
-  casterRF:       4.5,     // ° — Ford spec
-  casterLF:       4.5,
+  // ── Static alignment (Ford service manual) ──
+  camberRF:       S(-0.3,   'published', 'Ford service manual, Ford WSM Crown Victoria/Grand Marquis (±0.5° tolerance)'),
+  camberLF:       S(-0.3,   'published', 'Ford service manual'),
+  casterRF:       S(4.5,    'published', 'Ford service manual midpoint (spec range +3.5° to +5.5°)'),
+  casterLF:       S(4.5,    'published', 'Ford service manual midpoint'),
 
-  // Camber chain output at 0.5G (street use, gentle cornering)
-  rfGroundCamber: +0.8,    // ° — outside tire goes positive on street car
-  lfGroundCamber: +0.5,
+  // ── Camber chain output at street 0.5G ──
+  rfGroundCamber: S(+0.8,   'derived',   'Computed from −0.3° static + caster gain + light body roll'),
+  lfGroundCamber: S(+0.5,   'derived',   'Same derivation'),
 
-  // Suspension geometry
-  bjAsymmetry:    0.0,     // " — symmetric stock
-  pivotAsymmetry: 0.0,
-  fvsa:           18.0,    // " — typical SLA FVSA
-  scrubRadius:    0.45,    // " — stock 16x7 wheel, 1.75 offset
-  wheelHeight:    13.6,    // " — stock 235/55R17 radius
+  // ── Suspension hardpoints / geometry ──
+  bjAsymmetry:    S(0.0,    'verified',  'Stock factory build is symmetric L/R'),
+  pivotAsymmetry: S(0.0,    'verified',  'Stock factory build is symmetric L/R'),
+  fvsa:           S(32.5,   'derived',   'Computed from back-solved hardpoints'),
+  scrubRadius:    S(0.45,   'derived',   'wh × tan(KPI) − offset; KPI 9.5° is typical SLA value not P71-verified'),
+  wheelHeight:    S(13.6,   'published', 'Tire Rack: 235/55R17 nominal radius at 32 psi cold'),
 
-  // LLTD
-  geoLLTDF:       0.50,    // 50/50 stock geometric split
-  rollRateFront:  0.50,
+  // ── LLTD (derived from estimated RC values — directly affected if RC is wrong) ──
+  geoLLTDF:       S(0.40,   'derived',   'Front geo LT / total geo LT, with frontRC=4 / rearRC=11. Heavily dependent on RC estimates.'),
+  rollRateFront:  S(0.40,   'derived',   'Same'),
 
-  // Springs / wheel rates / frequencies
-  springF:        475,     // lb/in — Police/Taxi front (most common)
-  springR:        160,     // lb/in — stock rear coil
-  irF:            0.52,
-  irR:            1.0,
-  kwF:            128,     // lb/in — 475 × 0.52²
-  kwR:            160,
-  rideFreqF:      80,      // cpm — stock comfort tuning
-  rideFreqR:      88,
-  rollGradient:   5.5,     // deg/g — stock comfort
+  // ── Springs / wheel rates / frequencies ──
+  springF:        S(475,    'published', 'Eaton Detroit Spring catalog: P71 Police/Taxi front strut (most common). Civilian base 440, Heavy Duty 700.'),
+  springR:        S(160,    'published', 'Eaton catalog + multiple Panther vendors confirm stock rear coil'),
+  irF:            S(0.52,   'estimated', 'Typical SLA installation ratio ~0.50–0.55. Not P71-measured. Verify by measuring spring travel ÷ wheel travel over a known stroke.'),
+  irR:            S(1.0,    'verified',  'Geometric truth: solid axle, spring directly between axle tube and frame'),
+  kwF:            S(128,    'derived',   '475 × 0.52² = 128 (depends on irF being correct)'),
+  kwR:            S(160,    'derived',   '160 × 1.0² = 160'),
+  rideFreqF:      S(80,     'derived',   'Computed from kwF and sprung corner mass'),
+  rideFreqR:      S(88,     'derived',   'Computed from kwR and sprung corner mass'),
+  rollGradient:   S(5.5,    'derived',   'Computed from spring rates + cgHeight (cgHeight is estimated)'),
 
-  // ARB
-  arbDiameter:    1.161,   // " — stock 29.5mm front bar
-  arbR:           0,       // no rear bar stock
+  // ── ARB ──
+  arbDiameter:    S(1.161,  'published', 'Confirmed Police Interceptor 29.5mm solid front bar (multiple vendor catalogs)'),
+  arbR:           S(0,      'verified',  'P71 has no rear ARB stock (civilian Crown Vic also)'),
 
-  // Bumpstop / shock
-  shockGapF:      2.0,     // " — stock at ride height
-  shockGapR:      2.0,
-  rideHeight:     0,       // " from stock (zero by definition)
-  rake:           0.5,     // " — slight nose-up stock
+  // ── Bumpstop / shock / ride height ──
+  shockGapF:      S(2.0,    'estimated', 'Approximate stock travel — not verified to a specific service manual figure'),
+  shockGapR:      S(2.0,    'estimated', 'Approximate stock travel'),
+  rideHeight:     S(0,      'verified',  'Zero by definition — stock IS the reference'),
+  rake:           S(0.5,    'estimated', 'Slight nose-up rake observed on stock cars; not from spec sheet'),
 
-  // Damping
-  zetaBumpF:      0.25,    // ζ — passenger car comfort
-  zetaRebF:       0.50,
-  zetaBumpR:      0.25,
-  zetaRebR:       0.50,
-  brRatio:        2.0,     // 1:2 standard
+  // ── Damping (Milliken Table 22.2 passenger-car typical, not Panther-measured) ──
+  zetaBumpF:      S(0.25,   'estimated', 'Milliken Table 22.2 passenger-car typical. Stock KYB Excel-G or Motorcraft strut not dyno-verified.'),
+  zetaRebF:       S(0.50,   'estimated', 'Same'),
+  zetaBumpR:      S(0.25,   'estimated', 'Same'),
+  zetaRebR:       S(0.50,   'estimated', 'Same'),
+  brRatio:        S(2.0,    'estimated', 'Standard 1:2 manufactured ratio for passenger shocks'),
 };
+
+// Helper: format a stock value with an "(est.)" tag if not published-verified.
+function stockStr(field, fmt = (v) => v) {
+  if (field == null) return '—';
+  const tag = field.verified === 'published' || field.verified === 'verified'
+    ? '' : ' (est.)';
+  return `${fmt(field.val)}${tag}`;
+}
 
 // ─── Metric tile — structured 4-row layout ────────────────────────────────────
 // Replaces free-form Finding for measurable values. Shows Measured / Stock P71 /
@@ -891,7 +914,7 @@ export default function GeometryAnalysis({ geo }) {
         <Metric
           title="Front Roll Center"
           measured={a.rcAvg != null ? `${a.rcAvg.toFixed(2)}"` : null}
-          stock={`${STOCK_P71.frontRC}" (stock ride height, OEM struts)`}
+          stock={`${stockStr(STOCK_P71.frontRC, v => `${v}"`)} — back-solved to match published 2–5" SLA passenger-sedan range. NOT measured from a real P71.`}
           optimal={`${T.idealFrontRC_low}–${T.idealFrontRC_high}" for ${T.label}`}
           sev={frontRCSev}
           handling={a.rcAvg == null ? 'Enter front hardpoints to compute.'
@@ -910,7 +933,7 @@ export default function GeometryAnalysis({ geo }) {
         <Metric
           title="Rear Roll Center (Watts Link)"
           measured={`${a.rearRC.toFixed(2)}"`}
-          stock={`${STOCK_P71.rearRC}" (stock Panhard bar / Watts equivalent)`}
+          stock={`${stockStr(STOCK_P71.rearRC, v => `${v}"`)} — Panhard bar pivot height estimated from frame rail. No published OEM value.`}
           optimal={`${T.idealRearRC_low}–${T.idealRearRC_high}" for ${T.label}`}
           sev={rearRCSev}
           handling={a.rearRC > T.idealRearRC_high
@@ -928,7 +951,7 @@ export default function GeometryAnalysis({ geo }) {
         <Metric
           title="Front vs Rear RC Differential"
           measured={a.rcDiff != null ? `${sign(a.rcDiff)}"` : null}
-          stock={`${sign(STOCK_P71.rcDiff)}" (rear higher than front stock)`}
+          stock={`${stockStr(STOCK_P71.rcDiff, v => `${sign(v)}"`)} — rear higher than front (front-RC and rear-RC both estimated)`}
           optimal={isOval ? '+2 to +6" (front higher — biases load to RF on left turn)' : '−1 to +1" (near-equal for symmetric figure-8)'}
           sev={a.rcDiff != null ? (isOval ? (a.rcDiff > 0 ? 'good' : 'warning') : (Math.abs(a.rcDiff) < 3 ? 'good' : 'warning')) : 'info'}
           handling={a.rcDiff == null ? '—'
@@ -949,7 +972,7 @@ export default function GeometryAnalysis({ geo }) {
         <Metric
           title="CG-to-Roll-Center Moment Arm"
           measured={a.momentArm != null ? `${a.momentArm.toFixed(2)}"` : null}
-          stock={`${STOCK_P71.momentArm}" (CG 22" − stock RC 10.5")`}
+          stock={`${stockStr(STOCK_P71.momentArm, v => `${v}"`)} — CG 22" (est) − front RC 4" (est)`}
           optimal={`6–14" (gives springs/ARB authority while limiting body roll)`}
           sev={momentArmSev}
           handling={a.momentArm == null ? '—'
@@ -976,7 +999,7 @@ export default function GeometryAnalysis({ geo }) {
         <Metric
           title="RF Static Camber"
           measured={`${sign(a.rfStatic)}°`}
-          stock={`${sign(STOCK_P71.camberRF)}° (Ford spec)`}
+          stock={`${stockStr(STOCK_P71.camberRF, v => `${sign(v)}°`)} — Ford service manual spec ±0.5°`}
           optimal={`−2.0° to −3.0° for oval RF (most negative — outside tire needs it)`}
           sev={a.rfStatic > -1.0 ? 'warning' : a.rfStatic > -3.5 ? 'good' : 'info'}
           handling={a.rfStatic > -1.0
@@ -992,7 +1015,7 @@ export default function GeometryAnalysis({ geo }) {
         <Metric
           title="RF Ground Camber at Apex"
           measured={`${rfGroundStr}°`}
-          stock={`${sign(STOCK_P71.rfGroundCamber)}° at street 0.5G (positive — flat-foot)`}
+          stock={`${stockStr(STOCK_P71.rfGroundCamber, v => `${sign(v)}°`)} at street 0.5G — derived, outside tire goes positive on stock car`}
           optimal={`${T.idealRFGroundCamber}° for ${T.label}`}
           sev={!a.rfStaticReachable ? 'critical' : rfCamberSev}
           handling={!a.rfStaticReachable
@@ -1022,7 +1045,7 @@ To reach the ideal at current dynamic terms, static would need to be ${a.rfStati
         <Metric
           title="LF Static Camber"
           measured={`${sign(a.lfStatic)}°`}
-          stock={`${sign(STOCK_P71.camberLF)}° (Ford spec)`}
+          stock={`${stockStr(STOCK_P71.camberLF, v => `${sign(v)}°`)} — Ford service manual spec`}
           optimal={isOval ? `+2° to +3° (positive — inside tire droops in left turn)` : `−1.5° to −2° (symmetric for figure-8)`}
           sev={isOval ? (a.lfStatic < 1.5 ? 'warning' : 'good') : (Math.abs(a.lfStatic + 1.75) < 1 ? 'good' : 'warning')}
           handling={isOval && a.lfStatic < 1.5
@@ -1042,7 +1065,7 @@ To reach the ideal at current dynamic terms, static would need to be ${a.rfStati
         <Metric
           title="LF Ground Camber at Apex"
           measured={`${lfGroundStr}°`}
-          stock={`${sign(STOCK_P71.lfGroundCamber)}° at street 0.5G`}
+          stock={`${stockStr(STOCK_P71.lfGroundCamber, v => `${sign(v)}°`)} at street 0.5G — derived`}
           optimal={`${T.idealLFGroundCamber}° for ${T.label}`}
           sev={lfCamberSev}
           handling={Math.abs(a.lfCamberDev) < 0.3
@@ -1064,7 +1087,7 @@ To reach the ideal at current dynamic terms, static would need to be ${a.rfStati
         <Metric
           title="Caster (RF / LF)"
           measured={`RF ${a.rfCaster}° / LF ${a.lfCaster}°`}
-          stock={`${STOCK_P71.casterRF}° / ${STOCK_P71.casterLF}° (Ford spec — symmetric)`}
+          stock={`${stockStr(STOCK_P71.casterRF, v => `${v}°`)} / ${stockStr(STOCK_P71.casterLF, v => `${v}°`)} — Ford service manual midpoint, symmetric`}
           optimal={isOval ? `RF 5–7° / LF 8–10° (asymmetric — LF higher pulls the car LEFT down straights)` : `Both 5–7° symmetric (figure-8 turns both directions)`}
           sev={isOval ? ((a.lfCaster - a.rfCaster) > 1.5 && (a.lfCaster - a.rfCaster) < 4 ? 'good' : 'warning') : (Math.abs(a.lfCaster - a.rfCaster) < 1 ? 'good' : 'warning')}
           handling={isOval
@@ -1164,7 +1187,7 @@ To reach the ideal at current dynamic terms, static would need to be ${a.rfStati
         <Metric
           title="RF FVSA (Front View Swing Arm)"
           measured={a.rf.fvsa != null ? `${a.rf.fvsa.toFixed(1)}"` : null}
-          stock={`${STOCK_P71.fvsa}" (typical SLA stock)`}
+          stock={`${stockStr(STOCK_P71.fvsa, v => `${v}"`)} — derived from back-solved hardpoints`}
           optimal={`${T.idealFVSA_low}–${T.idealFVSA_high}" for ${T.label}`}
           sev={fvsaSev(a.rf.fvsa)}
           handling={a.rf.fvsa == null ? 'Cannot compute — IC not found.'
@@ -1183,7 +1206,7 @@ To reach the ideal at current dynamic terms, static would need to be ${a.rfStati
         <Metric
           title="LF FVSA"
           measured={a.lf.fvsa != null ? `${a.lf.fvsa.toFixed(1)}"` : null}
-          stock={`${STOCK_P71.fvsa}" (matches RF stock)`}
+          stock={`${stockStr(STOCK_P71.fvsa, v => `${v}"`)} — symmetric with RF`}
           optimal={isOval ? `Within ±3" of RF FVSA` : `Match RF within ±1" for figure-8`}
           sev={fvsaSev(a.lf.fvsa)}
           handling={a.lf.fvsa != null && a.rf.fvsa != null
@@ -1219,7 +1242,7 @@ To reach the ideal at current dynamic terms, static would need to be ${a.rfStati
         <Metric
           title="Ball Joint Height Asymmetry (LF vs RF)"
           measured={`${(a.bjAsymmetry >= 0 ? '+' : '')}${a.bjAsymmetry.toFixed(3)}"`}
-          stock={`${STOCK_P71.bjAsymmetry}" (symmetric stock — both sides equal)`}
+          stock={`${stockStr(STOCK_P71.bjAsymmetry, v => `${v}"`)} — factory build is symmetric L/R`}
           optimal={isOval ? `+0.5 to +1.5" (LF higher — biases RF to more negative camber)` : `±0.25" (symmetric for figure-8)`}
           sev={isOval ? asymSev : (Math.abs(a.bjAsymmetry) > 0.5 ? 'warning' : 'good')}
           handling={isOval
@@ -1245,7 +1268,7 @@ To reach the ideal at current dynamic terms, static would need to be ${a.rfStati
         <Metric
           title="Wheel Center Height vs Tire Radius"
           measured={`${a.wh.toFixed(3)}"`}
-          stock={`${STOCK_P71.wheelHeight}" (235/55R17 at 32 psi cold)`}
+          stock={`${stockStr(STOCK_P71.wheelHeight, v => `${v}"`)} — Tire Rack 235/55R17 spec at 32 psi cold`}
           optimal={`13.59" (matches tire-neutral radius — neither over- nor under-loaded)`}
           sev={Math.abs(a.wh - 13.59) > 1.0 ? 'warning' : Math.abs(a.wh - 13.59) > 0.5 ? 'info' : 'good'}
           handling={Math.abs(a.wh - 13.59) < 0.3
@@ -1268,7 +1291,7 @@ To reach the ideal at current dynamic terms, static would need to be ${a.rfStati
         <Metric
           title="Scrub Radius"
           measured={`${a.scrubRadius.toFixed(3)}"`}
-          stock={`${STOCK_P71.scrubRadius}" (stock 16x7 wheel, 1.75" offset)`}
+          stock={`${stockStr(STOCK_P71.scrubRadius, v => `${v}"`)} — derived from KPI 9.5° (typical SLA, not P71-verified) and 1.75" offset`}
           optimal={`+0.3 to +1.5" (small positive = light, direct steering feel)`}
           sev={a.scrubRadius > 0 && a.scrubRadius < 1.5 ? 'good' : a.scrubRadius < 0 ? 'warning' : 'info'}
           handling={a.scrubRadius < 0
@@ -1510,7 +1533,7 @@ To reach the ideal at current dynamic terms, static would need to be ${a.rfStati
           <Metric
             title="Wheel Rates"
             measured={a.kwFavg != null ? `F ${a.kwFavg.toFixed(0)} / R ${a.kwRavg?.toFixed(0) ?? '—'} lb/in` : null}
-            stock={`F ${STOCK_P71.kwF} / R ${STOCK_P71.kwR} lb/in (475 spring × 0.52² IR / 160 spring × 1.0² IR)`}
+            stock={`F ${stockStr(STOCK_P71.kwF)} / R ${stockStr(STOCK_P71.kwR)} lb/in — derived: 475 × 0.52² (IR estimated) / 160 × 1.0² (IR exact)`}
             optimal={`F 130–250 / R 130–200 lb/in (race-tuned, depends on track roughness)`}
             sev={a.kwFavg != null ? 'info' : 'info'}
             handling={a.kwFavg == null ? 'Enter spring rates to compute.'
@@ -1525,7 +1548,7 @@ To reach the ideal at current dynamic terms, static would need to be ${a.rfStati
           <Metric
             title="Ride Frequency"
             measured={a.rideFreqF_cpm != null ? `F ${a.rideFreqF_cpm.toFixed(0)} / R ${a.rideFreqR_cpm?.toFixed(0) ?? '—'} cpm` : null}
-            stock={`F ${STOCK_P71.rideFreqF} / R ${STOCK_P71.rideFreqR} cpm (passenger comfort tuning)`}
+            stock={`F ${stockStr(STOCK_P71.rideFreqF)} / R ${stockStr(STOCK_P71.rideFreqR)} cpm — derived from stock springs + sprung mass`}
             optimal={`F 95–120 / R 85–110 cpm — front MUST exceed rear (anti-pitch)`}
             sev={(() => {
               const f = a.rideFreqF_cpm; const r = a.rideFreqR_cpm;
@@ -1555,7 +1578,7 @@ To reach the ideal at current dynamic terms, static would need to be ${a.rfStati
           <Metric
             title="Spring Roll Rate & Roll Gradient"
             measured={a.rollGradient != null ? `${a.rollGradient.toFixed(2)} deg/g (springs only)` : null}
-            stock={`${STOCK_P71.rollGradient} deg/g (passenger comfort — body rolls heavily)`}
+            stock={`${stockStr(STOCK_P71.rollGradient, v => `${v}`)} deg/g — derived from stock springs and 22" CG estimate`}
             optimal={`1.0–1.8 deg/g (with ARBs) for non-aero racing sedan (Milliken Table 16.5)`}
             sev={(() => {
               const rg = a.rollGradient;
@@ -1599,7 +1622,7 @@ To reach the ideal at current dynamic terms, static would need to be ${a.rfStati
           <Metric
             title="Target Spring Rate (if not yet selected)"
             measured={`F ${a.ksF_target.toFixed(0)} / R ${a.ksR_target.toFixed(0)} lb/in`}
-            stock={`F ${STOCK_P71.springF} / R ${STOCK_P71.springR} lb/in (Police/Taxi front, stock rear coil)`}
+            stock={`F ${stockStr(STOCK_P71.springF)} / R ${stockStr(STOCK_P71.springR)} lb/in — Eaton Detroit Spring catalog (Police/Taxi front, stock rear coil)`}
             optimal={`Match calc target — gives 108/97 cpm front/rear ride frequency`}
             sev="info"
             handling={`Calculated targets to hit 108 cpm front / 97 cpm rear at IR ${a.irF.toFixed(2)}/${a.irR.toFixed(2)}. F${a.ksF_target.toFixed(0)} lb/in spring → ${(a.ksF_target * a.irF * a.irF).toFixed(0)} lb/in wheel rate. R${a.ksR_target.toFixed(0)} → ${(a.ksR_target * a.irR * a.irR).toFixed(0)} lb/in wheel. Static spring load: F${a.springLoadF.toFixed(0)} lb / R${a.springLoadR.toFixed(0)} lb. Adjust ±50 lb/in for track roughness preferences.`}
@@ -1679,7 +1702,7 @@ To reach the ideal at current dynamic terms, static would need to be ${a.rfStati
               : sd.compression < 0.5 ? 'critical'
               : sd.jounceAvail != null && sd.jounceAvail < 1.0 ? 'warning'
               : 'good';
-            const stockGap = pos.endsWith('F') ? STOCK_P71.shockGapF : STOCK_P71.shockGapR;
+            const stockGap = pos.endsWith('F') ? STOCK_P71.shockGapF.val : STOCK_P71.shockGapR.val;
             return (
               <Metric
                 key={pos}
