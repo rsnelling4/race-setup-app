@@ -615,18 +615,28 @@ function diagnose(a, geo, trackType, measured = null) {
 }
 
 // ─── Generate fixes for each symptom — track + garage ────────────────────────
-function fixesFor(symptom, a, geo, trackType) {
+function fixesFor(symptom, a, geo, trackType, measured = null) {
   // MIXED phase: union the fixes for each contributing cause so the user sees
   // every available action. The aggregator de-duplicates downstream.
   if (symptom.causeTag === 'MIXED_PHASE' && symptom._expandedSymptoms) {
     const out = { track: [], garage: [] };
     for (const c of symptom._expandedSymptoms) {
-      const f = fixesFor(c, a, geo, trackType);
+      const f = fixesFor(c, a, geo, trackType, measured);
       out.track.push(...f.track);
       out.garage.push(...f.garage);
     }
     return out;
   }
+
+  // Resolve cold PSI: prefer the actual measured session value when available,
+  // fall back to the saved car profile. Recipes display "current X" using this.
+  const psiAt = (pos) => {
+    const m = measured?.coldPsi?.[pos];
+    if (Number.isFinite(m)) return m;
+    const g = parseFloat(geo.coldPsi?.[pos]);
+    return Number.isFinite(g) ? g : null;
+  };
+  const psiSourceLabel = measured ? 'session' : 'profile';
 
   const fixes = { track: [], garage: [] };
   const isOval = trackType === 'oval';
@@ -689,7 +699,7 @@ function fixesFor(symptom, a, geo, trackType) {
         magnitude: 'high',
       });
       fixes.track.push({
-        action: `Raise RF cold pressure by 1–2 PSI (current ${parseFloat(geo.coldPsi?.RF) || '—'} → ${(parseFloat(geo.coldPsi?.RF) + 2) || 34}).`,
+        action: `Raise RF cold pressure by 1–2 PSI (${psiSourceLabel} ${psiAt('RF') ?? '—'} → ${psiAt('RF') != null ? psiAt('RF') + 2 : 34}).`,
         impact: `Stiffens RF sidewall to support loaded outside tire. Doesn't fix LLTD root cause but recovers some of the lost lateral grip.`,
         magnitude: 'low',
       });
@@ -747,7 +757,7 @@ function fixesFor(symptom, a, geo, trackType) {
       }
       // Track-side: tire pressure helps a hot outside edge
       fixes.track.push({
-        action: `Drop RF cold pressure by 1–2 PSI (current ${parseFloat(geo.coldPsi?.RF) || '—'} → ${(parseFloat(geo.coldPsi?.RF) - 2) || 30}).`,
+        action: `Drop RF cold pressure by 1–2 PSI (${psiSourceLabel} ${psiAt('RF') ?? '—'} → ${psiAt('RF') != null ? psiAt('RF') - 2 : 30}).`,
         impact: `Lower pressure widens contact patch, broadens load distribution across the tire so the outside edge isn't the only thing on the ground. Mitigates push until camber is fixed.`,
         magnitude: 'low',
       });
@@ -946,9 +956,9 @@ function fixesFor(symptom, a, geo, trackType) {
     case 'MEAS_LR_PSI_HIGH':
     case 'MEAS_RR_PSI_HIGH': {
       const pos = tag.split('_')[1];
-      const cur = parseFloat(geo.coldPsi?.[pos]) || null;
+      const cur = psiAt(pos);
       fixes.track.push({
-        action: `Drop ${pos} cold pressure by 2 PSI for next session${cur ? ` (current ${cur} → ${cur - 2})` : ''}.`,
+        action: `Drop ${pos} cold pressure by 2 PSI for next session${cur != null ? ` (${psiSourceLabel} ${cur} → ${cur - 2})` : ''}.`,
         impact: `Pyrometer shows center crowning — pressure too high. Drop until the middle/edge spread is within 5°F.`,
         magnitude: 'high',
       });
@@ -960,9 +970,9 @@ function fixesFor(symptom, a, geo, trackType) {
     case 'MEAS_LR_PSI_LOW':
     case 'MEAS_RR_PSI_LOW': {
       const pos = tag.split('_')[1];
-      const cur = parseFloat(geo.coldPsi?.[pos]) || null;
+      const cur = psiAt(pos);
       fixes.track.push({
-        action: `Raise ${pos} cold pressure by 2 PSI for next session${cur ? ` (current ${cur} → ${cur + 2})` : ''}.`,
+        action: `Raise ${pos} cold pressure by 2 PSI for next session${cur != null ? ` (${psiSourceLabel} ${cur} → ${cur + 2})` : ''}.`,
         impact: `Pyrometer shows the middle is cooler than the edges — tire bowing under load, pressure too low. Raise until middle/edge spread closes.`,
         magnitude: 'high',
       });
@@ -1224,11 +1234,11 @@ export default function TuningAdvisor() {
       const phase = groups[s.phase] ? s.phase : 'OVERALL';
       groups[phase].push({
         ...s,
-        fixes: analysis ? fixesFor(s, analysis, car, trackType) : { track: [], garage: [] },
+        fixes: analysis ? fixesFor(s, analysis, car, trackType, measured) : { track: [], garage: [] },
       });
     }
     return groups;
-  }, [symptoms, analysis, car, trackType]);
+  }, [symptoms, analysis, car, trackType, measured]);
 
   // Aggregate ALL fixes across all symptoms into a single track + garage list,
   // de-duplicated by action text and ranked by magnitude
