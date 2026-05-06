@@ -4461,6 +4461,34 @@
   line-height: 1.55;
 }
 
+.tuning-mixed-contributors {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding-left: 4px;
+}
+
+.tuning-mixed-row {
+  background: #0a1019;
+  border: 1px solid #1e293b;
+  border-left: 3px solid #f59e0b;
+  border-radius: 4px;
+  padding: 8px 10px;
+}
+
+.tuning-mixed-row-head {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 4px;
+}
+
+.tuning-mixed-why {
+  font-size: 0.78rem;
+  color: #94a3b8;
+  line-height: 1.5;
+}
+
 /* ── Fix groups ─────────────────────────────────────────────────────────── */
 .tuning-fix-group {
   margin-bottom: 20px;

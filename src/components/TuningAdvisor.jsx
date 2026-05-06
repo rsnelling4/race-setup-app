@@ -300,17 +300,25 @@ function diagnose(a, geo, trackType) {
     }
   }
 
-  // Sort by severity then magnitude
-  symptoms.sort((a, b) => {
-    const r = SEV_RANK[b.severity] - SEV_RANK[a.severity];
-    return r !== 0 ? r : (b.magnitude || 0) - (a.magnitude || 0);
-  });
-
-  return symptoms;
+  // Net opposing PUSH/LOOSE symptoms within a phase into a single MIXED entry,
+  // and sort the result.
+  return netSymptoms(symptoms);
 }
 
 // ─── Generate fixes for each symptom — track + garage ────────────────────────
 function fixesFor(symptom, a, geo, trackType) {
+  // MIXED phase: union the fixes for each contributing cause so the user sees
+  // every available action. The aggregator de-duplicates downstream.
+  if (symptom.causeTag === 'MIXED_PHASE' && symptom._expandedSymptoms) {
+    const out = { track: [], garage: [] };
+    for (const c of symptom._expandedSymptoms) {
+      const f = fixesFor(c, a, geo, trackType);
+      out.track.push(...f.track);
+      out.garage.push(...f.garage);
+    }
+    return out;
+  }
+
   const fixes = { track: [], garage: [] };
   const isOval = trackType === 'oval';
   const tag = symptom.causeTag;
@@ -565,12 +573,76 @@ function fixesFor(symptom, a, geo, trackType) {
   return fixes;
 }
 
+// ─── Per-phase netting ────────────────────────────────────────────────────────
+// Two opposing causes (PUSH + LOOSE) can both be valid physically. The car
+// exhibits whichever is dominant — but the masked cause re-appears the moment
+// the dominant one is fixed. Convert opposing symptoms in a single phase into
+// a single MIXED symptom that lists both contributors and predicts net behavior.
+const SEVERITY_WEIGHT = { high: 3, medium: 2, low: 1 };
+
+function netSymptoms(symptoms) {
+  // Group by phase
+  const byPhase = {};
+  for (const s of symptoms) {
+    (byPhase[s.phase] = byPhase[s.phase] || []).push(s);
+  }
+
+  const result = [];
+  for (const phase of Object.keys(byPhase)) {
+    const list = byPhase[phase];
+    const pushes = list.filter(s => s.behavior === 'PUSH');
+    const looses = list.filter(s => s.behavior === 'LOOSE');
+    const others = list.filter(s => s.behavior !== 'PUSH' && s.behavior !== 'LOOSE');
+
+    if (pushes.length > 0 && looses.length > 0) {
+      // Sum severities
+      const pushScore = pushes.reduce((sum, s) => sum + SEVERITY_WEIGHT[s.severity], 0);
+      const looseScore = looses.reduce((sum, s) => sum + SEVERITY_WEIGHT[s.severity], 0);
+      const diff = Math.abs(pushScore - looseScore);
+      const netBehavior = pushScore > looseScore ? 'PUSH' : looseScore > pushScore ? 'LOOSE' : 'INSTABILITY';
+      const netSev = diff >= 4 ? 'high' : diff >= 2 ? 'medium' : 'low';
+
+      const allCauses = [...pushes, ...looses].sort((a, b) => SEVERITY_WEIGHT[b.severity] - SEVERITY_WEIGHT[a.severity]);
+
+      result.push({
+        phase,
+        behavior: netBehavior === 'INSTABILITY' ? 'MIXED' : netBehavior,
+        severity: netSev,
+        magnitude: diff,
+        isMixed: true,
+        netNote: pushScore === looseScore
+          ? `Two equal-severity opposing causes — car will feel vague, wandering, or alternate push/loose unpredictably.`
+          : `Net behavior is ${netBehavior} (${netBehavior === 'PUSH' ? 'PUSH' : 'LOOSE'} causes outweigh the opposing causes by ${diff} severity points). The opposing condition is masked but will reappear the moment the dominant cause is corrected.`,
+        contributors: allCauses,
+        causeTag: 'MIXED_PHASE',
+        // For the fixes aggregator we need to be able to expand this back into
+        // individual cause tags
+        _expandedSymptoms: allCauses,
+      });
+      // Plus the unrelated INSTABILITY symptoms for this phase
+      result.push(...others);
+    } else {
+      // No conflict — pass through
+      result.push(...list);
+    }
+  }
+
+  // Sort by severity then magnitude
+  result.sort((a, b) => {
+    const r = SEV_RANK[b.severity] - SEV_RANK[a.severity];
+    return r !== 0 ? r : (b.magnitude || 0) - (a.magnitude || 0);
+  });
+
+  return result;
+}
+
 // ─── Format helpers ───────────────────────────────────────────────────────────
 const BEHAVIOR_COLOR = {
   PUSH: '#f59e0b',
   LOOSE: '#f87171',
   NEUTRAL: '#22c55e',
   INSTABILITY: '#a78bfa',
+  MIXED: '#a855f7',
 };
 
 const SEVERITY_LABEL = {
@@ -707,7 +779,7 @@ export default function TuningAdvisor() {
                 <div key={i} className="tuning-symptom" style={{ borderLeftColor: BEHAVIOR_COLOR[sym.behavior] }}>
                   <div className="tuning-symptom-head">
                     <span className="tuning-behavior" style={{ color: BEHAVIOR_COLOR[sym.behavior] }}>
-                      {sym.behavior}
+                      {sym.isMixed ? `MIXED → NET ${sym.behavior}` : sym.behavior}
                     </span>
                     <span className="tuning-severity" style={{
                       background: SEVERITY_COLOR[sym.severity] + '22',
@@ -717,7 +789,32 @@ export default function TuningAdvisor() {
                       {SEVERITY_LABEL[sym.severity]}
                     </span>
                   </div>
-                  <div className="tuning-why">{sym.why}</div>
+                  {sym.isMixed ? (
+                    <>
+                      <div className="tuning-why" style={{ marginBottom: 10 }}>{sym.netNote}</div>
+                      <div className="tuning-mixed-contributors">
+                        {sym.contributors.map((c, ci) => (
+                          <div key={ci} className="tuning-mixed-row" style={{ borderLeftColor: BEHAVIOR_COLOR[c.behavior] }}>
+                            <div className="tuning-mixed-row-head">
+                              <span style={{ color: BEHAVIOR_COLOR[c.behavior], fontWeight: 700, fontSize: 12 }}>
+                                {c.behavior}
+                              </span>
+                              <span style={{
+                                fontSize: 10, fontWeight: 700, letterSpacing: 0.06,
+                                background: SEVERITY_COLOR[c.severity] + '22',
+                                color: SEVERITY_COLOR[c.severity],
+                                border: `1px solid ${SEVERITY_COLOR[c.severity]}55`,
+                                padding: '1px 6px', borderRadius: 3,
+                              }}>{SEVERITY_LABEL[c.severity]}</span>
+                            </div>
+                            <div className="tuning-mixed-why">{c.why}</div>
+                          </div>
+                        ))}
+                      </div>
+                    </>
+                  ) : (
+                    <div className="tuning-why">{sym.why}</div>
+                  )}
                 </div>
               ))}
             </div>
