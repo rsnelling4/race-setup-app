@@ -411,9 +411,25 @@ const STEPS = [
       <>
         <Sub>Spring rate is stamped on the spring or found by part number. Do NOT confuse with wheel
           rate — wheel rate = spring rate × IR².</Sub>
-        <Sub><strong>Installation ratio (IR):</strong> jack wheel up exactly 1 inch, measure spring compression.
-          IR = spring compression ÷ wheel travel. Stock P71 SLA front: ~0.85 (11&quot; spring pickup ÷ 13&quot; arm).</Sub>
-        <Sub><strong>Rear spring track:</strong> center-to-center between rear spring perch cups along the axle.</Sub>
+        <Sub>
+          <strong>Front Installation Ratio (IR) — how to measure:</strong><br />
+          1. Car at ride height on flat ground.<br />
+          2. Mark the current spring length with a paint pen or tape on the coil.<br />
+          3. Place a floor jack under the lower control arm near the ball joint. Jack the wheel up
+          exactly 1.0&quot; — measure the rise at the wheel centerline with a tape.<br />
+          4. Measure how much the spring compressed (distance from your mark to current top of coil).<br />
+          5. IR = spring compression ÷ 1.0 (the wheel travel).<br />
+          Stock P71 SLA front: ~0.85 (spring pickup 11&quot; from pivot on a 13&quot; arm → 11÷13 = 0.846).
+          If you can&apos;t measure, use 0.85.
+        </Sub>
+        <Sub>
+          <strong>Rear IR — P71 solid axle:</strong> The rear coil springs sit directly on the axle
+          perches with no lever arm — 1&quot; of axle movement = 1&quot; of spring compression. IR = 1.0.
+          Only enter a different value if your springs are mounted at a significant angle or on an
+          offset bracket.
+        </Sub>
+        <Sub><strong>Rear spring track:</strong> tape measure along the top of the axle tube from the
+          center of the left spring perch cup to the center of the right perch cup.</Sub>
       </>
     ),
     fields: (data, set, setN) => (
@@ -428,11 +444,11 @@ const STEPS = [
         </div>
         <Row>
           <WField label="Front IR (per side)"
-            hint="Stock P71 SLA: 0.85. To measure directly: jack wheel 1&quot;, measure spring compression. IR = compression ÷ 1.0. Range 0.75–0.90 for SLA passenger cars.">
+            hint="Mark spring length at ride height. Jack wheel up exactly 1.0&quot; at the wheel centerline. Measure spring compression from your mark. IR = spring compression ÷ 1.0. Stock P71: 0.85. Plausible range: 0.75–0.90. A value below 0.70 or above 1.0 is almost certainly wrong — re-measure.">
             <NIn value={data.installRatio?.front ?? ''} onChange={v => setN('installRatio', 'front', v)} placeholder="e.g. 0.85" step="0.01" />
           </WField>
           <WField label="Rear IR"
-            hint="P71 solid rear axle with spring at axle: IR ≈ 1.0. Only changes if spring is offset from axle centerline.">
+            hint="P71 rear: springs sit directly on axle perches, no lever arm. 1&quot; of axle travel = 1&quot; of spring compression → IR = 1.0. Only change this if your springs are on an angled or offset bracket — in that case measure the same way as front (jack axle 1&quot;, measure spring compression).">
             <NIn value={data.installRatio?.rear ?? ''} onChange={v => setN('installRatio', 'rear', v)} placeholder="e.g. 1.0" step="0.01" />
           </WField>
           <WField label="Rear spring track (inches)"
