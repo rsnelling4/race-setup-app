@@ -1162,11 +1162,29 @@ To reach the ideal at current dynamic terms, static would need to be ${a.rfStati
             />}
           />
 
-          <Finding title="Figure-8 Camber Compromise Summary" sev="info">
-            Left turn: RF outside {rfGroundStr}° (ideal {T.idealRFGroundCamber}°) / LF inside {lfGroundStr}° (ideal {T.idealLFGroundCamber}°){'\n'}
-            Right turn: LF outside {sign(a.lfGroundCamberRight)}° (ideal {T.idealRFGroundCamber}°) / RF inside {sign(a.rfGroundCamberRight)}°{'\n\n'}
-            A perfectly symmetric static setting (both sides equal negative camber) minimizes the worst-case deviation across both turn directions. The optimal static is approximately −{(Math.abs(T.idealRFGroundCamber + a.rfBodyRoll + a.rollAtApex - 0.48 + a.rfCasterGain) / 2).toFixed(2)}° for both sides as a starting point — tune from there with pyrometer data.
-          </Finding>
+          {(() => {
+            // Optimal static: the value that puts the OUTSIDE tire at ideal ground camber.
+            // Dynamic terms when a tire is outside: casterGain + bodyRoll_jounce + rollFrame + swCamber
+            // Use RF caster for RF (left turn outside) and LF caster for LF (right turn outside).
+            const dynRF = a.rfCasterGain + a.rfBodyRoll + a.rollAtApex + a.swCamber;
+            const dynLF = -(a.lfCaster * T.casterCoeffLF) + (-(a.rollAtApex * T.slaJounceCoeff)) + a.rollAtApex + a.swCamber;
+            const optRF = T.idealRFGroundCamber - dynRF;
+            const optLF = T.idealRFGroundCamber - dynLF;
+            const optAvg = (optRF + optLF) / 2;
+            const reachable = optAvg >= P71_MAX_STATIC_NEG_CAMBER;
+            return (
+              <Finding title="Figure-8 Camber Compromise Summary" sev={reachable ? 'info' : 'warning'}>
+                Left turn: RF outside {rfGroundStr}° (ideal {T.idealRFGroundCamber}°) / LF inside {lfGroundStr}° (ideal {T.idealLFGroundCamber}°){'\n'}
+                Right turn: LF outside {sign(a.lfGroundCamberRight)}° (ideal {T.idealRFGroundCamber}°) / RF inside {sign(a.rfGroundCamberRight)}°{'\n\n'}
+                Optimal static for RF (left-turn outside): {optRF.toFixed(2)}°{'\n'}
+                Optimal static for LF (right-turn outside): {optLF.toFixed(2)}°{'\n'}
+                Best symmetric compromise (set both sides): {optAvg.toFixed(2)}°{'\n'}
+                {!reachable
+                  ? `⚠ ${optAvg.toFixed(2)}° is beyond the P71 cam bolt limit (−3.0°). Cannot reach ideal with static alone — reduce body roll with stiffer springs/ARB. Every 1° less roll buys back ~0.65° of negative ground camber.`
+                  : `Set both sides to ${optAvg.toFixed(2)}° as a starting point — tune from there with pyrometer data.`}
+              </Finding>
+            );
+          })()}
         </Section>
       )}
 

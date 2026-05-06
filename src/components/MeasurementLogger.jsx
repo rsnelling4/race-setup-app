@@ -889,10 +889,12 @@ function GeoEditor({ editing, setEditing }) {
           <Field label="Front IR (per side)"
             hint="HOW: Jack the front wheel up exactly 1 inch from ride height. Measure how much the spring compresses (mark the spring with chalk, measure the gap change). IR = spring compression ÷ wheel travel. STOCK ESTIMATE: 0.85 (geometric: ~11&quot; spring pickup distance from inner pivot ÷ 13&quot; total arm length). Typical SLA passenger car range 0.75–0.90. The earlier value of 0.52 used in this app was wrong and underpredicted wheel rate by ~3×.">
             <NumIn value={editing.installRatio?.front ?? ''} onChange={v => setN('installRatio', 'front', v)} placeholder="e.g. 0.85 (est)" step="0.01" />
+            {(() => { const v = parseFloat(editing.installRatio?.front); return (v && (v < 0.6 || v > 1.1)) ? <p style={{color:'#f87171',fontSize:11,margin:'2px 0 0'}}>⚠ IR {v.toFixed(2)} is outside the physical range for an SLA car (0.75–0.90). P71 stock ≈ 0.85. A low value causes wildly high roll gradient — check your entry.</p> : null; })()}
           </Field>
           <Field label="Rear IR (per side)"
             hint="For the P71 solid rear axle: the coil springs sit on perches on the axle housing. If the spring is directly above the axle, IR ≈ 1.0. If mounted at an angle or offset, measure directly. Leaf spring equivalent: IR is inherently 1.0 for a spring sitting at the axle.">
             <NumIn value={editing.installRatio?.rear ?? ''} onChange={v => setN('installRatio', 'rear', v)} placeholder="e.g. 1.0" step="0.01" />
+            {(() => { const v = parseFloat(editing.installRatio?.rear); return (v && (v < 0.7 || v > 1.2)) ? <p style={{color:'#f87171',fontSize:11,margin:'2px 0 0'}}>⚠ IR {v.toFixed(2)} is outside the normal range for a solid rear axle (0.9–1.05). P71 stock ≈ 1.0. Check your entry.</p> : null; })()}
           </Field>
         </div>
 
