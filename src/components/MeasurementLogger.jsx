@@ -1,6 +1,7 @@
 ﻿import { useState } from 'react';
 import GeometryVisualizer, { GeometryTable } from './GeometryVisualizer';
 import GeometryAnalysis from './GeometryAnalysis';
+import MeasurementWizard from './MeasurementWizard';
 import { REAR_SHOCKS, FRONT_STRUTS, shockLabel } from '../data/shockOptions';
 import { useSync } from '../utils/SyncContext';
 
@@ -262,28 +263,50 @@ function NumIn({ value, onChange, placeholder, step = '0.1', min, max }) {
 
 // ─── Generic list editor (shared by both session and geo lists) ───────────────
 
-function ListEditor({ items, setItems, emptyTemplate, renderEditor, renderView, formatFn, label }) {
+function ListEditor({ items, setItems, emptyTemplate, renderEditor, renderNew, renderView, formatFn, label }) {
   const [selectedIdx, setSelectedIdx] = useState(null);
   const [editing, setEditing]         = useState(null);
+  const [wizarding, setWizarding]     = useState(null); // non-null = wizard open with this data
   const [copied, setCopied]           = useState(false);
   const [deleteConfirm, setDeleteConfirm] = useState(null);
 
   function newItem() {
-    setEditing({ ...dc(emptyTemplate), id: Date.now(), date: new Date().toISOString().slice(0, 10) });
-    setSelectedIdx(null);
+    const fresh = { ...dc(emptyTemplate), id: Date.now(), date: new Date().toISOString().slice(0, 10) };
+    if (renderNew) {
+      setWizarding(fresh);
+      setEditing(null);
+      setSelectedIdx(null);
+    } else {
+      setEditing(fresh);
+      setSelectedIdx(null);
+    }
   }
 
-  function editItem(idx) {
-    const merged = { ...dc(emptyTemplate), ...dc(items[idx]) };
+  function wizardSave(data) {
+    const updated = [...items, data];
+    setItems(updated);
+    setSelectedIdx(updated.length - 1);
+    setWizarding(null);
+    // Open in edit mode so user can see full editor + analysis immediately
+    editItem(updated.length - 1, updated);
+  }
+
+  function wizardCancel() {
+    setWizarding(null);
+  }
+
+  function editItem(idx, itemsOverride) {
+    const list = itemsOverride ?? items;
+    const merged = { ...dc(emptyTemplate), ...dc(list[idx]) };
     // deep-merge nested objects
     for (const key of Object.keys(emptyTemplate)) {
       if (emptyTemplate[key] && typeof emptyTemplate[key] === 'object' && !Array.isArray(emptyTemplate[key])) {
-        merged[key] = { ...emptyTemplate[key], ...(items[idx][key] || {}) };
+        merged[key] = { ...emptyTemplate[key], ...(list[idx][key] || {}) };
       }
     }
     if (emptyTemplate.tireTemps) {
       for (const pos of ['LF', 'RF', 'LR', 'RR']) {
-        merged.tireTemps[pos] = { ...emptyTemplate.tireTemps[pos], ...(items[idx].tireTemps?.[pos] || {}) };
+        merged.tireTemps[pos] = { ...emptyTemplate.tireTemps[pos], ...(list[idx].tireTemps?.[pos] || {}) };
       }
     }
     setEditing(merged);
@@ -333,7 +356,7 @@ function ListEditor({ items, setItems, emptyTemplate, renderEditor, renderView, 
         )}
         {items.map((item, idx) => (
           <button key={item.id} className={`ml-car-item${selectedIdx === idx ? ' active' : ''}`}
-            onClick={() => editItem(idx)}>
+            onClick={() => { setWizarding(null); editItem(idx); }}>
             <span className="ml-car-name">{item.title || 'Unnamed'}</span>
             <span className="ml-car-date">{item.date}</span>
           </button>
@@ -342,11 +365,20 @@ function ListEditor({ items, setItems, emptyTemplate, renderEditor, renderView, 
 
       {/* Content */}
       <div className="ml-content">
-        {!editing && !viewItem && (
-          <div className="ml-splash"><p>Select an entry or tap "+ New".</p></div>
+        {/* Measurement wizard — shown when creating a new geo profile */}
+        {wizarding && (
+          <MeasurementWizard
+            initialData={wizarding}
+            onSave={wizardSave}
+            onCancel={wizardCancel}
+          />
         )}
 
-        {editing && (
+        {!wizarding && !editing && !viewItem && (
+          <div className="ml-splash"><p>Select a car or tap "+ New" to start a guided measurement walkthrough.</p></div>
+        )}
+
+        {!wizarding && editing && (
           <div className="ml-editor">
             <div className="ml-editor-header">
               <div className="ml-section-title">{selectedIdx !== null ? 'Edit' : 'New'}</div>
@@ -372,7 +404,7 @@ function ListEditor({ items, setItems, emptyTemplate, renderEditor, renderView, 
           </div>
         )}
 
-        {viewItem && !editing && (
+        {!wizarding && viewItem && !editing && (
           <div className="ml-view">
             <div className="ml-view-header">
               <div>
@@ -1244,6 +1276,7 @@ export function SuspensionGeometry() {
       emptyTemplate={EMPTY_GEO}
       formatFn={formatGeo}
       label="Cars"
+      renderNew={true}
       renderEditor={(editing, setEditing) => (
         <>
           <GeoEditor editing={editing} setEditing={setEditing} />
