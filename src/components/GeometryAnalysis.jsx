@@ -1467,65 +1467,82 @@ To reach the ideal at current dynamic terms, static would need to be ${a.rfStati
           SECTION 6 — LLTD
       ══════════════════════════════════════════════════════════════════ */}
       <Section title="6 — LATERAL LOAD TRANSFER DISTRIBUTION (LLTD)" color="#22c55e">
+
+        {/* Context banner — explain two-part LLTD before showing numbers */}
+        <div style={{background:'#0f172a',border:'1px solid #1e3a5f',borderRadius:6,padding:'10px 12px',marginBottom:12,fontSize:11,color:'#94a3b8',lineHeight:1.6}}>
+          <span style={{color:'#22c55e',fontWeight:700}}>LLTD has two independent parts</span> that must be read together:{' '}
+          <b style={{color:'#e2e8f0'}}>Geometric</b> (instant — through roll centers, bypasses springs) and{' '}
+          <b style={{color:'#e2e8f0'}}>Elastic</b> (rate-dependent — springs, ARB, dampers). The{' '}
+          <b style={{color:'#e2e8f0'}}>Optimizer shows TOTAL LLTD</b> (geometric + elastic combined, target ~42–46%).
+          This section shows geometric-only. A low geometric front fraction (like this P71's ~34%) is normal when the front RC is low (4") —{' '}
+          it means springs and ARB carry most of the front load transfer, giving you more tuning authority.
+        </div>
+
         <Metric
           title="Geometric LLTD — Front Share"
           measured={a.geoLLTDF != null ? `${(a.geoLLTDF * 100).toFixed(1)}%` : null}
-          stock={`~50% (stock front RC ≈ rear RC, balanced split)`}
-          optimal={isOval ? `60–70% front (oval — bias load to outside-front via geometry)` : `52–68% front (figure-8)`}
+          stock={`~30–35% front (P71 with 4" front RC / 14.5" rear RC — rear-biased geometric split is correct)`}
+          optimal={isOval
+            ? `20–45% front geometric (low front RC = rear-biased geometry; springs/ARB supply the elastic portion to reach 42–46% TOTAL)`
+            : `30–50% front geometric (figure-8 — symmetric RC heights preferred)`}
           sev={a.geoLLTDF != null
-            ? (isOval
-              ? (a.geoLLTDF >= 0.58 && a.geoLLTDF <= 0.72 ? 'good' : a.geoLLTDF < 0.50 ? 'warning' : 'info')
-              : (a.geoLLTDF >= 0.52 && a.geoLLTDF <= 0.68 ? 'good' : 'warning'))
+            ? (a.geoLLTDF >= 0.20 && a.geoLLTDF <= 0.55 ? 'good'
+              : a.geoLLTDF > 0.70 ? 'warning' : 'info')
             : 'info'}
-          handling={a.geoLLTDF == null ? 'Enter front hardpoints.'
-            : isOval && a.geoLLTDF >= 0.58 && a.geoLLTDF <= 0.72
-              ? `Geometry biases load to RF outside tire — sharp turn-in, RF loads up before springs deflect. Springs/ARB add rear elastic transfer to bring total LLTD toward the 46% optimum target.`
-            : a.geoLLTDF < 0.55
-              ? `Front geometric fraction LOW — rear loads up faster than front in a corner = entry oversteer / loose. Front RC needs to come up or rear Watts needs to drop.`
-            : a.geoLLTDF > 0.72
-              ? `Front geometric fraction VERY HIGH — front tires take a disproportionate share of load before springs engage. Chronic push that ARBs cannot tune out (geometry bypasses elastic path). Lower front RC.`
-            : `Geometric split is workable — minor tuning via spring/ARB will bring total LLTD to optimum.`}
+          handling={a.geoLLTDF == null ? 'Enter front hardpoints to compute.'
+            : a.geoLLTDF >= 0.20 && a.geoLLTDF <= 0.55
+              ? `Geometric split is rear-biased — expected with a low front RC (~${a.rcAvg?.toFixed(1) ?? '4'}"). The rear takes more geometric load, which is counteracted by stiff front springs/ARB supplying elastic load transfer. Total LLTD (geometry + springs + ARB) should be 42–46% front — check the Optimizer's LLTD readout.`
+            : a.geoLLTDF < 0.20
+              ? `Geometric front fraction very low — entry loose. Front RC is almost at ground level; geometry barely transfers load forward. Raise front RC or lower rear Watts pivot.`
+            : a.geoLLTDF > 0.65
+              ? `Geometric LLTD front-heavy — front RC is high, geometry aggressively loads outside front at corner entry before springs respond. This creates chronic push that ARBs cannot fully tune out. Lower front RC.`
+            : `Moderate geometric split — springs/ARB provide the elastic portion to reach the 42–46% total LLTD target.`}
           tip={<Tip
             changeable={false}
-            text="Fraction of GEOMETRIC load transfer (through RC links) that goes to the front axle. Optimizer's 46% target is TOTAL (geometric + elastic + ARB); geometric-only is normally higher on a P71."
-            fixMethod="Lower front RC (raise ride height on stiffer springs) to shift geometric transfer rearward. Raise rear Watts pivot to shift geometric transfer forward."
+            text={`Geometric LLTD = (front axle weight × front RC height / front track) / (same front term + rear axle weight × rear RC / rear track). This is INSTANT load transfer through the suspension links — it happens before the springs deflect. The Optimizer shows TOTAL LLTD (geometric + elastic) and targets 42–46% front. These two numbers are NOT the same and should not be compared directly.`}
+            fixMethod="Raise front RC to increase front geometric fraction (front gets more load faster at entry). Lower rear Watts pivot to decrease rear geometric fraction (rear loads up less). Both affect entry balance more than mid-corner."
           />}
         />
 
         <Metric
           title="Geometric LLTD — Rear Share"
           measured={a.geoLLTDF != null ? `${(a.geoLLTDR * 100).toFixed(1)}%` : null}
-          stock={`~50% (stock symmetric split)`}
-          optimal={`28–42% rear (most geometric LT to front because front RC is higher)`}
-          sev={a.geoLLTDF != null ? (a.geoLLTDR >= 0.28 && a.geoLLTDR <= 0.42 ? 'good' : 'info') : 'info'}
+          stock={`~65–70% rear (P71 stock — rear RC higher than front RC in absolute terms)`}
+          optimal={`45–80% rear geometric (rear dominates geometry on any low-front-RC car; elastic path compensates)`}
+          sev={a.geoLLTDF != null ? (a.geoLLTDR >= 0.45 && a.geoLLTDR <= 0.80 ? 'good' : 'warning') : 'info'}
           handling={a.geoLLTDF == null ? '—'
-            : a.geoLLTDR > 0.45
-              ? `Rear taking too much geometric load = rear tires unevenly loaded, less combined grip, oversteer tendency. Lower the Watts link pivot.`
-            : a.geoLLTDR < 0.28
-              ? `Rear geometric load too low — rear tires loaded evenly, lots of grip back there. Car may push since rear is "stuck" while front is overloaded.`
-            : `Rear taking healthy minority share — rear stays planted while front geometry dominates load distribution. Predictable rotation.`}
+            : a.geoLLTDR > 0.80
+              ? `Rear geometric fraction very high — rear tires load up sharply at corner entry. Entry loose / oversteer on turn-in. Lower the Watts link pivot.`
+            : a.geoLLTDR < 0.45
+              ? `Rear geometric fraction low — front RC is high and geometry is front-biased. Entry push tendency before springs engage.`
+            : `Rear handling majority of geometric load transfer — correct for a low-front-RC P71. Front springs/ARB provide the elastic portion to balance total LLTD.`}
           tip={<Tip
             changeable={true}
-            text="Higher rear RC = more rear geometric transfer = rear tires load up sooner = oversteer tendency. The Watts link pivot height directly controls this."
-            fixMethod="Adjustable Watts link pivot bracket. Raising the pivot 1 inch increases rear geometric transfer."
+            text="Higher rear Watts pivot = more rear geometric LLTD = rear tires load up faster at corner entry = oversteer tendency. Watts link height is the primary geometric LLTD tuning tool on the P71."
+            fixMethod={`Adjustable Watts link pivot bracket. Lowering the pivot 1" shifts ~2–3% of geometric transfer from rear to front.`}
           />}
         />
 
         <Metric
-          title="Geometric Roll Rate Distribution (Milliken §7.3)"
-          measured={a.rollRateFrontFrac != null ? `${(a.rollRateFrontFrac * 100).toFixed(1)}%` : null}
-          stock={`~50% (stock balanced)`}
-          optimal={isOval ? `58–72% front (oval)` : `52–68% front (figure-8)`}
-          sev={a.rollRateFrontFrac == null ? 'info'
-            : isOval
-              ? (a.rollRateFrontFrac >= 0.58 && a.rollRateFrontFrac <= 0.72 ? 'good' : 'warning')
-              : (a.rollRateFrontFrac >= 0.52 && a.rollRateFrontFrac <= 0.68 ? 'good' : 'warning')}
-          handling={a.rollRateFrontFrac == null ? '—'
-            : `Geometric-only split. Springs and ARB add elastic transfer on TOP of this — bringing the total LLTD toward the 42–46% optimum found by Milliken's MRA testing. ${isOval ? 'Oval needs predominantly rear-biased elastic transfer to compensate for the front-heavy geometric split.' : 'Figure-8 wants near-symmetric front/rear elastic transfer.'}`}
+          title="Geometric vs Elastic LLTD — Tuning Authority"
+          measured={a.momentArm != null ? `${a.momentArm.toFixed(1)}" CG-to-RC moment arm` : null}
+          stock={`~${(22 - 4).toFixed(0)}" (22" CG − 4" RC estimate)`}
+          optimal={`6–14" (gives springs/ARB authority while limiting body roll)`}
+          sev={a.momentArm != null
+            ? (Math.abs(a.momentArm) < 3 ? 'critical'
+              : a.momentArm >= 6 && a.momentArm <= 18 ? 'good'
+              : 'warning')
+            : 'info'}
+          handling={a.momentArm == null ? 'Enter front RC and CG height.'
+            : a.momentArm < 3
+              ? `Moment arm nearly zero — CG is almost at RC height. Springs and ARB have almost no leverage to create elastic load transfer. Cannot tune balance with springs alone. Raise RC or lower CG.`
+            : a.momentArm > 20
+              ? `Long moment arm — heavy elastic body roll. Large spring/ARB forces needed to control roll, and every change has an outsized effect on balance. Stiffen springs to shorten effective arm.`
+            : `Healthy moment arm (${a.momentArm.toFixed(1)}") — springs and ARB have meaningful leverage. Each 50 lb/in front spring increase shifts total LLTD ~1–2% front.`}
           tip={<Tip
-            changeable={true}
-            text="Milliken §7.3: MRA analysis of a 3570 lb sports sedan found MAXIMUM lateral acceleration with 42% TOTAL LLTD to the front — geometric + elastic + ARB combined."
-            fixMethod="Geometric fraction: lower front RC to reduce front share. Spring/ARB stiffness adds elastic transfer on top."
+            changeable={false}
+            text="The CG-to-RC moment arm determines how much of the sprung weight creates elastic (spring-resisted) body roll. A larger arm = more spring/ARB authority but more roll. A smaller arm = less roll but also less LLTD tuning range. Milliken §16.2."
+            fixMethod="Lower front RC (drop ride height or lower hardpoints) to increase moment arm and elastic tuning range. Higher RC reduces roll but also reduces spring/ARB authority."
           />}
         />
 
