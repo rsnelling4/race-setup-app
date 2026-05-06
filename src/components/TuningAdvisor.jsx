@@ -326,16 +326,26 @@ function fixesFor(symptom, a, geo, trackType) {
   switch (tag) {
 
     // ── RC differential issues ───────────────────────────────────────────
+    // NOTE: factory P71 Watts bracket is FIXED — pivot height is set by the
+    // weldment on the axle housing. To change rear RC the realistic options
+    // are: (1) change rear ride height (raises/lowers the entire axle and the
+    // Watts pivot with it), or (2) install an aftermarket adjustable Watts
+    // bracket (Fays2, Strange, fabricated).
     case 'RC_DIFF_NEG':
       fixes.garage.push({
-        action: `Lower the rear Watts link center pivot bracket by ${Math.min(Math.abs(a.rcDiff) - 1, 4).toFixed(1)}".`,
-        impact: `Reduces rear RC from ${a.rearRC.toFixed(1)}" toward ${(a.rearRC - Math.min(Math.abs(a.rcDiff) - 1, 4)).toFixed(1)}". Front and rear geometric load transfer rates equalize, removing entry rotation.`,
+        action: `Raise front ride height ½–1" on stiffer or taller front springs (e.g. P71 700 lb/in HD struts).`,
+        impact: `Raises front RC by ~1–2" closer to rear RC. Front-side correction — works without touching the rear and uses parts already in the P71 catalog.`,
         magnitude: 'high',
       });
       fixes.garage.push({
-        action: `Alternative: raise front ride height ½–1" on stiffer springs.`,
-        impact: `Raises front RC by ~1–2" closer to rear RC. Same balance effect from the front side instead of the rear.`,
+        action: `Lower rear ride height ½" via softer or shorter rear coil springs.`,
+        impact: `Drops the rear axle assembly (and the fixed Watts pivot mounted on it) by ½", reducing rear RC by approximately the same amount. Re-check rake after the change.`,
         magnitude: 'medium',
+      });
+      fixes.garage.push({
+        action: `Aftermarket adjustable Watts bracket (Fays2, Strange, fabricated). Drop center pivot ${Math.min(Math.abs(a.rcDiff) - 1, 4).toFixed(1)}".`,
+        impact: `Direct correction — drops rear RC from ${a.rearRC.toFixed(1)}" toward ${(a.rearRC - Math.min(Math.abs(a.rcDiff) - 1, 4)).toFixed(1)}" without changing rear ride height or rake. Requires aftermarket part purchase.`,
+        magnitude: 'high',
       });
       fixes.track.push({
         action: `Add ½ turn of static negative camber to RF.`,
@@ -346,13 +356,18 @@ function fixesFor(symptom, a, geo, trackType) {
 
     case 'RC_DIFF_HIGH':
       fixes.garage.push({
-        action: `Raise ride height by 0.5"–1.0" on the front.`,
-        impact: `Each 1" of ride height raises front RC ~1–2" geometrically — but ALSO drops it relative to CG. The net effect is reduced front geometric load transfer share, returning ARB authority. Use spring spacers or taller front springs.`,
+        action: `Raise front ride height 0.5"–1.0" using stiffer or taller front springs.`,
+        impact: `Counter-intuitive but correct: raising the front via stiffer springs drops front RC RELATIVE to the CG, reducing front geometric load transfer share and returning ARB/spring authority. Each 1" of stiffer-spring ride height ≈ 1–2" of geometric front RC change.`,
         magnitude: 'high',
       });
       fixes.garage.push({
-        action: `Increase rear Watts link pivot height to ${Math.min(a.rearRC + 1.5, 18).toFixed(1)}".`,
-        impact: `Closes the RC gap by raising rear share of geometric transfer. Less invasive than re-springing.`,
+        action: `Raise rear ride height ½" via stiffer rear coil springs (e.g. 200 lb/in HD).`,
+        impact: `Lifts the rear axle and the fixed Watts pivot ½", indirectly raising rear RC by the same amount and closing the differential. Side benefit: stiffer rear adds elastic LLTD to rear.`,
+        magnitude: 'medium',
+      });
+      fixes.garage.push({
+        action: `Aftermarket adjustable Watts bracket — raise center pivot to ${Math.min(a.rearRC + 1.5, 18).toFixed(1)}".`,
+        impact: `Direct correction — raises rear share of geometric transfer without changing rear ride height. Requires aftermarket part.`,
         magnitude: 'medium',
       });
       break;
@@ -372,16 +387,24 @@ function fixesFor(symptom, a, geo, trackType) {
       break;
 
     case 'LLTD_FRONT_LOW': {
-      const target = Math.min(a.rearRC - 1.5, 14).toFixed(1);
+      // Rear is doing too much geometric work. Factory Watts is fixed — the
+      // realistic levers are rear ride height, front ride height, and (last
+      // resort) an aftermarket adjustable Watts bracket.
       fixes.garage.push({
-        action: `Lower rear Watts link pivot to ~${target}".`,
-        impact: `Drops rear geometric LLTD share, returning front LLTD to 60–65% range. Most direct correction.`,
+        action: `Lower rear ride height ½" via softer or shorter rear coil springs.`,
+        impact: `Drops the rear axle and the fixed Watts pivot ½", reducing rear RC by approximately the same amount. Pulls geometric LLTD share back toward the front.`,
         magnitude: 'high',
       });
       fixes.garage.push({
-        action: `Stiffer rear springs (e.g. 200 lb/in Heavy Duty) raise rear elastic share.`,
-        impact: `Adds elastic LLTD to rear, balancing the geometric tilt the other direction.`,
-        magnitude: 'medium',
+        action: `Raise front ride height ½–1" via stiffer front springs (e.g. 700 lb/in HD struts).`,
+        impact: `Raises front RC closer to rear RC, increasing front geometric share. P71 Watts is not factory-adjustable, so this front-side change is the cleanest non-aftermarket fix.`,
+        magnitude: 'high',
+      });
+      const target = Math.min(a.rearRC - 1.5, 14).toFixed(1);
+      fixes.garage.push({
+        action: `Aftermarket adjustable Watts bracket — drop center pivot to ~${target}".`,
+        impact: `Direct correction without changing rear ride height. Requires aftermarket part (Fays2, Strange, fabricated).`,
+        magnitude: 'high',
       });
       break;
     }
@@ -478,16 +501,31 @@ function fixesFor(symptom, a, geo, trackType) {
     // ── Roll axis ────────────────────────────────────────────────────────
     case 'ROLL_AXIS_INVERTED':
       fixes.garage.push({
-        action: `URGENT: raise rear Watts link pivot or drop front RC. Front RC must be lower than rear RC.`,
-        impact: `Currently the body jacks upward in cornering instead of rolling. This is dangerous and unpredictable.`,
+        action: `URGENT: drop front RC. Lower front ride height OR install lower-rate / shorter front springs to bring the front below rear RC.`,
+        impact: `Currently the body jacks upward in cornering instead of rolling — dangerous and unpredictable. P71 Watts is fixed; the front-side correction is required.`,
+        magnitude: 'high',
+      });
+      fixes.garage.push({
+        action: `Raise rear ride height via stiffer rear springs to lift the Watts pivot.`,
+        impact: `Lifts axle and Watts pivot together, raising rear RC. Combined with a front-side drop, restores normal roll axis inclination.`,
+        magnitude: 'medium',
+      });
+      fixes.garage.push({
+        action: `Aftermarket adjustable Watts bracket — raise center pivot.`,
+        impact: `Most direct fix. Front RC must end up lower than rear RC. Requires aftermarket part.`,
         magnitude: 'high',
       });
       break;
 
     case 'ROLL_AXIS_STEEP':
       fixes.garage.push({
-        action: `Lower rear Watts link pivot by 1–2".`,
-        impact: `Reduces roll axis inclination from ${a.rollAxisInclination.toFixed(1)}° toward 5–7°. Rear sets more progressively.`,
+        action: `Lower rear ride height ½–1" via softer or shorter rear coil springs.`,
+        impact: `Drops the axle and Watts pivot, reducing rear RC and roll axis inclination from ${a.rollAxisInclination.toFixed(1)}° toward 5–7°. P71 Watts is not factory-adjustable so ride height is the lever.`,
+        magnitude: 'medium',
+      });
+      fixes.garage.push({
+        action: `Aftermarket adjustable Watts bracket — drop center pivot 1–2".`,
+        impact: `Direct correction without ride-height side effects. Requires aftermarket part.`,
         magnitude: 'medium',
       });
       break;
@@ -850,7 +888,7 @@ export default function TuningAdvisor() {
             <div className="tuning-fix-group garage">
               <div className="tuning-fix-group-header">
                 <span style={{ color: '#60a5fa', fontSize: 12, fontWeight: 700, letterSpacing: 0.05 }}>
-                  GARAGE TUNING — between sessions; alignment rack, shock swap, spring change, Watts link
+                  GARAGE TUNING — between sessions; alignment rack, shock swap, spring change, ride height adjustment
                 </span>
               </div>
               {aggregatedFixes.garage.length === 0 ? (

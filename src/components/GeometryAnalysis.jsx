@@ -913,7 +913,7 @@ export default function GeometryAnalysis({ geo }) {
       partsRecs.push({
         pos: 'LLTD', type: 'REAR RC — TOO HIGH RELATIVE TO FRONT (ENTRY LOOSE)',
         color: '#f59e0b',
-        detail: `Front geometric fraction is ${(frontFrac * 100).toFixed(1)}% — below ${(targetLo*100).toFixed(0)}% target. The rear Watts link pivot is transferring a disproportionately large share of load geometrically. The rear axle loads up faster than the front in a corner, causing oversteer/loose entry. Lower the rear Watts link pivot bracket 1–2" to reduce rear geometric transfer. Or raise front ride height to increase front RC height. (Milliken §12.3 2A)`,
+        detail: `Front geometric fraction is ${(frontFrac * 100).toFixed(1)}% — below ${(targetLo*100).toFixed(0)}% target. The rear Watts link pivot is transferring a disproportionately large share of load geometrically. The rear axle loads up faster than the front in a corner, causing oversteer/loose entry. Factory P71 Watts bracket is fixed: lower rear ride height ½" via softer rear coils (drops the axle and Watts pivot together) OR raise front ride height to increase front RC height. Aftermarket adjustable Watts brackets (Fays2, Strange) allow direct pivot drop. (Milliken §12.3 2A)`,
       });
     } else if (frontFrac > targetHi) {
       partsRecs.push({
@@ -1032,14 +1032,14 @@ export default function GeometryAnalysis({ geo }) {
           optimal={`${T.idealRearRC_low}–${T.idealRearRC_high}" for ${T.label}`}
           sev={rearRCSev}
           handling={a.rearRC > T.idealRearRC_high
-            ? `Rear RC too high — rear axle loads up geometrically faster than front. Tail sets first in corner = oversteer / loose entry. Lower the Watts link center pivot by ${(a.rearRC - T.idealRearRC_high).toFixed(1)}–${(a.rearRC - (T.idealRearRC_high + T.idealRearRC_low)/2).toFixed(1)}".`
+            ? `Rear RC too high — rear axle loads up geometrically faster than front. Tail sets first in corner = oversteer / loose entry. Factory Watts bracket is fixed: lower rear ride height ${(a.rearRC - T.idealRearRC_high).toFixed(1)}–${(a.rearRC - (T.idealRearRC_high + T.idealRearRC_low)/2).toFixed(1)}" via softer rear coils, or fit an aftermarket adjustable Watts bracket.`
             : a.rearRC < T.idealRearRC_low
               ? `Rear RC too low — rear elastic transfer dominates, slow weight build on rear tires. Car may understeer mid-corner as front loads up before rear catches up.`
             : `In target — Watts link providing balanced geometric transfer. Predictable rotation through corner.`}
           tip={<Tip
             changeable={true}
             text={`The P71 has a factory Watts link rear (not Panhard) — its roll center sits at the center pivot bolt mounted on the axle housing bracket, between the two horizontal balance arms. Stock height ~11" est. (no published Ford figure). Watts gives near-linear lateral motion of the axle (better than a Panhard arc). Aftermarket adjustable Watts brackets allow raising or lowering by 1–4". Target ${T.idealRearRC_low}–${T.idealRearRC_high}" for ${T.label}.`}
-            fixMethod={`Adjustable Watts link center pivot bracket. Each 1" raise increases rear geometric LLTD ~0.5–1%. ${isOval ? 'Target 12–16" for oval.' : 'For figure-8 target 10–18" symmetric.'} Keep Watts link as level as possible in side view to minimize roll steer.`}
+            fixMethod={`Factory P71 Watts bracket is fixed (not adjustable from the factory). Two ways to change rear RC: (1) change rear ride height via spring rate/length — lifts or lowers axle and Watts pivot together; (2) install an aftermarket adjustable Watts bracket (Fays2, Strange, fabricated). Each 1" of rear RC change shifts rear geometric LLTD by ~0.5–1%. ${isOval ? 'Target 12–16" for oval.' : 'For figure-8 target 10–18" symmetric.'} Keep Watts link as level as possible in side view to minimize roll steer.`}
           />}
         />
 
@@ -1053,14 +1053,14 @@ export default function GeometryAnalysis({ geo }) {
             : isOval && a.rcDiff > 2
               ? `Front-biased geometric split working in your favor on oval — RF loads up first through links, biasing weight to the heavily loaded outside-front tire. Sharp turn-in.`
             : isOval && a.rcDiff < 0
-              ? `Rear higher than front on an oval = rear loads up first = corner-entry oversteer / loose. Raise front RC (taller springs) or lower rear Watts pivot.`
+              ? `Rear higher than front on an oval = rear loads up first = corner-entry oversteer / loose. Raise front RC (taller / stiffer front springs) or lower rear ride height to drop the fixed Watts pivot. Aftermarket adjustable Watts bracket gives the most direct control.`
             : !isOval && Math.abs(a.rcDiff) > 3
-              ? `Large RC differential on figure-8 = car will handle differently in left vs right turns. Equalize by adjusting Watts link to match front RC.`
+              ? `Large RC differential on figure-8 = car will handle differently in left vs right turns. Equalize by changing rear ride height (drops/raises fixed Watts pivot with axle) or fitting an aftermarket adjustable Watts bracket to match front RC.`
             : `Differential is appropriate for ${T.label}. Geometric load transfer split is balanced for the track type.`}
           tip={<Tip
             changeable={false}
             text={`The front/rear RC differential sets the balance of geometric vs elastic load transfer. ${isOval ? 'On oval, front higher than rear is intentional — biases load to the outside (RF) in left turns.' : 'On figure-8, a small differential (front ≈ rear) helps keep the car balanced through both left and right turns.'}`}
-            fixMethod="Adjust rear Watts link pivot height to change differential. Front RC only moves with ride height changes."
+            fixMethod="Factory Watts bracket is fixed. Change rear RC by adjusting rear ride height (axle and pivot move together) or installing an aftermarket adjustable Watts bracket. Front RC only moves with ride height changes."
           />}
         />
 
@@ -1076,16 +1076,16 @@ export default function GeometryAnalysis({ geo }) {
             : 'warning'}
           handling={a.rollAxisInclination == null ? 'Enter front hardpoints to compute.'
             : a.rollAxisInclination < 0
-              ? `Roll axis tilts DOWN toward rear by ${Math.abs(a.rollAxisInclination).toFixed(2)}°. Front RC is higher than rear — body tends to jack upward rather than roll in a corner. Unpredictable. Lower front RC or raise rear Watts pivot.`
+              ? `Roll axis tilts DOWN toward rear by ${Math.abs(a.rollAxisInclination).toFixed(2)}°. Front RC is higher than rear — body tends to jack upward rather than roll in a corner. Unpredictable. Lower front RC (lower front ride height or softer front springs) or raise rear ride height to lift the fixed Watts pivot.`
             : a.rollAxisInclination < 2
               ? `Nearly flat roll axis (${a.rollAxisInclination.toFixed(2)}°). Front and rear load up simultaneously with almost no roll couple distribution bias. Springs and ARB have full authority but geometry provides no damping of roll onset.`
             : a.rollAxisInclination <= 9
-              ? `Normal inclination — roll axis rises ${a.rollAxisInclination.toFixed(2)}° toward the rear. Rear geometric load transfer slightly outpaces front at roll-out, giving a mild understeer moment at corner entry. Tunable via Watts link height.`
-              : `Steep roll axis (${a.rollAxisInclination.toFixed(2)}°). Rear loads up much faster than front geometrically — can cause corner-entry oversteer or snap when the rear hits its geometric limit. Lower the Watts link pivot.`}
+              ? `Normal inclination — roll axis rises ${a.rollAxisInclination.toFixed(2)}° toward the rear. Rear geometric load transfer slightly outpaces front at roll-out, giving a mild understeer moment at corner entry. Tunable via rear ride height or aftermarket adjustable Watts bracket.`
+              : `Steep roll axis (${a.rollAxisInclination.toFixed(2)}°). Rear loads up much faster than front geometrically — can cause corner-entry oversteer or snap when the rear hits its geometric limit. Lower rear ride height (drops the fixed Watts pivot with the axle) or fit an aftermarket adjustable Watts bracket.`}
           tip={<Tip
             changeable={true}
             text="Roll axis = line connecting front RC to rear RC in side view. Inclination = atan((rearRC − frontRC) / wheelbase). Positive = axis rises toward rear (normal). The inclination angle sets how quickly the rear geometric load transfer builds relative to front as the car rolls — a steeper angle means the rear 'sets' faster."
-            fixMethod="Raise or lower the rear Watts link center pivot. Each 1&quot; change in rear RC shifts inclination by ~0.5°. Front RC moves only with ride height changes (lowering drops front RC)."
+            fixMethod="Factory Watts bracket is fixed. Rear RC moves with rear ride height (raising/lowering the axle moves the Watts pivot with it) or via aftermarket adjustable Watts bracket. Each 1&quot; change in rear RC shifts inclination by ~0.5°. Front RC moves only with front ride height changes (lowering drops front RC)."
           />}
         />
 
@@ -1528,14 +1528,14 @@ To reach the ideal at current dynamic terms, static would need to be ${a.rfStati
             : a.geoLLTDF >= 0.20 && a.geoLLTDF <= 0.55
               ? `Geometric split is rear-biased — expected with a low front RC (~${a.rcAvg?.toFixed(1) ?? '4'}"). The rear takes more geometric load, which is counteracted by stiff front springs/ARB supplying elastic load transfer. Total LLTD (geometry + springs + ARB) should be 42–46% front — check the Optimizer's LLTD readout.`
             : a.geoLLTDF < 0.20
-              ? `Geometric front fraction very low — entry loose. Front RC is almost at ground level; geometry barely transfers load forward. Raise front RC or lower rear Watts pivot.`
+              ? `Geometric front fraction very low — entry loose. Front RC is almost at ground level; geometry barely transfers load forward. Raise front RC (stiffer / taller front springs) or lower rear ride height to drop the fixed Watts pivot with the axle.`
             : a.geoLLTDF > 0.65
               ? `Geometric LLTD front-heavy — front RC is high, geometry aggressively loads outside front at corner entry before springs respond. This creates chronic push that ARBs cannot fully tune out. Lower front RC.`
             : `Moderate geometric split — springs/ARB provide the elastic portion to reach the 42–46% total LLTD target.`}
           tip={<Tip
             changeable={false}
             text={`Geometric LLTD = (front axle weight × front RC height / front track) / (same front term + rear axle weight × rear RC / rear track). This is INSTANT load transfer through the suspension links — it happens before the springs deflect. The Optimizer shows TOTAL LLTD (geometric + elastic) and targets 42–46% front. These two numbers are NOT the same and should not be compared directly.`}
-            fixMethod="Raise front RC to increase front geometric fraction (front gets more load faster at entry). Lower rear Watts pivot to decrease rear geometric fraction (rear loads up less). Both affect entry balance more than mid-corner."
+            fixMethod="Raise front RC (stiffer/taller front springs) to increase front geometric fraction. Lower rear RC by dropping rear ride height (axle and fixed Watts pivot move together) or by fitting an aftermarket adjustable Watts bracket. Both affect entry balance more than mid-corner."
           />}
         />
 
@@ -1547,14 +1547,14 @@ To reach the ideal at current dynamic terms, static would need to be ${a.rfStati
           sev={a.geoLLTDF != null ? (a.geoLLTDR >= 0.45 && a.geoLLTDR <= 0.80 ? 'good' : 'warning') : 'info'}
           handling={a.geoLLTDF == null ? '—'
             : a.geoLLTDR > 0.80
-              ? `Rear geometric fraction very high — rear tires load up sharply at corner entry. Entry loose / oversteer on turn-in. Lower the Watts link pivot.`
+              ? `Rear geometric fraction very high — rear tires load up sharply at corner entry. Entry loose / oversteer on turn-in. Drop rear ride height (lowers the fixed Watts pivot with the axle) or install an aftermarket adjustable Watts bracket.`
             : a.geoLLTDR < 0.45
               ? `Rear geometric fraction low — front RC is high and geometry is front-biased. Entry push tendency before springs engage.`
             : `Rear handling majority of geometric load transfer — correct for a low-front-RC P71. Front springs/ARB provide the elastic portion to balance total LLTD.`}
           tip={<Tip
             changeable={true}
-            text="Higher rear Watts pivot = more rear geometric LLTD = rear tires load up faster at corner entry = oversteer tendency. Watts link height is the primary geometric LLTD tuning tool on the P71."
-            fixMethod={`Adjustable Watts link pivot bracket. Lowering the pivot 1" shifts ~2–3% of geometric transfer from rear to front.`}
+            text="Higher rear Watts pivot = more rear geometric LLTD = rear tires load up faster at corner entry = oversteer tendency. The factory Watts bracket is fixed; rear RC tuning is done via rear ride height changes or an aftermarket adjustable Watts bracket."
+            fixMethod={`Lower rear ride height ½" (softer rear coils) drops both the axle and the fixed Watts pivot, reducing rear RC. Or install an aftermarket adjustable Watts bracket — each 1" pivot drop shifts ~2–3% of geometric transfer from rear to front.`}
           />}
         />
 
@@ -1643,12 +1643,12 @@ To reach the ideal at current dynamic terms, static would need to be ${a.rfStati
             : a.lltdFrontFrac > 0.72
               ? `Front geometry-overloaded — chronic mid-corner push that ARB changes won't cure (geometry bypasses springs). Lower front RC (raise ride height) is the only real fix.`
             : a.lltdFrontFrac < 0.55
-              ? `Front under-loaded geometrically — car loose on entry as rear loads up first. Raise front RC or lower rear Watts.`
+              ? `Front under-loaded geometrically — car loose on entry as rear loads up first. Raise front RC (stiffer / taller front springs) or lower rear ride height to drop the fixed Watts pivot.`
             : `Geometric split is in the normal P71 race window. Springs and ARB carry the elastic load transfer to bring total LLTD to optimum 46%.`}
           tip={<Tip
             changeable={true}
             text="Whichever axle carries more geometric load transfer will see its tires load up faster and degrade first. >72% front → push. <55% front → loose."
-            fixMethod="Lower front RC to reduce front geometric fraction. Raise rear Watts pivot to increase rear geometric fraction."
+            fixMethod="Lower front ride height to reduce front geometric fraction. Raise rear ride height (stiffer rear springs lift axle and fixed Watts pivot) or fit an aftermarket adjustable Watts bracket to raise rear RC."
           />}
         />
 
@@ -2219,7 +2219,7 @@ function TrackPositionSynopsis({ a, isOval, T }) {
 
   if (a.rcDiff != null) {
     if (isOval && a.rcDiff < 0) {
-      lines.exit.push(`Rear RC higher than front → rear loads up first under throttle, exit OVERSTEER. Lower the Watts pivot.`);
+      lines.exit.push(`Rear RC higher than front → rear loads up first under throttle, exit OVERSTEER. Lower rear ride height to drop the fixed Watts pivot, or fit an aftermarket adjustable Watts bracket.`);
     } else if (isOval && a.rcDiff > 6) {
       lines.exit.push(`Front RC much higher than rear → strong front geometric bias, exit tends PUSH as front holds load while rear rotates.`);
     }
