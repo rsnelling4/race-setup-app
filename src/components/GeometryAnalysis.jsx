@@ -88,11 +88,18 @@ export function analyzeGeometry(geo, trackType = 'oval') {
   const cgH         = T.cgHeight - (num(geo.rideLowering) * 0.65);
   const momentArm   = rcAvg != null ? cgH - rcAvg : null;
 
-  // Static alignment from geo profile (falls back to sensible defaults)
-  const rfStatic = num(geo.camber?.RF || -2.25);
-  const lfStatic = num(geo.camber?.LF ||  2.75);
-  const rfCaster = num(geo.caster?.RF ||  6.0);
-  const lfCaster = num(geo.caster?.LF ||  9.0);
+  // Static alignment from geo profile.
+  // NOTE: use ?? not || for camber/caster — 0° is a valid entry and || would
+  // incorrectly fall through to the default when the profile stores "0".
+  const _rfStaticRaw = geo.camber?.RF != null && geo.camber.RF !== '' ? parseFloat(geo.camber.RF) : null;
+  const _lfStaticRaw = geo.camber?.LF != null && geo.camber.LF !== '' ? parseFloat(geo.camber.LF) : null;
+  const _rfCasterRaw = geo.caster?.RF != null && geo.caster.RF !== '' ? parseFloat(geo.caster.RF) : null;
+  const _lfCasterRaw = geo.caster?.LF != null && geo.caster.LF !== '' ? parseFloat(geo.caster.LF) : null;
+  // Defaults: stock-symmetric (0° camber) and P71 factory caster cross (3.5/5.0°)
+  const rfStatic = _rfStaticRaw ?? 0.0;
+  const lfStatic = _lfStaticRaw ?? 0.0;
+  const rfCaster = _rfCasterRaw ?? 5.0;
+  const lfCaster = _lfCasterRaw ?? 3.5;
 
   // ── (A) Use COMPUTED body roll from springs/ARB (not constant T.bodyRollPerG)
   // We need rollGradient here, but it depends on spring rates which are read
@@ -174,13 +181,14 @@ export function analyzeGeometry(geo, trackType = 'oval') {
   let rfGroundCamberRight = null, lfGroundCamberRight = null;
   let rfCamberDevRight = null, lfCamberDevRight = null;
   if (T.symmetric) {
-    // Right turn: LF is now outside (jounce), RF is now inside (droop)
-    const lfBodyRollRight = -(rollAtApex * T.slaJounceCoeff);  // LF jounces
-    const rfBodyRollRight =  (rollAtApex * T.slaDroopCoeff);   // RF droops
-    rfGroundCamberRight   = rfStatic - rfCasterGain + rfBodyRollRight - rollAtApex + swCamber;
-    lfGroundCamberRight   = lfStatic - lfCasterGain + lfBodyRollRight + rollAtApex;
-    rfCamberDevRight      = rfGroundCamberRight - T.idealLFGroundCamber; // RF is now inside
-    lfCamberDevRight      = lfGroundCamberRight - T.idealRFGroundCamber; // LF is now outside
+    // Right turn: LF is now outside (jounce/loaded), RF is now inside (droop/unloaded)
+    const lfBodyRollRight = -(rollAtApex * T.slaJounceCoeff);  // LF jounces into negative camber
+    const rfBodyRollRight =  (rollAtApex * T.slaDroopCoeff);   // RF droops into positive camber
+    // swCamber only applies to the loaded outside tire (LF in right turn); RF is unloaded
+    rfGroundCamberRight   = rfStatic - rfCasterGain + rfBodyRollRight - rollAtApex;
+    lfGroundCamberRight   = lfStatic - lfCasterGain + lfBodyRollRight + rollAtApex + swCamber;
+    rfCamberDevRight      = rfGroundCamberRight - T.idealLFGroundCamber; // RF is inside — target is LF ideal
+    lfCamberDevRight      = lfGroundCamberRight - T.idealRFGroundCamber; // LF is outside — target is RF ideal
   }
 
   const armRatio    = P71_UPPER_ARM_LENGTH / P71_LOWER_ARM_LENGTH;
