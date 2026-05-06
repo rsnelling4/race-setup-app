@@ -475,6 +475,21 @@ export function analyzeGeometry(geo, trackType = 'oval') {
     ? (lltdFrontFrac > 0.72 ? 'UNDERSTEER (front geo-dominated)' : lltdFrontFrac < 0.55 ? 'OVERSTEER (rear geo-dominant)' : 'NORMAL GEOMETRIC SPLIT')
     : null;
 
+  // ── Roll axis inclination ─────────────────────────────────────────────────
+  // Roll axis = line connecting front RC to rear RC, viewed from the side.
+  // Inclination (positive = axis tilts UP toward rear, normal for most cars):
+  //   θ = atan((rearRC − frontRC) / wheelbase_in) × (180/π)
+  // Negative inclination means front is higher than rear — unusual, can cause
+  // the body to jack up (rather than roll) in a corner.
+  const wheelbase_in = 114.7;
+  const rollAxisInclination = rcAvg != null
+    ? Math.atan((rearRC - rcAvg) / wheelbase_in) * (180 / Math.PI)
+    : null;
+
+  // Camber gain rate per inch of suspension travel from FVSA: rate = arctan(1/FVSA) ≈ 57.3/FVSA °/in
+  const rfCamberGainRate = rf.fvsa != null ? (Math.atan(1 / rf.fvsa) * 180 / Math.PI) : null;
+  const lfCamberGainRate = lf.fvsa != null ? (Math.atan(1 / lf.fvsa) * 180 / Math.PI) : null;
+
   return {
     T,
     rf, lf, halfTrack, trackWidthF, trackWidthR, wh,
@@ -508,6 +523,7 @@ export function analyzeGeometry(geo, trackType = 'oval') {
     fBumpF_meas, fRebF_meas, fBumpR_meas, fRebR_meas,
     zetaF_bump, zetaF_reb, zetaR_bump, zetaR_reb,
     brRatioF, brRatioR, fHop_hz, fHop_cpm,
+    rollAxisInclination, rfCamberGainRate, lfCamberGainRate,
   };
 }
 
@@ -1049,6 +1065,31 @@ export default function GeometryAnalysis({ geo }) {
         />
 
         <Metric
+          title="Roll Axis Inclination"
+          measured={a.rollAxisInclination != null ? `${a.rollAxisInclination >= 0 ? '+' : ''}${a.rollAxisInclination.toFixed(2)}°` : null}
+          stock={`~+${((Math.atan((14.5 - 4) / 114.7) * 180 / Math.PI)).toFixed(2)}° (est: rear 14.5" − front 4" over 114.7" wheelbase)`}
+          optimal={isOval ? '+3 to +8° (rear higher — normal, damps oversteer tendency)' : '+2 to +6° (slightly rear-high for balance)'}
+          sev={a.rollAxisInclination == null ? 'info'
+            : a.rollAxisInclination < 0 ? 'critical'
+            : a.rollAxisInclination < 2 ? 'warning'
+            : a.rollAxisInclination <= 9 ? 'good'
+            : 'warning'}
+          handling={a.rollAxisInclination == null ? 'Enter front hardpoints to compute.'
+            : a.rollAxisInclination < 0
+              ? `Roll axis tilts DOWN toward rear by ${Math.abs(a.rollAxisInclination).toFixed(2)}°. Front RC is higher than rear — body tends to jack upward rather than roll in a corner. Unpredictable. Lower front RC or raise rear Watts pivot.`
+            : a.rollAxisInclination < 2
+              ? `Nearly flat roll axis (${a.rollAxisInclination.toFixed(2)}°). Front and rear load up simultaneously with almost no roll couple distribution bias. Springs and ARB have full authority but geometry provides no damping of roll onset.`
+            : a.rollAxisInclination <= 9
+              ? `Normal inclination — roll axis rises ${a.rollAxisInclination.toFixed(2)}° toward the rear. Rear geometric load transfer slightly outpaces front at roll-out, giving a mild understeer moment at corner entry. Tunable via Watts link height.`
+              : `Steep roll axis (${a.rollAxisInclination.toFixed(2)}°). Rear loads up much faster than front geometrically — can cause corner-entry oversteer or snap when the rear hits its geometric limit. Lower the Watts link pivot.`}
+          tip={<Tip
+            changeable={true}
+            text="Roll axis = line connecting front RC to rear RC in side view. Inclination = atan((rearRC − frontRC) / wheelbase). Positive = axis rises toward rear (normal). The inclination angle sets how quickly the rear geometric load transfer builds relative to front as the car rolls — a steeper angle means the rear 'sets' faster."
+            fixMethod="Raise or lower the rear Watts link center pivot. Each 1&quot; change in rear RC shifts inclination by ~0.5°. Front RC moves only with ride height changes (lowering drops front RC)."
+          />}
+        />
+
+        <Metric
           title="CG-to-Roll-Center Moment Arm"
           measured={a.momentArm != null ? `${a.momentArm.toFixed(2)}"` : null}
           stock={`${stockStr(STOCK_P71.momentArm, v => `${v}"`)} — CG 22" (est) − front RC 4" (est)`}
@@ -1285,33 +1326,33 @@ To reach the ideal at current dynamic terms, static would need to be ${a.rfStati
 
         <Metric
           title="RF FVSA (Front View Swing Arm)"
-          measured={a.rf.fvsa != null ? `${a.rf.fvsa.toFixed(1)}"` : null}
+          measured={a.rf.fvsa != null ? `${a.rf.fvsa.toFixed(1)}" — ${a.rfCamberGainRate.toFixed(3)}°/in camber gain` : null}
           stock={`${stockStr(STOCK_P71.fvsa, v => `${v}"`)} — derived from back-solved hardpoints`}
-          optimal={`${T.idealFVSA_low}–${T.idealFVSA_high}" for ${T.label}`}
+          optimal={`${T.idealFVSA_low}–${T.idealFVSA_high}" (${(Math.atan(1/T.idealFVSA_high)*180/Math.PI).toFixed(2)}–${(Math.atan(1/T.idealFVSA_low)*180/Math.PI).toFixed(2)}°/in)`}
           sev={fvsaSev(a.rf.fvsa)}
           handling={a.rf.fvsa == null ? 'Cannot compute — IC not found.'
             : a.rf.fvsa < T.idealFVSA_low
-              ? `Very short FVSA = aggressive ${(Math.atan(1/a.rf.fvsa) * 180/Math.PI).toFixed(2)}°/in camber gain. Outside tire stays well-cambered but susceptible to scrub on rough surfaces (lateral movement of contact patch in jounce).`
+              ? `Very short FVSA = aggressive ${a.rfCamberGainRate.toFixed(3)}°/in camber gain. Outside tire stays well-cambered but susceptible to scrub on rough surfaces (lateral movement of contact patch in jounce).`
             : a.rf.fvsa > T.idealFVSA_high
-              ? `Long FVSA = gentle ${(Math.atan(1/a.rf.fvsa) * 180/Math.PI).toFixed(2)}°/in camber gain. Less roll compensation — more burden on static camber to keep RF outside tire flat. Less scrub disturbance.`
-            : `In target — ${(Math.atan(1/a.rf.fvsa) * 180/Math.PI).toFixed(2)}°/in camber gain provides good roll compensation without excessive scrub.`}
+              ? `Long FVSA = gentle ${a.rfCamberGainRate.toFixed(3)}°/in camber gain. Less roll compensation — more burden on static camber to keep RF outside tire flat. Less scrub disturbance.`
+            : `In target — ${a.rfCamberGainRate.toFixed(3)}°/in camber gain provides good roll compensation without excessive scrub.`}
           tip={<Tip
             changeable={false}
-            text={`FVSA = distance from front-view IC to wheel center. Sets camber change rate: rate = arctan(1/FVSA) ≈ 57.3/FVSA °/in. Target ${T.idealFVSA_low}–${T.idealFVSA_high}" for ${T.label}.`}
+            text={`FVSA = distance from front-view IC to wheel center. Sets camber gain rate: rate = arctan(1/FVSA) °/in. Target ${T.idealFVSA_low}–${T.idealFVSA_high}" → ${(Math.atan(1/T.idealFVSA_high)*180/Math.PI).toFixed(2)}–${(Math.atan(1/T.idealFVSA_low)*180/Math.PI).toFixed(2)}°/in for ${T.label}.`}
             fixMethod="Fixed by hardpoint geometry. Not adjustable without fabrication."
           />}
         />
 
         <Metric
           title="LF FVSA"
-          measured={a.lf.fvsa != null ? `${a.lf.fvsa.toFixed(1)}"` : null}
+          measured={a.lf.fvsa != null ? `${a.lf.fvsa.toFixed(1)}" — ${a.lfCamberGainRate.toFixed(3)}°/in camber gain` : null}
           stock={`${stockStr(STOCK_P71.fvsa, v => `${v}"`)} — symmetric with RF`}
           optimal={isOval ? `Within ±3" of RF FVSA` : `Match RF within ±1" for figure-8`}
           sev={fvsaSev(a.lf.fvsa)}
           handling={a.lf.fvsa != null && a.rf.fvsa != null
-            ? `Delta vs RF: ${(a.lf.fvsa - a.rf.fvsa).toFixed(1)}". ${!isOval && Math.abs(a.lf.fvsa - a.rf.fvsa) > 3 ? 'Large FVSA asymmetry for figure-8 — different camber gain L vs R = car will feel different turning each direction.' : 'Asymmetry within manageable range.'}`
+            ? `${a.lfCamberGainRate.toFixed(3)}°/in camber gain. Delta vs RF: ${(a.lf.fvsa - a.rf.fvsa).toFixed(1)}" FVSA / ${(a.lfCamberGainRate - a.rfCamberGainRate).toFixed(3)}°/in rate difference. ${!isOval && Math.abs(a.lf.fvsa - a.rf.fvsa) > 3 ? 'Large FVSA asymmetry for figure-8 — different camber gain rates L vs R = car will feel inconsistent corner-to-corner.' : 'Asymmetry within manageable range.'}`
             : '—'}
-          tip={<Tip changeable={false} text="LF FVSA sets how fast LF gains camber in droop (during cornering). Camber change rate = arctan(1/FVSA length) — Milliken §17.3." fixMethod="Fixed geometry." />}
+          tip={<Tip changeable={false} text="LF FVSA sets how fast LF gains camber in droop (during cornering). Camber gain rate = arctan(1/FVSA length) °/in — Milliken §17.3." fixMethod="Fixed geometry." />}
         />
 
         <Metric
