@@ -29,90 +29,184 @@ async function callGroq(apiKey, prompt) {
   return data.choices?.[0]?.message?.content ?? '';
 }
 
-// Build the AI prompt — give the model the same data the rule-based engine had,
-// plus its own diagnoses, and ask for a second opinion.
-function buildSecondOpinionPrompt({ car, analysis, measured, symptoms, aggregatedFixes, trackType }) {
+// Build the AI prompt — INDEPENDENT analysis. We give the model the raw
+// suspension geometry and (when available) the raw Track Day session data.
+// We do NOT give it our local engine's symptoms or fixes — the AI must form
+// its own diagnosis based on race-engineering knowledge.
+function buildSecondOpinionPrompt({ car, measured, trackType }) {
   const isOval = trackType === 'oval';
   const lines = [];
-  lines.push(`You are an experienced oval/figure-8 race crew chief reviewing a Crown Victoria P71 setup. The car uses an SLA front + Watts-link solid rear axle (factory Watts bracket is FIXED — not factory-adjustable; rear RC is changed by rear ride height or aftermarket bracket).`);
+
+  // ── Role / context ──────────────────────────────────────────────────────
+  lines.push(`You are an experienced oval-track race engineer. You are reviewing setup data for a 2008 Ford Crown Victoria P71 Police Interceptor running on a ${isOval ? '1/4-mile asphalt left-turn oval' : 'figure-8 (mixed direction)'} track.`);
   lines.push(``);
-  lines.push(`The local physics-based tuning advisor has produced its diagnosis below. Your job: review the data, confirm or disagree with each diagnosis, point out anything missed, and suggest the single most important next change. Be direct — no padding.`);
+  lines.push(`Car platform facts you should use:`);
+  lines.push(`- Body-on-frame ~3700 lb sedan, RWD, ~57/43 front/rear weight bias`);
+  lines.push(`- Front: short-long-arm (SLA) independent with strut-coil, P71 factory cross-caster (RF higher than LF)`);
+  lines.push(`- Rear: solid axle on a Watts link. The factory Watts bracket pivot height is FIXED — not adjustable without aftermarket parts. Rear roll center can only be changed by (a) changing rear ride height, which moves the axle and the fixed Watts pivot together, or (b) installing an aftermarket adjustable Watts bracket.`);
+  lines.push(`- Tire: 235/55R17 typical, treaded street radial`);
+  lines.push(`- Static camber adjustability: with a P71 camber bolt, ~−3° max negative; without one, very limited. Caster adjustable via lower control arm eccentric, ~3° to 9° range.`);
+  lines.push(`- Spring options: front struts ship as 440 (Base) / 475 (Police) / 700 (HD) lb/in pre-assembled. Rear coils ~140 / 160 (stock) / 200 lb/in.`);
   lines.push(``);
-  lines.push(`Track type: ${analysis.T.label}. Apex G ~${analysis.T.trackG}, apex steer ~${analysis.T.apexSteer}°.`);
+
+  // ── Raw geometry profile ────────────────────────────────────────────────
+  lines.push(`── SUSPENSION GEOMETRY (saved profile) ──`);
+  lines.push(`Track type: ${isOval ? 'Oval (left-turn only)' : 'Figure-8'}`);
+  if (car.title) lines.push(`Profile name: ${car.title}`);
+
+  // Static alignment (raw)
   lines.push(``);
-  lines.push(`── KEY GEOMETRY ──`);
-  lines.push(`Front RC ${analysis.rcAvg?.toFixed(1)}" / Rear RC ${analysis.rearRC.toFixed(1)}" / RC differential ${analysis.rcDiff?.toFixed(1)}"`);
-  lines.push(`Roll axis inclination: ${analysis.rollAxisInclination?.toFixed(2)}° (positive = rises toward rear)`);
-  lines.push(`Front geometric LLTD: ${analysis.geoLLTDF != null ? (analysis.geoLLTDF*100).toFixed(0)+'%' : '—'}`);
-  lines.push(`Roll gradient: ${analysis.rollGradient?.toFixed(2)}°/g, body roll at apex: ${analysis.rollAtApex?.toFixed(2)}°`);
-  lines.push(`RF dynamic ground camber: ${analysis.rfGroundCamber?.toFixed(2)}° (target ${analysis.T.idealRFGroundCamber}°)`);
-  lines.push(`LF dynamic ground camber: ${analysis.lfGroundCamber?.toFixed(2)}° (target ${analysis.T.idealLFGroundCamber}°)`);
-  lines.push(`Static alignment: LF camber ${analysis.lfStatic.toFixed(2)}° / RF ${analysis.rfStatic.toFixed(2)}°, LF caster ${analysis.lfCaster.toFixed(1)}° / RF ${analysis.rfCaster.toFixed(1)}°`);
-  if (car.toe) lines.push(`Front toe (in): ${car.toe}`);
-  if (car.rearToe) lines.push(`Rear toe (in): ${car.rearToe}`);
-  if (analysis.kwLF) {
-    lines.push(`Springs: LF ${car.springRate?.LF || '?'} RF ${car.springRate?.RF || '?'} LR ${car.springRate?.LR || '?'} RR ${car.springRate?.RR || '?'} (lb/in)`);
-    lines.push(`Wheel rates: F avg ${analysis.kwFavg?.toFixed(0)} / R avg ${analysis.kwRavg?.toFixed(0)} lb/in`);
-  }
-  if (car.shocks) {
-    lines.push(`Shocks: LF ${car.shocks.LF || '?'} / RF ${car.shocks.RF || '?'} / LR ${car.shocks.LR || '?'} / RR ${car.shocks.RR || '?'}`);
+  lines.push(`Static alignment:`);
+  lines.push(`  Camber: LF ${car.camber?.LF ?? '?'}° / RF ${car.camber?.RF ?? '?'}°`);
+  lines.push(`  Caster: LF ${car.caster?.LF ?? '?'}° / RF ${car.caster?.RF ?? '?'}°`);
+  if (car.toe) lines.push(`  Front toe (total, in): ${car.toe}  (negative = toe-out)`);
+  if (car.rearToe) lines.push(`  Rear toe (total, in):  ${car.rearToe}`);
+
+  // Ride heights (if entered)
+  const rh = car.rideHeight || {};
+  if (rh.LF || rh.RF || rh.LR || rh.RR) {
+    lines.push(``);
+    lines.push(`Ride heights (in to rocker / reference):  LF ${rh.LF ?? '?'} RF ${rh.RF ?? '?'} LR ${rh.LR ?? '?'} RR ${rh.RR ?? '?'}`);
+    if (car.rideLowering) lines.push(`Lowered from stock: ${car.rideLowering}"`);
   }
 
+  // Springs / IR / ARB
+  lines.push(``);
+  lines.push(`Springs (lb/in):  LF ${car.springRate?.LF ?? '?'} RF ${car.springRate?.RF ?? '?'} LR ${car.springRate?.LR ?? '?'} RR ${car.springRate?.RR ?? '?'}`);
+  if (car.installRatio?.front || car.installRatio?.rear) {
+    lines.push(`Installation ratio:  front ${car.installRatio?.front ?? '?'}  rear ${car.installRatio?.rear ?? '?'}`);
+  }
+  if (car.arbDiameter) lines.push(`Front ARB diameter: ${car.arbDiameter}" (stock 1.161" = 29.5 mm)`);
+
+  // Shocks (raw labels — the AI can identify them by part number)
+  if (car.shocks?.LF || car.shocks?.RF || car.shocks?.LR || car.shocks?.RR) {
+    lines.push(``);
+    lines.push(`Shocks installed (manufacturer | part | type | rating where lower-number = stiffer):`);
+    lines.push(`  LF: ${car.shocks?.LF ?? '?'}`);
+    lines.push(`  RF: ${car.shocks?.RF ?? '?'}`);
+    lines.push(`  LR: ${car.shocks?.LR ?? '?'}`);
+    lines.push(`  RR: ${car.shocks?.RR ?? '?'}`);
+  }
+
+  // SLA hardpoint heights (raw — the AI can use these to reason about geometry)
+  const lbj = car.lowerBallJoint || {};
+  const ubj = car.upperBallJoint || {};
+  const lap = car.lowerArmPivot || {};
+  const uap = car.upperArmPivot || {};
+  if (lbj.LF || lbj.RF) {
+    lines.push(``);
+    lines.push(`Front SLA hardpoint heights (in from floor — measured, not derived):`);
+    lines.push(`  Lower ball joint:    LF ${lbj.LF ?? '?'} / RF ${lbj.RF ?? '?'}`);
+    lines.push(`  Upper ball joint:    LF ${ubj.LF ?? '?'} / RF ${ubj.RF ?? '?'}`);
+    lines.push(`  Lower arm inner piv: LF ${lap.LF ?? '?'} / RF ${lap.RF ?? '?'}`);
+    lines.push(`  Upper arm inner piv: LF ${uap.LF ?? '?'} / RF ${uap.RF ?? '?'}`);
+    if (car.wheelCenterHeight) lines.push(`  Wheel center height: ${car.wheelCenterHeight}"`);
+  }
+
+  // Rear geometry
+  if (car.rearRollCenter || car.rearSpringBase || car.trackWidth?.front || car.trackWidth?.rear) {
+    lines.push(``);
+    lines.push(`Track / rear:`);
+    if (car.trackWidth?.front) lines.push(`  Front track width: ${car.trackWidth.front}"`);
+    if (car.trackWidth?.rear)  lines.push(`  Rear track width:  ${car.trackWidth.rear}"`);
+    if (car.rearRollCenter)    lines.push(`  Watts link center pivot height (= rear roll center): ${car.rearRollCenter}"`);
+    if (car.rearSpringBase)    lines.push(`  Rear spring perch center-to-center: ${car.rearSpringBase}"`);
+  }
+
+  // Suspension travel / droop / bump
+  const dc = car.droopCamber || {};
+  const dt = car.droopTravel || {};
+  const bc = car.bumpCamber || {};
+  const bt = car.bumpTravel || {};
+  const sc = car.steerCamber20 || {};
+  if (dc.LF || dc.RF || bc.LF || bc.RF) {
+    lines.push(``);
+    lines.push(`Suspension travel measurements:`);
+    if (dc.LF || dc.RF) lines.push(`  Camber at full droop:  LF ${dc.LF ?? '?'}° / RF ${dc.RF ?? '?'}°`);
+    if (dt.LF || dt.RF) lines.push(`  Droop travel (in):     LF ${dt.LF ?? '?'} / RF ${dt.RF ?? '?'}`);
+    if (bc.LF || bc.RF) lines.push(`  Camber at full bump:   LF ${bc.LF ?? '?'}° / RF ${bc.RF ?? '?'}°`);
+    if (bt.LF || bt.RF) lines.push(`  Bump travel (in):      LF ${bt.LF ?? '?'} / RF ${bt.RF ?? '?'}`);
+    if (sc.LF || sc.RF) lines.push(`  Camber at 20° right steer: LF ${sc.LF ?? '?'}° / RF ${sc.RF ?? '?'}° (used for caster-camber gain calibration)`);
+  }
+
+  // Shock physical measurements (bumpstop gap matters)
+  const sg = car.shockBumpGap || {};
+  if (sg.LF || sg.RF || sg.LR || sg.RR) {
+    lines.push(``);
+    lines.push(`Bumpstop gap at ride height (in):  LF ${sg.LF ?? '?'} / RF ${sg.RF ?? '?'} / LR ${sg.LR ?? '?'} / RR ${sg.RR ?? '?'}  (under 0.5" = at the stop)`);
+  }
+
+  if (car.cgNotes) {
+    lines.push(``);
+    lines.push(`Ballast / chassis notes: ${car.cgNotes}`);
+  }
+  if (car.notes) {
+    lines.push(`Profile notes: ${car.notes}`);
+  }
+
+  // ── Track Day session data (when present) ───────────────────────────────
   if (measured) {
     lines.push(``);
-    lines.push(`── MEASURED THIS SESSION ──`);
-    if (measured.ambient != null) lines.push(`Ambient: ${measured.ambient}°F, tires set at ${measured.inflationTemp ?? '?'}°F`);
-    const cp = measured.coldPsi;
-    const hp = measured.hotPsi;
-    if (cp.LF != null || cp.RF != null) lines.push(`Cold PSI: LF ${cp.LF ?? '?'} / RF ${cp.RF ?? '?'} / LR ${cp.LR ?? '?'} / RR ${cp.RR ?? '?'}`);
-    if (hp.LF != null || hp.RF != null) lines.push(`Hot PSI:  LF ${hp.LF ?? '?'} / RF ${hp.RF ?? '?'} / LR ${hp.LR ?? '?'} / RR ${hp.RR ?? '?'}`);
-    const tt = measured.tireTemps;
+    lines.push(`── TRACK DAY SESSION (measured at the track, this is what the car actually did) ──`);
+    if (measured.ambient != null)        lines.push(`Ambient temperature: ${measured.ambient}°F`);
+    if (measured.inflationTemp != null)  lines.push(`Tires inflated at: ${measured.inflationTemp}°F (shop temp when cold pressures were set)`);
+    const cp = measured.coldPsi || {};
+    const hp = measured.hotPsi  || {};
+    if (cp.LF != null || cp.RF != null || cp.LR != null || cp.RR != null) {
+      lines.push(`Cold PSI:  LF ${cp.LF ?? '?'} / RF ${cp.RF ?? '?'} / LR ${cp.LR ?? '?'} / RR ${cp.RR ?? '?'}`);
+    }
+    if (hp.LF != null || hp.RF != null || hp.LR != null || hp.RR != null) {
+      lines.push(`Hot PSI:   LF ${hp.LF ?? '?'} / RF ${hp.RF ?? '?'} / LR ${hp.LR ?? '?'} / RR ${hp.RR ?? '?'}  (taken within 2 minutes of getting off track)`);
+    }
+    const tt = measured.tireTemps || {};
+    let anyPyro = false;
     for (const pos of ['LF', 'RF', 'LR', 'RR']) {
-      const t = tt[pos];
+      const t = tt[pos] || {};
       if (t.inside != null || t.middle != null || t.outside != null) {
-        lines.push(`Pyrometer ${pos}: I ${t.inside ?? '?'} / M ${t.middle ?? '?'} / O ${t.outside ?? '?'} °F`);
+        if (!anyPyro) { lines.push(`Pyrometer (°F, Inside / Middle / Outside — Inside = engine-side):`); anyPyro = true; }
+        lines.push(`  ${pos}: I ${t.inside ?? '?'} / M ${t.middle ?? '?'} / O ${t.outside ?? '?'}`);
       }
     }
-    if (measured.condition) lines.push(`Driver feel: car ${measured.condition}${measured.phase ? ` in ${measured.phase}` : ''}`);
-    if (measured.bestLap) lines.push(`Best lap: ${measured.bestLap}s`);
+    if (measured.condition || measured.phase) {
+      lines.push(`Driver feel: car ${measured.condition || '?'}${measured.phase ? ` in ${measured.phase}` : ''}`);
+    }
+    if (measured.bestLap)  lines.push(`Best lap: ${measured.bestLap}s`);
     if (measured.lapTimes) lines.push(`All laps: ${measured.lapTimes}`);
-    if (measured.lapNotes) lines.push(`Notes: ${measured.lapNotes}`);
-  }
-
-  lines.push(``);
-  lines.push(`── LOCAL ENGINE DIAGNOSIS ──`);
-  if (symptoms.length === 0) {
-    lines.push(`(no significant issues flagged)`);
+    if (measured.lapNotes) lines.push(`Driver / crew notes: ${measured.lapNotes}`);
   } else {
-    for (const s of symptoms) {
-      const tag = s.isMixed ? `MIXED → NET ${s.behavior}` : s.behavior;
-      lines.push(`[${s.phase} · ${s.severity.toUpperCase()}] ${tag}: ${s.why}`);
-      if (s.contributors) {
-        for (const c of s.contributors) {
-          lines.push(`    └─ ${c.behavior}: ${c.why}`);
-        }
-      }
-    }
+    lines.push(``);
+    lines.push(`(No Track Day session selected — analyzing geometry profile only.)`);
   }
 
-  lines.push(``);
-  lines.push(`── LOCAL ENGINE FIXES ──`);
-  if (aggregatedFixes.track.length > 0) {
-    lines.push(`Track tunes:`);
-    for (const f of aggregatedFixes.track) lines.push(`  - [${f.magnitude}] ${f.action}`);
-  }
-  if (aggregatedFixes.garage.length > 0) {
-    lines.push(`Garage tunes:`);
-    for (const f of aggregatedFixes.garage) lines.push(`  - [${f.magnitude}] ${f.action}`);
-  }
-
+  // ── Request ─────────────────────────────────────────────────────────────
   lines.push(``);
   lines.push(`── REQUEST ──`);
-  lines.push(`1. CONFIRM or DISAGREE with each diagnosed symptom (cite a number that supports your view).`);
-  lines.push(`2. List anything the local engine missed that the data shows.`);
-  lines.push(`3. State the single most important next change and why.`);
-  lines.push(`4. If track tunes (pressure/toe/camber-bolt) and garage tunes (shock/spring/alignment/RC) are both needed, separate them.`);
-  lines.push(`Format: short bullet points. Do not repeat the data back.`);
+  lines.push(`Based on the data above and your knowledge of oval chassis setup, race engineering, and the Crown Victoria P71 platform specifically, do an independent analysis. Do NOT defer to any external source — form your own opinion.`);
+  lines.push(``);
+  lines.push(`Tell us:`);
+  lines.push(`1. WHAT THE DATA SAYS THE CAR IS DOING on this track. Cite the specific numbers (camber, caster, RC, pyrometer cross-tread, hot/cold PSI delta, etc.) that support each conclusion. Cover entry, mid-corner, and exit phases. If the driver feel and the data agree, say so; if they disagree, note that and explain.`);
+  lines.push(``);
+  lines.push(`2. HOW TO FIX IT, organized into TWO categories:`);
+  lines.push(``);
+  lines.push(`   A. TRACK TUNING — adjustments that can be made at the track between sessions in 5–10 minutes with hand tools / pressure gauge / toe plates / phone inclinometer:`);
+  lines.push(`      - Cold tire pressure changes (with specific PSI values, not just "raise/lower")`);
+  lines.push(`      - Toe adjustment (with toe plates)`);
+  lines.push(`      - Camber adjustment IF a camber bolt is already installed (within ±0.5° range)`);
+  lines.push(`      - Driver-line / brake-bias / sway bar end-link length if applicable`);
+  lines.push(``);
+  lines.push(`   B. GARAGE TUNING — adjustments that require an alignment rack, parts swap, or fabrication between sessions:`);
+  lines.push(`      - Static alignment beyond the track-tunable range (camber bolt installation, caster eccentric)`);
+  lines.push(`      - Spring rate changes (front struts: 440/475/700 lb/in; rear coils: 140/160/200 lb/in — those are the available P71 options)`);
+  lines.push(`      - Shock changes (call out specific stiffer or softer in qualitative terms — the user has a catalog ranging from rating 0 (stiffest) to 10 (softest))`);
+  lines.push(`      - Ride height changes (front via stiffer/taller front springs; rear via stiffer/shorter rear coils — note that lowering the rear ALSO lowers the fixed Watts pivot, changing rear RC)`);
+  lines.push(`      - ARB diameter change`);
+  lines.push(`      - Aftermarket adjustable Watts bracket if rear RC is the limiting factor and ride-height alone won't get there`);
+  lines.push(``);
+  lines.push(`3. RANK YOUR FIXES. Lead with the one change that addresses the most important problem first. State why it's first.`);
+  lines.push(``);
+  lines.push(`Do NOT recommend factory-adjustable Watts pivot height (the factory bracket is fixed). Do NOT recommend coilovers, double-A-arm conversions, or anything outside this platform's normal modification path.`);
+  lines.push(``);
+  lines.push(`Format: short, direct, numeric. Use bullet points. No headers like "Introduction" or "Conclusion".`);
 
   return lines.join('\n');
 }
@@ -1324,9 +1418,7 @@ export default function TuningAdvisor() {
     setAiError('');
     setAiResult('');
     try {
-      const prompt = buildSecondOpinionPrompt({
-        car, analysis, measured, symptoms, aggregatedFixes, trackType,
-      });
+      const prompt = buildSecondOpinionPrompt({ car, measured, trackType });
       const text = await callGroq(apiKey, prompt);
       setAiResult(text);
     } catch (e) {
@@ -1577,10 +1669,11 @@ function AiSecondOpinion({ apiKey, setApiKey, canRun, running, result, error, on
   return (
     <div className="tuning-section">
       <div className="tuning-section-head">
-        <div className="tuning-section-title">AI SECOND OPINION</div>
+        <div className="tuning-section-title">INDEPENDENT AI ANALYSIS</div>
         <div className="tuning-section-sub">
-          Sends the diagnosis above to {GROQ_MODEL} via Groq for an independent crew-chief review.
-          Your API key is stored only in your browser and only sent to api.groq.com.
+          Sends the raw geometry and (if selected) Track Day session data to {GROQ_MODEL} via Groq.
+          The AI does its own analysis from the raw inputs — it does not see the local engine's
+          symptoms or fixes. Your API key is stored only in your browser and only sent to api.groq.com.
         </div>
       </div>
 
@@ -1617,7 +1710,7 @@ function AiSecondOpinion({ apiKey, setApiKey, canRun, running, result, error, on
           disabled={!apiKey || !canRun || running}
           onClick={onRun}
         >
-          {running ? 'Asking the AI…' : result ? 'Re-run AI second opinion' : 'Get AI second opinion'}
+          {running ? 'Asking the AI…' : result ? 'Re-run AI analysis' : 'Get AI analysis'}
         </button>
         {!apiKey && (
           <span style={{ marginLeft: 12, color: '#94a3b8', fontSize: 12 }}>
@@ -1635,7 +1728,7 @@ function AiSecondOpinion({ apiKey, setApiKey, canRun, running, result, error, on
       {result && (
         <div className="tuning-ai-result">
           <div className="tuning-ai-result-head">
-            <span style={{ color: '#a78bfa', fontWeight: 700 }}>AI second opinion</span>
+            <span style={{ color: '#a78bfa', fontWeight: 700 }}>Independent AI analysis</span>
             <span style={{ color: '#64748b', fontSize: 11, marginLeft: 8 }}>{GROQ_MODEL}</span>
           </div>
           <pre className="tuning-ai-result-body">{result}</pre>
