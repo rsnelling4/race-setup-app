@@ -1,5 +1,5 @@
 ﻿import { useState } from 'react';
-import GeometryVisualizer, { GeometryTable } from './GeometryVisualizer';
+import GeometryVisualizer, { GeometryTable, computeGeometry } from './GeometryVisualizer';
 import GeometryAnalysis from './GeometryAnalysis';
 import MeasurementWizard from './MeasurementWizard';
 import { REAR_SHOCKS, FRONT_STRUTS, shockLabel } from '../data/shockOptions';
@@ -670,6 +670,101 @@ function SessionEditor({ editing, setEditing }) {
   );
 }
 
+// ─── Calculators (estimate hard-to-measure values from data already entered) ─
+
+// P71 corner weights (lbs) — used for static spring sag estimates
+const P71_TOTAL_WEIGHT     = 3700;
+const P71_FRONT_AXLE_FRAC  = 0.57;
+const P71_CORNER_F         = (P71_TOTAL_WEIGHT * P71_FRONT_AXLE_FRAC) / 2;        // ≈ 1054 lb
+const P71_CORNER_R         = (P71_TOTAL_WEIGHT * (1 - P71_FRONT_AXLE_FRAC)) / 2;  // ≈ 795 lb
+
+// Estimate static shock compression (sag from free length) in inches.
+// Strut: spring concentric on shock — shock compresses with the spring.
+//        F_spring = corner_weight / IR (virtual work)
+//        spring_compression = F_spring / k_spring
+//        shock_compression = spring_compression
+// Rear axle shock: shock and spring move 1:1 with the axle, so
+//        shock_compression = corner_weight / k_spring  (IR=1.0)
+function estimateShockSag(pos, geo) {
+  const isFront = pos === 'LF' || pos === 'RF';
+  const k = parseFloat(geo.springRate?.[pos]);
+  if (!Number.isFinite(k) || k <= 0) return null;
+  const ir = isFront
+    ? (parseFloat(geo.installRatio?.front) || 0.85)
+    : (parseFloat(geo.installRatio?.rear)  || 1.0);
+  const w = isFront ? P71_CORNER_F : P71_CORNER_R;
+  return w / (ir * k);
+}
+
+// Estimate installed (mount-to-mount) length at ride height = free − sag.
+// Returns null if free length is unknown or spring data is missing.
+function estimateInstalledLength(pos, geo) {
+  const isFront = pos === 'LF' || pos === 'RF';
+  const list = isFront ? FRONT_STRUTS : REAR_SHOCKS;
+  const label = geo.shocks?.[pos];
+  const spec = label ? list.find(s => shockLabel(s) === label) : null;
+  const free = parseFloat(geo.shockFreeLength?.[pos]) || (spec?.extended ?? null);
+  const sag = estimateShockSag(pos, geo);
+  if (!free || sag == null) return null;
+  return Math.max(0, free - sag);
+}
+
+// Estimate bumpstop gap at ride height in inches.
+// gap = stroke − shock_compression − safety_margin
+// (The 0.25" safety margin accounts for the bumpstop rubber not bottoming
+// exactly when the shock metal does.)
+function estimateBumpstopGap(pos, geo) {
+  const isFront = pos === 'LF' || pos === 'RF';
+  const list = isFront ? FRONT_STRUTS : REAR_SHOCKS;
+  const label = geo.shocks?.[pos];
+  const spec = label ? list.find(s => shockLabel(s) === label) : null;
+  const stroke = spec?.stroke;
+  const sag = estimateShockSag(pos, geo);
+  if (!stroke || sag == null) return null;
+  return Math.max(0, stroke - sag - 0.25);
+}
+
+// Camber gain rate in degrees per inch of WHEEL travel, derived from FVSA.
+// rate = arctan(1 / FVSA) — Milliken §17.3
+function camberGainPerInch(geo, side /* 'LF' | 'RF' */) {
+  const cg = computeGeometry(geo, side);
+  if (!cg || cg.fvsa == null || cg.fvsa <= 0) return null;
+  return Math.atan(1 / cg.fvsa) * (180 / Math.PI);
+}
+
+// Estimate full-bump wheel travel from ride height to bumpstop, in inches.
+// For a strut, wheel travel × IR = shock travel. So wheel travel to bump =
+// (stroke − sag) / IR (the remaining shock stroke converted back to wheel travel).
+// For the rear axle, IR = 1.0, so it's just the remaining shock stroke.
+function estimateBumpTravel(pos, geo) {
+  const isFront = pos === 'LF' || pos === 'RF';
+  const list = isFront ? FRONT_STRUTS : REAR_SHOCKS;
+  const label = geo.shocks?.[pos];
+  const spec = label ? list.find(s => shockLabel(s) === label) : null;
+  const stroke = spec?.stroke;
+  const sag = estimateShockSag(pos, geo);
+  if (!stroke || sag == null) return null;
+  const ir = isFront
+    ? (parseFloat(geo.installRatio?.front) || 0.85)
+    : 1.0;
+  // Subtract a 0.25" margin (bumpstop rubber crush — same as the gap calc)
+  const remaining = Math.max(0, stroke - sag - 0.25);
+  return remaining / ir;
+}
+
+// Estimate camber at full bump = static + (camber_gain_per_inch × bump_travel)
+// SLA convention: more bump = more negative camber, so we ADD a negative gain.
+function estimateBumpCamber(pos, geo) {
+  const isFront = pos === 'LF' || pos === 'RF';
+  if (!isFront) return null;
+  const stat = parseFloat(geo.camber?.[pos]);
+  const gain = camberGainPerInch(geo, pos);
+  const travel = estimateBumpTravel(pos, geo);
+  if (!Number.isFinite(stat) || gain == null || travel == null) return null;
+  // Camber gain in jounce on SLA = negative (camber goes more negative)
+  return stat - gain * travel;
+}
+
 // ─── Geometry editor ──────────────────────────────────────────────────────────
 
 function GeoEditor({ editing, setEditing }) {
@@ -848,26 +943,71 @@ function GeoEditor({ editing, setEditing }) {
           })}
         </div>
 
-        <h4 style={{ color: '#94a3b8', fontFamily: 'monospace', fontSize: 12, margin: '12px 0 6px' }}>Installed Length at Ride Height (inches)</h4>
-        <p className="ml-section-note">Car at race ride height. Measure the shock eye-to-eye (or mount-to-mount) while installed. Shaft compression = free length minus installed length.</p>
+        <h4 style={{ color: '#94a3b8', fontFamily: 'monospace', fontSize: 12, margin: '12px 0 6px', display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap' }}>
+          <span>Installed Length at Ride Height (inches)</span>
+          <button
+            type="button"
+            onClick={() => {
+              const next = { ...(editing.shockInstalled ?? {}) };
+              for (const pos of ['LF', 'RF', 'LR', 'RR']) {
+                const est = estimateInstalledLength(pos, editing);
+                if (est != null) next[pos] = est.toFixed(2);
+              }
+              set('shockInstalled', next);
+            }}
+            style={{ background: 'rgba(59,130,246,0.15)', border: '1px solid rgba(59,130,246,0.35)', borderRadius: 4, color: '#93c5fd', fontSize: 11, padding: '3px 10px', cursor: 'pointer' }}
+          >
+            Estimate from springs / corner weight
+          </button>
+        </h4>
+        <p className="ml-section-note">
+          Hard to measure in-place. Click "Estimate" above to fill from the spring rate and IR you've already entered.
+          Formula: <code>installed = free_length − corner_weight ÷ (IR × spring_rate)</code> (front uses corner weight ≈ {P71_CORNER_F.toFixed(0)} lb,
+          rear ≈ {P71_CORNER_R.toFixed(0)} lb at 57/43 weight bias). Or measure directly: car at ride height, eye-to-eye (or mount-to-mount).
+        </p>
         <div className="ml-tire-grid">
-          {['LF', 'RF', 'LR', 'RR'].map(pos => (
-            <Field key={pos} label={pos}
-              hint={`Car at race ride height, driver weight in seat. Measure the ${pos} shock from upper mount center to lower mount center while installed in the car. Use a tape measure or caliper. This tells you how much of the stroke the shock has already used at ride height — the remaining droop travel is: installed minus compressed (minimum) length.`}>
-              <NumIn value={editing.shockInstalled?.[pos] ?? ''} onChange={v => setN('shockInstalled', pos, v)} placeholder="e.g. 12.0" step="0.125" />
-            </Field>
-          ))}
+          {['LF', 'RF', 'LR', 'RR'].map(pos => {
+            const est = estimateInstalledLength(pos, editing);
+            return (
+              <Field key={pos} label={pos}
+                hint={`Car at race ride height, driver weight in seat. Measure the ${pos} shock from upper mount center to lower mount center. Or leave blank and use the Estimate button — calculates from corner weight ÷ (IR × spring_rate) which is accurate to ±0.25" if springs and IR are entered correctly.`}>
+                <NumIn value={editing.shockInstalled?.[pos] ?? ''} onChange={v => setN('shockInstalled', pos, v)} placeholder={est != null ? `est. ${est.toFixed(2)}` : 'e.g. 12.0'} step="0.125" />
+              </Field>
+            );
+          })}
         </div>
 
-        <h4 style={{ color: '#94a3b8', fontFamily: 'monospace', fontSize: 12, margin: '12px 0 6px' }}>Bumpstop Gap at Ride Height (inches)</h4>
-        <p className="ml-section-note">Distance from the shock piston or bump rubber to contact at ride height. This is how much jounce travel is available before hitting the stop. Critical for spring rate selection.</p>
+        <h4 style={{ color: '#94a3b8', fontFamily: 'monospace', fontSize: 12, margin: '12px 0 6px', display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap' }}>
+          <span>Bumpstop Gap at Ride Height (inches)</span>
+          <button
+            type="button"
+            onClick={() => {
+              const next = { ...(editing.shockBumpGap ?? {}) };
+              for (const pos of ['LF', 'RF', 'LR', 'RR']) {
+                const est = estimateBumpstopGap(pos, editing);
+                if (est != null) next[pos] = est.toFixed(2);
+              }
+              set('shockBumpGap', next);
+            }}
+            style={{ background: 'rgba(59,130,246,0.15)', border: '1px solid rgba(59,130,246,0.35)', borderRadius: 4, color: '#93c5fd', fontSize: 11, padding: '3px 10px', cursor: 'pointer' }}
+          >
+            Estimate from springs / shock stroke
+          </button>
+        </h4>
+        <p className="ml-section-note">
+          Often impossible to see (boot covers the bumpstop rubber). Click Estimate to fill from the chosen shock's stroke, your spring rate, and IR.
+          Formula: <code>gap = stroke − shock_sag − 0.25" margin</code>. A gap under 0.5" means the car contacts the stop in cornering — critical for spring rate selection.
+        </p>
         <div className="ml-tire-grid">
-          {['LF', 'RF', 'LR', 'RR'].map(pos => (
-            <Field key={pos} label={pos}
-              hint={`With the car at race ride height, measure the gap between the bumpstop rubber (on the shock shaft or chassis) and the contact surface it would hit when fully compressed. On the P71 front strut: the bump rubber is on the strut shaft above the top mount — measure from the top of the bump rubber to the lower surface of the strut mount bearing. On rear shocks: the bump rubber is typically on the axle or frame — measure from rubber face to contact point. A gap of 1.0–1.5" is typical; less than 0.5" means you are near the stop at race height.`}>
-              <NumIn value={editing.shockBumpGap?.[pos] ?? ''} onChange={v => setN('shockBumpGap', pos, v)} placeholder="e.g. 1.25" step="0.125" />
-            </Field>
-          ))}
+          {['LF', 'RF', 'LR', 'RR'].map(pos => {
+            const est = estimateBumpstopGap(pos, editing);
+            return (
+              <Field key={pos} label={pos}
+                hint={`If you can see the bumpstop, measure the gap from the bumpstop face to the surface it'd hit when fully compressed. Otherwise click Estimate — accurate to ±0.25" given correct springs/IR/shock selection. A typical P71 stock setup gives ~1.2" front, ~2.5" rear.`}>
+                <NumIn value={editing.shockBumpGap?.[pos] ?? ''} onChange={v => setN('shockBumpGap', pos, v)} placeholder={est != null ? `est. ${est.toFixed(2)}` : 'e.g. 1.25'} step="0.125" />
+              </Field>
+            );
+          })}
         </div>
 
         {(() => {
@@ -984,8 +1124,12 @@ function GeoEditor({ editing, setEditing }) {
           </Field>
         </div>
 
-        <h4 style={{ color: '#94a3b8', fontFamily: 'monospace', fontSize: 12, margin: '16px 0 6px' }}>Damping Forces (optional — §22.3 damping ratio analysis)</h4>
-        <p className="ml-section-note">Dyno-measured shock force in lbs at 5 in/sec shaft speed — the body-control range (0–5 in/sec is where dampers do most of their work). If you have a shock dyno printout, read off the force at 5 in/sec for bump and rebound separately. If not, leave blank — target force ranges will still be computed from spring/weight data. Racing sedan target (Milliken Table 22.2): bump ζ = 0.40–0.50, rebound ζ = 0.71. Rebound is always ~2× bump.</p>
+        <h4 style={{ color: '#94a3b8', fontFamily: 'monospace', fontSize: 12, margin: '16px 0 6px' }}>Damping Forces — OPTIONAL, leave blank if no shock dyno</h4>
+        <p className="ml-section-note">
+          <strong style={{ color: '#fbbf24' }}>Skip these unless you have a shock dyno printout.</strong> A shock dyno is the only way to get real numbers — there's no estimating these from car data alone.
+          The model computes target force ranges automatically from your spring rate and corner weight regardless of whether you fill these in.
+          Racing-sedan targets (Milliken Ch.22): bump ζ ≈ 0.40–0.50, rebound ζ ≈ 0.71 (rebound always ~2× bump). The readout below shows the targets your car needs.
+        </p>
         <div className="ml-row">
           <Field label="Front BUMP force at 5 in/sec (lbs)"
             hint="From shock dyno: bump (compression) force in pounds at 5 inches/second shaft speed. This is the most important operating point for body control. If using KONI shocks, test at various adjustment positions and record which click gave this value.">
@@ -1157,28 +1301,54 @@ function GeoEditor({ editing, setEditing }) {
 
       {/* Bump */}
       <div className="ml-section">
-        <h3 className="ml-section-heading">Bump Camber</h3>
+        <h3 className="ml-section-heading" style={{ display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap' }}>
+          <span>Bump Camber</span>
+          <button
+            type="button"
+            onClick={() => {
+              const nextCam = { ...(editing.bumpCamber ?? {}) };
+              const nextTrv = { ...(editing.bumpTravel ?? {}) };
+              for (const pos of ['LF', 'RF']) {
+                const t = estimateBumpTravel(pos, editing);
+                const c = estimateBumpCamber(pos, editing);
+                if (t != null) nextTrv[pos] = t.toFixed(2);
+                if (c != null) nextCam[pos] = c.toFixed(2);
+              }
+              set('bumpCamber', nextCam);
+              set('bumpTravel', nextTrv);
+            }}
+            style={{ background: 'rgba(59,130,246,0.15)', border: '1px solid rgba(59,130,246,0.35)', borderRadius: 4, color: '#93c5fd', fontSize: 11, padding: '3px 10px', cursor: 'pointer', fontFamily: 'inherit', textTransform: 'none', letterSpacing: 0 }}
+          >
+            Estimate from FVSA / shock stroke
+          </button>
+        </h3>
         <p className="ml-section-note">
-          Car on jack stands (same setup as droop — frame supported, wheels free). Use a floor jack under the lower control arm outboard end to push the wheel upward into bump until the bumpstop contacts or the strut bottoms.
+          Bump camber and travel are derivable from the SLA geometry you've already entered.
+          <br />
+          <strong>Bump travel</strong> = remaining shock stroke ÷ IR (front) or remaining shock stroke (rear).
+          <br />
+          <strong>Bump camber</strong> = static camber + (camber gain rate × bump travel), where gain rate = arctan(1 ÷ FVSA) °/in. Sign convention: SLA jounce → more negative camber.
+          <br />
+          Click "Estimate" above to auto-fill, or measure directly: car on jack stands (frame supported, wheels free), floor jack under lower control arm to push wheel up to bumpstop, phone inclinometer on flat plate against wheel face.
         </p>
         <div className="ml-row">
           <Field label="LF camber at full bump (°)"
-            hint="Place floor jack under the LF lower control arm near the ball joint. Jack slowly until bumpstop compresses or movement stops. Read camber with phone inclinometer on flat plate against wheel face. For SLA suspension, more bump = more negative camber (good). Record the final camber reading at full bump.">
-            <NumIn value={editing.bumpCamber.LF} onChange={v => setN('bumpCamber', 'LF', v)} placeholder="e.g. -3.0" />
+            hint="Auto-filled from FVSA × bump travel. To measure directly: jack the LF lower arm slowly until the bumpstop compresses, then read camber with a phone inclinometer on a flat plate against the wheel face.">
+            <NumIn value={editing.bumpCamber.LF} onChange={v => setN('bumpCamber', 'LF', v)} placeholder={(() => { const c = estimateBumpCamber('LF', editing); return c != null ? `est. ${c.toFixed(2)}` : 'e.g. -3.0'; })()} />
           </Field>
           <Field label="RF camber at full bump (°)"
-            hint="Same as LF — jack under RF lower control arm until bumpstop, read camber with inclinometer. RF bump camber is critical — this wheel is in jounce during left-turn cornering.">
-            <NumIn value={editing.bumpCamber.RF} onChange={v => setN('bumpCamber', 'RF', v)} placeholder="e.g. -4.5" />
+            hint="Auto-filled from FVSA × bump travel. RF bump camber is critical — this is the loaded wheel in left-turn jounce. Measure directly with inclinometer or use the estimate.">
+            <NumIn value={editing.bumpCamber.RF} onChange={v => setN('bumpCamber', 'RF', v)} placeholder={(() => { const c = estimateBumpCamber('RF', editing); return c != null ? `est. ${c.toFixed(2)}` : 'e.g. -4.5'; })()} />
           </Field>
         </div>
         <div className="ml-row">
           <Field label="LF bump travel (inches)"
-            hint="Total wheel travel from ride height to full bump. Method: (1) At ride height, mark the wheel center and measure its height from the floor. (2) Jack to full bump and re-measure wheel center height. (3) Bump travel = full-bump measurement minus ride-height measurement. Stock P71: ~2.0&quot; bump travel to bumpstop (estimated from strut stroke and stock ride height).">
-            <NumIn value={editing.bumpTravel.LF} onChange={v => setN('bumpTravel', 'LF', v)} placeholder="e.g. 2.0" step="0.125" />
+            hint="Auto-filled from (shock stroke − sag − 0.25 margin) ÷ IR. Direct measurement: mark wheel center height at ride, then at full bump, subtract.">
+            <NumIn value={editing.bumpTravel.LF} onChange={v => setN('bumpTravel', 'LF', v)} placeholder={(() => { const t = estimateBumpTravel('LF', editing); return t != null ? `est. ${t.toFixed(2)}` : 'e.g. 2.0'; })()} step="0.125" />
           </Field>
           <Field label="RF bump travel (inches)"
-            hint="Same as LF bump travel — measure RF wheel center at ride height then at full bump. Subtract.">
-            <NumIn value={editing.bumpTravel.RF} onChange={v => setN('bumpTravel', 'RF', v)} placeholder="e.g. 2.0" step="0.125" />
+            hint="Same as LF.">
+            <NumIn value={editing.bumpTravel.RF} onChange={v => setN('bumpTravel', 'RF', v)} placeholder={(() => { const t = estimateBumpTravel('RF', editing); return t != null ? `est. ${t.toFixed(2)}` : 'e.g. 2.0'; })()} step="0.125" />
           </Field>
         </div>
       </div>

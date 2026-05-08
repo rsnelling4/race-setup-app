@@ -1,4 +1,5 @@
 import { useState } from 'react';
+import { computeGeometry } from './GeometryVisualizer';
 
 // Stock P71 defaults — used to fill any skipped step
 const P71 = {
@@ -16,6 +17,86 @@ const P71 = {
   arbDiameter: '1.161',
   droopTravel: '1.25', bumpTravel: '2.0',
 };
+
+// ─── Wizard calculators ──────────────────────────────────────────────────────
+// Reuse the same physics as the GeoEditor calculators, but operate on the
+// wizard's intermediate data. Shock specs default to stock P71 strut/shock
+// values since the wizard doesn't capture shock selection.
+
+const W_CORNER_F = (3700 * 0.57) / 2;        // ≈ 1054 lb
+const W_CORNER_R = (3700 * (1 - 0.57)) / 2;  // ≈ 795 lb
+// Stock P71 strut (FCS 1336349 Police): extended 15.94", stroke 4.09"
+// Stock P71 rear shock (Motorcraft ASH12277 HD): extended 20.26", stroke 7.76"
+const STOCK_FRONT_STROKE = 4.09;
+const STOCK_REAR_STROKE  = 7.76;
+const STOCK_FRONT_FREE   = 15.94;
+const STOCK_REAR_FREE    = 20.26;
+
+function pf(v) { const n = parseFloat(v); return Number.isFinite(n) ? n : null; }
+
+function wIR(data, isFront) {
+  const ir = isFront ? pf(data.installRatio?.front) : pf(data.installRatio?.rear);
+  if (ir != null && ir > 0) return ir;
+  return isFront ? 0.85 : 1.0;
+}
+
+function wSpringRate(pos, data) {
+  const k = pf(data.springRate?.[pos]);
+  if (k != null && k > 0) return k;
+  return (pos === 'LF' || pos === 'RF') ? 475 : 160;
+}
+
+function wShockSag(pos, data) {
+  const isFront = pos === 'LF' || pos === 'RF';
+  const k = wSpringRate(pos, data);
+  const ir = wIR(data, isFront);
+  const w = isFront ? W_CORNER_F : W_CORNER_R;
+  return w / (ir * k);
+}
+
+function estimateInstalledLengthW(pos, data) {
+  const isFront = pos === 'LF' || pos === 'RF';
+  const free = isFront ? STOCK_FRONT_FREE : STOCK_REAR_FREE;
+  const sag = wShockSag(pos, data);
+  if (sag == null) return null;
+  return Math.max(0, free - sag);
+}
+
+function estimateBumpstopGapW(pos, data) {
+  const isFront = pos === 'LF' || pos === 'RF';
+  const stroke = isFront ? STOCK_FRONT_STROKE : STOCK_REAR_STROKE;
+  const sag = wShockSag(pos, data);
+  if (sag == null) return null;
+  return Math.max(0, stroke - sag - 0.25);
+}
+
+function estimateBumpTravelW(pos, data) {
+  const isFront = pos === 'LF' || pos === 'RF';
+  if (!isFront) return null;
+  const stroke = STOCK_FRONT_STROKE;
+  const sag = wShockSag(pos, data);
+  const ir = wIR(data, true);
+  if (sag == null) return null;
+  const remaining = Math.max(0, stroke - sag - 0.25);
+  return remaining / ir;
+}
+
+function estimateBumpCamberW(pos, data) {
+  const isFront = pos === 'LF' || pos === 'RF';
+  if (!isFront) return null;
+  const stat = pf(data.camber?.[pos]);
+  if (stat == null) return null;
+  let fvsa = null;
+  try {
+    const cg = computeGeometry(data, pos);
+    fvsa = cg?.fvsa;
+  } catch { /* wizard data may be incomplete — fall back below */ }
+  if (fvsa == null || fvsa <= 0) return null;
+  const gainPerInch = Math.atan(1 / fvsa) * (180 / Math.PI);
+  const travel = estimateBumpTravelW(pos, data);
+  if (travel == null) return null;
+  return stat - gainPerInch * travel;
+}
 
 // ─── Small shared inputs ──────────────────────────────────────────────────────
 
@@ -567,69 +648,123 @@ const STEPS = [
     }),
   },
 
-  // 9 ─ Car on stands — bump
+  // 9 ─ Car on stands — bump (or computed from FVSA + shock stroke)
   {
     title: 'Bump Camber & Travel',
-    location: 'Car on jack stands — push wheel into bump with floor jack',
+    location: 'Car on jack stands — or auto-calculate from FVSA / shock stroke',
     instructions: (
       <>
-        <Sub>Car still on jack stands (same setup as droop). Use a floor jack under the lower
-          control arm near the ball joint to push the wheel upward into bump until the bumpstop
-          contacts or the strut bottoms.</Sub>
-        <Sub><strong>Bump camber:</strong> Read with phone inclinometer on flat plate at full bump.<br />
-          <strong>Bump travel:</strong> Full-bump wheel center height minus ride-height wheel center height.</Sub>
+        <Sub><strong>This step is hard to measure directly.</strong> Bump camber and travel are
+          derivable from data you've already entered (SLA hardpoints → FVSA, shock stroke,
+          spring rate). Click <strong>"Auto-calculate"</strong> below to fill from those, or
+          measure directly: car on jack stands, floor jack under lower control arm to push wheel
+          up to bumpstop, phone inclinometer on flat plate against wheel face.</Sub>
+        <Sub>Formula: <code>bump_travel = (shock_stroke − sag) ÷ IR</code>, where sag = corner_weight ÷ (IR × spring_rate).
+          <br /><code>bump_camber = static_camber − (camber_gain_per_inch × bump_travel)</code>, where camber_gain_per_inch = arctan(1 ÷ FVSA).</Sub>
       </>
     ),
-    fields: (data, set, setN) => (
+    fields: (data, set, setN) => {
+      const tLF = estimateBumpTravelW('LF', data);
+      const tRF = estimateBumpTravelW('RF', data);
+      const cLF = estimateBumpCamberW('LF', data);
+      const cRF = estimateBumpCamberW('RF', data);
+      const canAuto = tLF != null || tRF != null || cLF != null || cRF != null;
+      return (
       <>
+        {canAuto && (
+          <div style={{ marginBottom: 12 }}>
+            <button
+              type="button"
+              onClick={() => {
+                if (tLF != null) setN('bumpTravel', 'LF', tLF.toFixed(2));
+                if (tRF != null) setN('bumpTravel', 'RF', tRF.toFixed(2));
+                if (cLF != null) setN('bumpCamber', 'LF', cLF.toFixed(2));
+                if (cRF != null) setN('bumpCamber', 'RF', cRF.toFixed(2));
+              }}
+              style={{ background: 'rgba(59,130,246,0.15)', border: '1px solid rgba(59,130,246,0.35)', borderRadius: 4, color: '#93c5fd', fontSize: 12, padding: '6px 14px', cursor: 'pointer' }}
+            >
+              Auto-calculate from previous steps
+            </button>
+          </div>
+        )}
         <Row>
           <WField label="LF camber at full bump (°)"
-            hint="Floor jack under LF lower arm near BJ — jack slowly to bumpstop. Read inclinometer on plate against wheel face. SLA suspension gains negative camber in bump (good). Record as-read.">
-            <NIn value={data.bumpCamber?.LF ?? ''} onChange={v => setN('bumpCamber', 'LF', v)} placeholder="e.g. -3.0" />
+            hint="Floor jack under LF lower arm near BJ — jack slowly to bumpstop. Read inclinometer on plate against wheel face. Or click Auto-calculate above.">
+            <NIn value={data.bumpCamber?.LF ?? ''} onChange={v => setN('bumpCamber', 'LF', v)} placeholder={cLF != null ? `est. ${cLF.toFixed(2)}` : 'e.g. -3.0'} />
           </WField>
           <WField label="RF camber at full bump (°)"
-            hint="Floor jack under RF lower arm near BJ. RF bump camber is critical — this wheel is in jounce during left-turn cornering on an oval. More negative at bump = better. Read at bumpstop contact.">
-            <NIn value={data.bumpCamber?.RF ?? ''} onChange={v => setN('bumpCamber', 'RF', v)} placeholder="e.g. -4.5" />
+            hint="Floor jack under RF lower arm near BJ. RF bump camber is critical — this wheel is in jounce during left-turn cornering on an oval. Or use Auto-calculate.">
+            <NIn value={data.bumpCamber?.RF ?? ''} onChange={v => setN('bumpCamber', 'RF', v)} placeholder={cRF != null ? `est. ${cRF.toFixed(2)}` : 'e.g. -4.5'} />
           </WField>
         </Row>
         <Row>
           <WField label="LF bump travel (inches)"
-            hint="Wheel center height at full bump minus wheel center height at ride height. Stock P71: ~2.0&quot; to bumpstop.">
-            <NIn value={data.bumpTravel?.LF ?? ''} onChange={v => setN('bumpTravel', 'LF', v)} placeholder="e.g. 2.0" step="0.125" />
+            hint="Wheel center height at full bump minus wheel center height at ride height. Or Auto-calculate from shock stroke − sag.">
+            <NIn value={data.bumpTravel?.LF ?? ''} onChange={v => setN('bumpTravel', 'LF', v)} placeholder={tLF != null ? `est. ${tLF.toFixed(2)}` : 'e.g. 2.0'} step="0.125" />
           </WField>
           <WField label="RF bump travel (inches)"
-            hint="Same method as LF. RF bump travel directly limits how far the outside front wheel can compress in a corner.">
-            <NIn value={data.bumpTravel?.RF ?? ''} onChange={v => setN('bumpTravel', 'RF', v)} placeholder="e.g. 2.0" step="0.125" />
+            hint="Same as LF.">
+            <NIn value={data.bumpTravel?.RF ?? ''} onChange={v => setN('bumpTravel', 'RF', v)} placeholder={tRF != null ? `est. ${tRF.toFixed(2)}` : 'e.g. 2.0'} step="0.125" />
           </WField>
         </Row>
       </>
-    ),
+      );
+    },
     fillDefaults: () => ({
       bumpCamber: { LF: '', RF: '' },
       bumpTravel:  { LF: P71.bumpTravel, RF: P71.bumpTravel },
     }),
   },
 
-  // 10 ─ Shocks + physical measurements
+  // 10 ─ Shocks + physical measurements (or computed from corner weight + spring rate)
   {
     title: 'Shocks / Struts & Travel Measurements',
-    location: 'Car back on ground at ride height',
+    location: 'Car back on ground — or auto-calculate from springs',
     instructions: (
       <>
-        <Sub>Car back on the ground at race ride height, driver weight in seat.</Sub>
-        <Sub><strong>Installed length:</strong> shock eye-to-eye (or mount-to-mount) while installed.<br />
-          <strong>Bumpstop gap:</strong> gap between the bumpstop rubber and the surface it contacts at
-          ride height — how much jounce travel remains before hitting the stop.</Sub>
+        <Sub><strong>These are hard to measure in-place.</strong> Both can be calculated from
+          data you've already entered (corner weight, spring rate, IR, shock stroke).
+          Click <strong>"Auto-calculate"</strong> below to fill from those, or measure
+          directly with the car at race ride height.</Sub>
+        <Sub>Formula: <code>installed_length = free_length − sag</code>, where <code>sag = corner_weight ÷ (IR × spring_rate)</code>.
+          <br /><code>bumpstop_gap = stroke − sag − 0.25" margin</code>.</Sub>
       </>
     ),
-    fields: (data, set, setN) => (
+    fields: (data, set, setN) => {
+      const installEsts = {};
+      const gapEsts = {};
+      let canAuto = false;
+      for (const pos of ['LF', 'RF', 'LR', 'RR']) {
+        const i = estimateInstalledLengthW(pos, data);
+        const g = estimateBumpstopGapW(pos, data);
+        installEsts[pos] = i;
+        gapEsts[pos] = g;
+        if (i != null || g != null) canAuto = true;
+      }
+      return (
       <>
+        {canAuto && (
+          <div style={{ marginBottom: 12 }}>
+            <button
+              type="button"
+              onClick={() => {
+                for (const pos of ['LF', 'RF', 'LR', 'RR']) {
+                  if (installEsts[pos] != null) setN('shockInstalled', pos, installEsts[pos].toFixed(2));
+                  if (gapEsts[pos] != null) setN('shockBumpGap', pos, gapEsts[pos].toFixed(2));
+                }
+              }}
+              style={{ background: 'rgba(59,130,246,0.15)', border: '1px solid rgba(59,130,246,0.35)', borderRadius: 4, color: '#93c5fd', fontSize: 12, padding: '6px 14px', cursor: 'pointer' }}
+            >
+              Auto-calculate from corner weight, springs, IR &amp; shock stroke
+            </button>
+          </div>
+        )}
         <p className="ml-section-note" style={{ marginBottom: 8 }}>Installed length at ride height (inches)</p>
         <div className="ml-tire-grid" style={{ marginBottom: 12 }}>
           {['LF', 'RF', 'LR', 'RR'].map(pos => (
             <WField key={pos} label={`${pos} installed (inches)`}
-              hint={`${pos} shock mount-to-mount with car at race ride height, driver weight in seat. Shaft compression = free length minus this number.`}>
-              <NIn value={data.shockInstalled?.[pos] ?? ''} onChange={v => setN('shockInstalled', pos, v)} placeholder="e.g. 12.0" step="0.125" />
+              hint={`${pos} shock mount-to-mount at ride height. Or use Auto-calculate above.`}>
+              <NIn value={data.shockInstalled?.[pos] ?? ''} onChange={v => setN('shockInstalled', pos, v)} placeholder={installEsts[pos] != null ? `est. ${installEsts[pos].toFixed(2)}` : 'e.g. 12.0'} step="0.125" />
             </WField>
           ))}
         </div>
@@ -637,13 +772,14 @@ const STEPS = [
         <div className="ml-tire-grid" style={{ marginBottom: 12 }}>
           {['LF', 'RF', 'LR', 'RR'].map(pos => (
             <WField key={pos} label={`${pos} gap (inches)`}
-              hint={`${pos} gap from bumpstop rubber to contact surface. On P71 front strut: rubber on shaft above top mount, measure to lower surface of strut mount bearing. Under 0.5&quot; = very close to bumpstop at race height.`}>
-              <NIn value={data.shockBumpGap?.[pos] ?? ''} onChange={v => setN('shockBumpGap', pos, v)} placeholder="e.g. 1.25" step="0.125" />
+              hint={`${pos} gap from bumpstop rubber to contact surface. Often hidden under the boot — use Auto-calculate. Under 0.5" = at the stop in cornering.`}>
+              <NIn value={data.shockBumpGap?.[pos] ?? ''} onChange={v => setN('shockBumpGap', pos, v)} placeholder={gapEsts[pos] != null ? `est. ${gapEsts[pos].toFixed(2)}` : 'e.g. 1.25'} step="0.125" />
             </WField>
           ))}
         </div>
       </>
-    ),
+      );
+    },
     fillDefaults: () => ({
       shockInstalled: { LF: '', RF: '', LR: '', RR: '' },
       shockBumpGap:   { LF: '', RF: '', LR: '', RR: '' },
