@@ -193,7 +193,10 @@ export function analyzeGeometry(geo, trackType = 'oval') {
     lfCamberDevRight      = lfGroundCamberRight - T.idealRFGroundCamber; // LF is outside — target is RF ideal
   }
 
-  const armRatio    = P71_UPPER_ARM_LENGTH / P71_LOWER_ARM_LENGTH;
+  // Arm ratio uses the user's measured arm lengths if available, else stock defaults.
+  const _loArmLen = num(geo.lowerArmLength) || P71_LOWER_ARM_LENGTH;
+  const _upArmLen = num(geo.upperArmLength) || P71_UPPER_ARM_LENGTH;
+  const armRatio  = _upArmLen / _loArmLen;
   const scrubRadius = wh * Math.tan(P71_KPI * Math.PI / 180) - P71_WHEEL_OFFSET;
   const bjAsymmetry    = num(geo.lowerBallJoint?.LF || 7.75) - num(geo.lowerBallJoint?.RF || 6.75);
   const pivotAsymmetry = num(geo.lowerArmPivot?.LF  || 10.0) - num(geo.lowerArmPivot?.RF  || 9.375);
@@ -1485,7 +1488,7 @@ To reach the ideal at current dynamic terms, static would need to be ${a.rfStati
 
         <Metric
           title="Arm Length Ratio (Upper/Lower)"
-          measured={(P71_UPPER_ARM_LENGTH / P71_LOWER_ARM_LENGTH).toFixed(3)}
+          measured={a.armRatio != null ? a.armRatio.toFixed(3) : (P71_UPPER_ARM_LENGTH / P71_LOWER_ARM_LENGTH).toFixed(3)}
           stock={`0.731 (P71 OEM — 9.5" upper / 13.0" lower)`}
           optimal={`0.65–0.80 (shorter upper = more camber gain in jounce — race-favorable)`}
           sev="info"

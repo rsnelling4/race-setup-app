@@ -1,15 +1,22 @@
 import { useMemo } from 'react';
 
 // ─── Geometry engine ──────────────────────────────────────────────────────────
-// IMPORTANT: Hardpoint defaults below are BACK-SOLVED ESTIMATES, not OEM-published
-// or measured values. Ford never released Panther suspension hardpoint geometry.
-// These values were chosen to produce a front roll center of ~4" — which matches
-// the typical published range for SLA passenger sedans (Suspension Secrets, Milliken
-// reference table). The earlier defaults produced a ~19" RC which is geometrically
-// implausible for any street car. Treat all hardpoint outputs as ESTIMATED until
-// the user enters actual measurements taken from their specific car.
-const P71_UPPER_ARM_LENGTH  = 9.5;
-const P71_LOWER_ARM_LENGTH  = 13.0;
+// Defaults are BACK-SOLVED ESTIMATES — Ford never published Panther suspension
+// hardpoint geometry. They are intentionally conservative; the moment the user
+// enters their actual measurements, those override defaults. The defaults below
+// are tuned to produce a front roll center near 4", matching the typical 2–5"
+// range for SLA passenger sedans.
+//
+// Arm length defaults (pivot-to-ball-joint straight line):
+//   Lower arm: 13.0"  (typical published P71 range 13–14")
+//   Upper arm:  9.5"  (typical published P71 range 9–10")
+// IMPORTANT: Arm length is the STRAIGHT-LINE 3D distance from inner pivot
+// center to ball-joint stud center, NOT the horizontal projection. An arm
+// that rises 0.75" over a 13" run has a horizontal projection of √(13²−0.75²)
+// ≈ 12.98". The geometry math below recovers the horizontal projection from
+// the user's arm length and the (pivot − ball joint) vertical rise.
+const P71_UPPER_ARM_LENGTH_DEFAULT  = 9.5;
+const P71_LOWER_ARM_LENGTH_DEFAULT  = 13.0;
 const P71_UPPER_PIVOT_H_EST = 13.0;  // back-solved (was 13.5", which forced RC ~19")
 
 function num(v) { return parseFloat(v) || 0; }
@@ -29,24 +36,50 @@ function yAtX(p1, p2, x) {
   return p1.y + t * (p2.y - p1.y);
 }
 
+// Given an arm's straight-line length and the vertical rise from its outer
+// (ball joint) end to its inner (pivot) end, return the horizontal projection.
+// horizontal² + rise² = length². If rise > length the arm geometry is broken
+// (clamp to 0 to avoid NaN).
+function horizontalProjection(armLen, rise) {
+  const r2 = rise * rise;
+  const L2 = armLen * armLen;
+  if (L2 <= r2) return 0;
+  return Math.sqrt(L2 - r2);
+}
+
 export function computeGeometry(geo, side) {
   const sign     = side === 'RF' ? 1 : -1;
   const halfTrack = num(geo.trackWidth?.front || 64) / 2;
   const wh       = num(geo.wheelCenterHeight || 13.0);
 
-  // Back-solved defaults — see note at top of file. Lower BJ ~7.5" off ground,
-  // upper BJ ~17" (giving ~9.5" knuckle height for 17" wheel + brake clearance).
-  // Lower inner pivot 6.0" (frame K-member). Upper inner pivot 13.0" (shock tower
-  // bracket). Both arms slope DOWN inboard at modest angles, IC sits low, RC ≈4".
-  const loBJ = { x: sign * halfTrack, y: num(geo.lowerBallJoint?.[side]  || (side === 'RF' ? 7.50  : 7.50)) };
-  const upBJ = { x: sign * halfTrack, y: num(geo.upperBallJoint?.[side]  || (side === 'RF' ? 17.00 : 17.00)) };
+  // Ball joint heights (vertical from floor)
+  const loBJ_y = num(geo.lowerBallJoint?.[side]  || 7.50);
+  const upBJ_y = num(geo.upperBallJoint?.[side]  || 17.00);
 
-  const loPivH = num(geo.lowerArmPivot?.[side]  || (side === 'RF' ? 6.00  : 6.00));
+  // Inner pivot heights (vertical from floor)
+  const loPivH = num(geo.lowerArmPivot?.[side]  || 6.00);
   const upPivH = num(geo.upperArmPivot?.[side]  || P71_UPPER_PIVOT_H_EST);
   const upPivEstimated = !geo.upperArmPivot?.[side];
 
-  const loPiv = { x: sign * (halfTrack - P71_LOWER_ARM_LENGTH), y: loPivH };
-  const upPiv = { x: sign * (halfTrack - P71_UPPER_ARM_LENGTH), y: upPivH };
+  // Arm lengths — straight-line pivot-to-ball-joint distance
+  const loArmLen = num(geo.lowerArmLength || P71_LOWER_ARM_LENGTH_DEFAULT);
+  const upArmLen = num(geo.upperArmLength || P71_UPPER_ARM_LENGTH_DEFAULT);
+
+  // Vertical rise from ball joint to inner pivot (positive = pivot HIGHER than BJ)
+  // Then convert straight-line arm length to horizontal projection.
+  const loRise = loPivH - loBJ_y;
+  const upRise = upPivH - upBJ_y;
+  const loHoriz = horizontalProjection(loArmLen, loRise);
+  const upHoriz = horizontalProjection(upArmLen, upRise);
+
+  // Ball joint x-coordinate is at the contact-patch line (halfTrack from center)
+  const loBJ = { x: sign * halfTrack, y: loBJ_y };
+  const upBJ = { x: sign * halfTrack, y: upBJ_y };
+
+  // Inner pivots sit inboard of the ball joints by the horizontal projection
+  const loPiv = { x: sign * (halfTrack - loHoriz), y: loPivH };
+  const upPiv = { x: sign * (halfTrack - upHoriz), y: upPivH };
+
   const cp    = { x: sign * halfTrack, y: 0 };
   const wheelCenter = { x: sign * halfTrack, y: wh };
 
@@ -60,7 +93,13 @@ export function computeGeometry(geo, side) {
     fvsa = Math.sqrt(dx * dx + dy * dy);
   }
 
-  return { side, halfTrack, loBJ, upBJ, loPiv, upPiv, cp, ic, wheelCenter, rcHeight, fvsa, upPivEstimated };
+  return {
+    side, halfTrack,
+    loBJ, upBJ, loPiv, upPiv, cp, ic, wheelCenter,
+    rcHeight, fvsa, upPivEstimated,
+    // Expose the derived horizontal projections so the UI can show them
+    loArmLen, upArmLen, loHoriz, upHoriz, loRise, upRise,
+  };
 }
 
 // ─── SVG viewport ─────────────────────────────────────────────────────────────

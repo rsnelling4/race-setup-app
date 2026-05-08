@@ -13,6 +13,7 @@ const P71 = {
   wattsLinkHeight: '14.5', rearSpringBase: '44.0',
   lowerBallJoint: '7.50', upperBallJoint: '17.00',
   lowerArmPivot: '6.00', upperArmPivot: '13.00',
+  lowerArmLength: '13.0', upperArmLength: '9.5',
   springPickup: '11.0',
   arbDiameter: '1.161',
   droopTravel: '1.25', bumpTravel: '2.0',
@@ -324,6 +325,16 @@ const STEPS = [
           </WField>
         </Row>
         <Row>
+          <WField label="Lower arm length (pivot → ball joint, inches)"
+            hint="STRAIGHT-LINE distance from the lower-arm inner pivot center to the lower ball joint center. Tape-measure along the arm itself, NOT horizontal. Stock P71: ~13.0&quot;. Race-prep cars commonly run 13–18&quot;. Single value applies to both sides.">
+            <NIn value={data.lowerArmLength ?? ''} onChange={v => set('lowerArmLength', v)} placeholder="e.g. 13.0" step="0.125" />
+          </WField>
+          <WField label="Upper arm length (pivot → ball joint, inches)"
+            hint="STRAIGHT-LINE distance from the upper-arm inner pivot center to the upper ball joint center. Stock P71: ~9.5&quot;. Race-prep range 8–12&quot;. Single value applies to both sides.">
+            <NIn value={data.upperArmLength ?? ''} onChange={v => set('upperArmLength', v)} placeholder="e.g. 9.5" step="0.125" />
+          </WField>
+        </Row>
+        <Row>
           <WField label="RF spring pickup distance from inner pivot (inches)"
             hint="Along the lower arm from inner pivot center to spring mount hole. Stock P71: ~11.0&quot; (total arm ~13&quot;, giving IR ≈ 0.85).">
             <NIn value={data.springPickup?.RF ?? ''} onChange={v => setN('springPickup', 'RF', v)} placeholder="e.g. 11.0" step="0.125" />
@@ -337,6 +348,8 @@ const STEPS = [
       lowerArmPivot:  { RF: P71.lowerArmPivot },
       upperArmPivot:  { RF: P71.upperArmPivot },
       springPickup:   { RF: P71.springPickup },
+      lowerArmLength: P71.lowerArmLength,
+      upperArmLength: P71.upperArmLength,
     }),
   },
 

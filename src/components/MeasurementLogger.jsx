@@ -39,6 +39,8 @@ const P71_STOCK = {
   upperBallJoint:   17.00,  // inches — floor to upper ball joint stud center (est.)
   lowerArmPivot:    6.00,   // inches — floor to lower arm inner pivot midpoint (est.)
   upperArmPivot:    13.00,  // inches — floor to upper arm inner pivot (est.)
+  lowerArmLength:   13.0,   // inches — STRAIGHT-LINE pivot center to ball joint center (est.)
+  upperArmLength:   9.5,    // inches — STRAIGHT-LINE pivot center to ball joint center (est.)
   springPickup:     11.0,   // inches — lower arm pivot to spring mount (≈MR 0.87 × 13" arm)
   // ARB
   arbDiameter:      1.161,  // inches — stock 29.5mm solid bar
@@ -108,6 +110,8 @@ const EMPTY_GEO = {
   lowerArmPivot:     { LF: String(P71_STOCK.lowerArmPivot),  RF: String(P71_STOCK.lowerArmPivot)  },
   upperArmPivot:     { LF: String(P71_STOCK.upperArmPivot),  RF: String(P71_STOCK.upperArmPivot)  },
   springPickup:      { LF: String(P71_STOCK.springPickup),   RF: String(P71_STOCK.springPickup)   },
+  lowerArmLength:    String(P71_STOCK.lowerArmLength),   // straight-line pivot-to-BJ
+  upperArmLength:    String(P71_STOCK.upperArmLength),
   wheelCenterHeight: String(P71_STOCK.wheelCenterHeight),
   // ── Suspension travel measurements ──
   droopCamber:       { LF: '', RF: '' },
@@ -1253,6 +1257,16 @@ function GeoEditor({ editing, setEditing }) {
           <Field label="RF upper arm inner pivot (inches)"
             hint="Same as LF upper inner pivot, right side. STOCK ESTIMATE: ~13.0&quot; (back-solved). Symmetric with LF on a stock car.">
             <NumIn value={editing.upperArmPivot?.RF ?? ''} onChange={v => setN('upperArmPivot', 'RF', v)} placeholder="e.g. 13.00 (est)" step="0.125" />
+          </Field>
+        </div>
+        <div className="ml-row">
+          <Field label="Lower arm length (pivot center → ball joint center, inches)"
+            hint="STRAIGHT-LINE 3D distance from the lower arm inner pivot bolt center to the lower ball joint stud center. NOT horizontal projection — measure along the arm itself with a tape. The geometry engine derives the horizontal projection from your arm length and the (pivot − ball joint) vertical rise. STOCK ESTIMATE: ~13.0&quot;. Common on race-prep P71s with extended/upper-arm-relocated geometry: 13–18&quot;. ±0.25&quot; precision matters for IC and RC.">
+            <NumIn value={editing.lowerArmLength ?? ''} onChange={v => set('lowerArmLength', v)} placeholder="e.g. 13.0 (est)" step="0.125" />
+          </Field>
+          <Field label="Upper arm length (pivot center → ball joint center, inches)"
+            hint="STRAIGHT-LINE pivot-to-ball-joint distance for the upper control arm. STOCK ESTIMATE: ~9.5&quot;. Race-prep cars sometimes run shorter upper arms (8–10&quot;) for more camber gain in jounce, or longer (10–12&quot;) for less aggressive gain. Sets the arm-length ratio (upper/lower) which targets ~0.65–0.80.">
+            <NumIn value={editing.upperArmLength ?? ''} onChange={v => set('upperArmLength', v)} placeholder="e.g. 9.5 (est)" step="0.125" />
           </Field>
         </div>
         <div className="ml-row">
