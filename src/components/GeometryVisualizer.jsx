@@ -419,10 +419,10 @@ export function GeometryTable({ geo }) {
           {rcAvg != null && row('RC / CG ratio', `${((rcAvg / cgH) * 100).toFixed(1)}%`, '100% = no elastic roll')}
 
           {head('ARM SLOPES', '#f97316')}
-          {row('RF lower arm', rf.loBJ ? `${((rf.loBJ.y - rf.loPiv.y) / P71_LOWER_ARM_LENGTH).toFixed(3)}` : '—', 'in/in (neg = drops outboard)', '#f97316')}
-          {row('LF lower arm', lf.loBJ ? `${((lf.loBJ.y - lf.loPiv.y) / P71_LOWER_ARM_LENGTH).toFixed(3)}` : '—', 'in/in', '#3b82f6')}
-          {row('RF upper arm', rf.upBJ ? `${((rf.upBJ.y - rf.upPiv.y) / P71_UPPER_ARM_LENGTH).toFixed(3)}` : '—', rf.upPivEstimated ? '⚠ pivot estimated' : 'measured', '#f97316')}
-          {row('LF upper arm', lf.upBJ ? `${((lf.upBJ.y - lf.upPiv.y) / P71_UPPER_ARM_LENGTH).toFixed(3)}` : '—', lf.upPivEstimated ? '⚠ pivot estimated' : 'measured', '#3b82f6')}
+          {row('RF lower arm', (rf.loBJ && rf.loHoriz > 0) ? `${((rf.loBJ.y - rf.loPiv.y) / rf.loHoriz).toFixed(3)}` : '—', 'in/in (neg = drops outboard)', '#f97316')}
+          {row('LF lower arm', (lf.loBJ && lf.loHoriz > 0) ? `${((lf.loBJ.y - lf.loPiv.y) / lf.loHoriz).toFixed(3)}` : '—', 'in/in', '#3b82f6')}
+          {row('RF upper arm', (rf.upBJ && rf.upHoriz > 0) ? `${((rf.upBJ.y - rf.upPiv.y) / rf.upHoriz).toFixed(3)}` : '—', rf.upPivEstimated ? '⚠ pivot estimated' : 'measured', '#f97316')}
+          {row('LF upper arm', (lf.upBJ && lf.upHoriz > 0) ? `${((lf.upBJ.y - lf.upPiv.y) / lf.upHoriz).toFixed(3)}` : '—', lf.upPivEstimated ? '⚠ pivot estimated' : 'measured', '#3b82f6')}
         </tbody>
       </table>
     </div>
